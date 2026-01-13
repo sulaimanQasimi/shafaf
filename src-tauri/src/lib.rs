@@ -917,6 +917,479 @@ fn delete_product(
     Ok("Product deleted successfully".to_string())
 }
 
+// Purchase Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Purchase {
+    pub id: i64,
+    pub supplier_id: i64,
+    pub date: String,
+    pub notes: Option<String>,
+    pub total_amount: f64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// PurchaseItem Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchaseItem {
+    pub id: i64,
+    pub purchase_id: i64,
+    pub product_id: i64,
+    pub unit_id: String,
+    pub per_price: f64,
+    pub amount: f64,
+    pub total: f64,
+    pub created_at: String,
+}
+
+/// Initialize purchases table schema
+#[tauri::command]
+fn init_purchases_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS purchases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            notes TEXT,
+            total_amount REAL NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create purchases table: {}", e))?;
+
+    let create_items_table_sql = "
+        CREATE TABLE IF NOT EXISTS purchase_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            purchase_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            unit_id TEXT NOT NULL,
+            per_price REAL NOT NULL,
+            amount REAL NOT NULL,
+            total REAL NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products(id)
+        )
+    ";
+
+    db.execute(create_items_table_sql, &[])
+        .map_err(|e| format!("Failed to create purchase_items table: {}", e))?;
+
+    Ok("Purchases and purchase_items tables initialized successfully".to_string())
+}
+
+/// Create a new purchase with items
+#[tauri::command]
+fn create_purchase(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    supplier_id: i64,
+    date: String,
+    notes: Option<String>,
+    items: Vec<(i64, String, f64, f64)>, // (product_id, unit_id, per_price, amount)
+) -> Result<Purchase, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Calculate total amount from items
+    let total_amount: f64 = items.iter().map(|(_, _, per_price, amount)| per_price * amount).sum();
+
+    // Insert purchase
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+    let insert_sql = "INSERT INTO purchases (supplier_id, date, notes, total_amount) VALUES (?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &supplier_id as &dyn rusqlite::ToSql,
+        &date as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+        &total_amount as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert purchase: {}", e))?;
+
+    // Get the created purchase ID
+    let purchase_id_sql = "SELECT id FROM purchases WHERE supplier_id = ? AND date = ? ORDER BY id DESC LIMIT 1";
+    let purchase_ids = db
+        .query(purchase_id_sql, &[&supplier_id as &dyn rusqlite::ToSql, &date as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to fetch purchase ID: {}", e))?;
+
+    let purchase_id = purchase_ids.first().ok_or("Failed to retrieve purchase ID")?;
+
+    // Insert purchase items
+    for (product_id, unit_id, per_price, amount) in items {
+        let total = per_price * amount;
+        let insert_item_sql = "INSERT INTO purchase_items (purchase_id, product_id, unit_id, per_price, amount, total) VALUES (?, ?, ?, ?, ?, ?)";
+        db.execute(insert_item_sql, &[
+            purchase_id as &dyn rusqlite::ToSql,
+            &product_id as &dyn rusqlite::ToSql,
+            &unit_id as &dyn rusqlite::ToSql,
+            &per_price as &dyn rusqlite::ToSql,
+            &amount as &dyn rusqlite::ToSql,
+            &total as &dyn rusqlite::ToSql,
+        ])
+            .map_err(|e| format!("Failed to insert purchase item: {}", e))?;
+    }
+
+    // Get the created purchase
+    let purchase_sql = "SELECT id, supplier_id, date, notes, total_amount, created_at, updated_at FROM purchases WHERE id = ?";
+    let purchases = db
+        .query(purchase_sql, &[purchase_id as &dyn rusqlite::ToSql], |row| {
+            Ok(Purchase {
+                id: row.get(0)?,
+                supplier_id: row.get(1)?,
+                date: row.get(2)?,
+                notes: row.get(3)?,
+                total_amount: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase: {}", e))?;
+
+    if let Some(purchase) = purchases.first() {
+        Ok(purchase.clone())
+    } else {
+        Err("Failed to retrieve created purchase".to_string())
+    }
+}
+
+/// Get all purchases
+#[tauri::command]
+fn get_purchases(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Purchase>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, supplier_id, date, notes, total_amount, created_at, updated_at FROM purchases ORDER BY date DESC, created_at DESC";
+    let purchases = db
+        .query(sql, &[], |row| {
+            Ok(Purchase {
+                id: row.get(0)?,
+                supplier_id: row.get(1)?,
+                date: row.get(2)?,
+                notes: row.get(3)?,
+                total_amount: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchases: {}", e))?;
+
+    Ok(purchases)
+}
+
+/// Get a single purchase with its items
+#[tauri::command]
+fn get_purchase(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<(Purchase, Vec<PurchaseItem>), String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Get purchase
+    let purchase_sql = "SELECT id, supplier_id, date, notes, total_amount, created_at, updated_at FROM purchases WHERE id = ?";
+    let purchases = db
+        .query(purchase_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Purchase {
+                id: row.get(0)?,
+                supplier_id: row.get(1)?,
+                date: row.get(2)?,
+                notes: row.get(3)?,
+                total_amount: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase: {}", e))?;
+
+    let purchase = purchases.first().ok_or("Purchase not found")?;
+
+    // Get purchase items
+    let items_sql = "SELECT id, purchase_id, product_id, unit_id, per_price, amount, total, created_at FROM purchase_items WHERE purchase_id = ?";
+    let items = db
+        .query(items_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(PurchaseItem {
+                id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                product_id: row.get(2)?,
+                unit_id: row.get(3)?,
+                per_price: row.get(4)?,
+                amount: row.get(5)?,
+                total: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase items: {}", e))?;
+
+    Ok((purchase.clone(), items))
+}
+
+/// Update a purchase
+#[tauri::command]
+fn update_purchase(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    supplier_id: i64,
+    date: String,
+    notes: Option<String>,
+    items: Vec<(i64, String, f64, f64)>, // (product_id, unit_id, per_price, amount)
+) -> Result<Purchase, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Calculate total amount from items
+    let total_amount: f64 = items.iter().map(|(_, _, per_price, amount)| per_price * amount).sum();
+
+    // Update purchase
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+    let update_sql = "UPDATE purchases SET supplier_id = ?, date = ?, notes = ?, total_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_sql, &[
+        &supplier_id as &dyn rusqlite::ToSql,
+        &date as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+        &total_amount as &dyn rusqlite::ToSql,
+        &id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update purchase: {}", e))?;
+
+    // Delete existing items
+    let delete_items_sql = "DELETE FROM purchase_items WHERE purchase_id = ?";
+    db.execute(delete_items_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete purchase items: {}", e))?;
+
+    // Insert new items
+    for (product_id, unit_id, per_price, amount) in items {
+        let total = per_price * amount;
+        let insert_item_sql = "INSERT INTO purchase_items (purchase_id, product_id, unit_id, per_price, amount, total) VALUES (?, ?, ?, ?, ?, ?)";
+        db.execute(insert_item_sql, &[
+            &id as &dyn rusqlite::ToSql,
+            &product_id as &dyn rusqlite::ToSql,
+            &unit_id as &dyn rusqlite::ToSql,
+            &per_price as &dyn rusqlite::ToSql,
+            &amount as &dyn rusqlite::ToSql,
+            &total as &dyn rusqlite::ToSql,
+        ])
+            .map_err(|e| format!("Failed to insert purchase item: {}", e))?;
+    }
+
+    // Get the updated purchase
+    let purchase_sql = "SELECT id, supplier_id, date, notes, total_amount, created_at, updated_at FROM purchases WHERE id = ?";
+    let purchases = db
+        .query(purchase_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Purchase {
+                id: row.get(0)?,
+                supplier_id: row.get(1)?,
+                date: row.get(2)?,
+                notes: row.get(3)?,
+                total_amount: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase: {}", e))?;
+
+    if let Some(purchase) = purchases.first() {
+        Ok(purchase.clone())
+    } else {
+        Err("Failed to retrieve updated purchase".to_string())
+    }
+}
+
+/// Delete a purchase (items will be deleted automatically due to CASCADE)
+#[tauri::command]
+fn delete_purchase(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let delete_sql = "DELETE FROM purchases WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete purchase: {}", e))?;
+
+    Ok("Purchase deleted successfully".to_string())
+}
+
+/// Create a purchase item (standalone, for adding items to existing purchase)
+#[tauri::command]
+fn create_purchase_item(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    purchase_id: i64,
+    product_id: i64,
+    unit_id: String,
+    per_price: f64,
+    amount: f64,
+) -> Result<PurchaseItem, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let total = per_price * amount;
+
+    let insert_sql = "INSERT INTO purchase_items (purchase_id, product_id, unit_id, per_price, amount, total) VALUES (?, ?, ?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &purchase_id as &dyn rusqlite::ToSql,
+        &product_id as &dyn rusqlite::ToSql,
+        &unit_id as &dyn rusqlite::ToSql,
+        &per_price as &dyn rusqlite::ToSql,
+        &amount as &dyn rusqlite::ToSql,
+        &total as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert purchase item: {}", e))?;
+
+    // Update purchase total
+    let update_purchase_sql = "UPDATE purchases SET total_amount = (SELECT COALESCE(SUM(total), 0) FROM purchase_items WHERE purchase_id = ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_purchase_sql, &[&purchase_id as &dyn rusqlite::ToSql, &purchase_id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to update purchase total: {}", e))?;
+
+    // Get the created item
+    let item_sql = "SELECT id, purchase_id, product_id, unit_id, per_price, amount, total, created_at FROM purchase_items WHERE purchase_id = ? AND product_id = ? ORDER BY id DESC LIMIT 1";
+    let items = db
+        .query(item_sql, &[&purchase_id as &dyn rusqlite::ToSql, &product_id as &dyn rusqlite::ToSql], |row| {
+            Ok(PurchaseItem {
+                id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                product_id: row.get(2)?,
+                unit_id: row.get(3)?,
+                per_price: row.get(4)?,
+                amount: row.get(5)?,
+                total: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase item: {}", e))?;
+
+    if let Some(item) = items.first() {
+        Ok(item.clone())
+    } else {
+        Err("Failed to retrieve created purchase item".to_string())
+    }
+}
+
+/// Get purchase items for a purchase
+#[tauri::command]
+fn get_purchase_items(db_state: State<'_, Mutex<Option<Database>>>, purchase_id: i64) -> Result<Vec<PurchaseItem>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, purchase_id, product_id, unit_id, per_price, amount, total, created_at FROM purchase_items WHERE purchase_id = ? ORDER BY id";
+    let items = db
+        .query(sql, &[&purchase_id as &dyn rusqlite::ToSql], |row| {
+            Ok(PurchaseItem {
+                id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                product_id: row.get(2)?,
+                unit_id: row.get(3)?,
+                per_price: row.get(4)?,
+                amount: row.get(5)?,
+                total: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase items: {}", e))?;
+
+    Ok(items)
+}
+
+/// Update a purchase item
+#[tauri::command]
+fn update_purchase_item(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    product_id: i64,
+    unit_id: String,
+    per_price: f64,
+    amount: f64,
+) -> Result<PurchaseItem, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let total = per_price * amount;
+
+    let update_sql = "UPDATE purchase_items SET product_id = ?, unit_id = ?, per_price = ?, amount = ?, total = ? WHERE id = ?";
+    db.execute(update_sql, &[
+        &product_id as &dyn rusqlite::ToSql,
+        &unit_id as &dyn rusqlite::ToSql,
+        &per_price as &dyn rusqlite::ToSql,
+        &amount as &dyn rusqlite::ToSql,
+        &total as &dyn rusqlite::ToSql,
+        &id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update purchase item: {}", e))?;
+
+    // Get purchase_id to update purchase total
+    let purchase_id_sql = "SELECT purchase_id FROM purchase_items WHERE id = ?";
+    let purchase_ids = db
+        .query(purchase_id_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to fetch purchase_id: {}", e))?;
+
+    if let Some(purchase_id) = purchase_ids.first() {
+        // Update purchase total
+        let update_purchase_sql = "UPDATE purchases SET total_amount = (SELECT COALESCE(SUM(total), 0) FROM purchase_items WHERE purchase_id = ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+        db.execute(update_purchase_sql, &[purchase_id as &dyn rusqlite::ToSql, purchase_id as &dyn rusqlite::ToSql])
+            .map_err(|e| format!("Failed to update purchase total: {}", e))?;
+    }
+
+    // Get the updated item
+    let item_sql = "SELECT id, purchase_id, product_id, unit_id, per_price, amount, total, created_at FROM purchase_items WHERE id = ?";
+    let items = db
+        .query(item_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(PurchaseItem {
+                id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                product_id: row.get(2)?,
+                unit_id: row.get(3)?,
+                per_price: row.get(4)?,
+                amount: row.get(5)?,
+                total: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase item: {}", e))?;
+
+    if let Some(item) = items.first() {
+        Ok(item.clone())
+    } else {
+        Err("Failed to retrieve updated purchase item".to_string())
+    }
+}
+
+/// Delete a purchase item
+#[tauri::command]
+fn delete_purchase_item(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Get purchase_id before deleting
+    let purchase_id_sql = "SELECT purchase_id FROM purchase_items WHERE id = ?";
+    let purchase_ids = db
+        .query(purchase_id_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to fetch purchase_id: {}", e))?;
+
+    let purchase_id = purchase_ids.first().ok_or("Purchase item not found")?;
+
+    let delete_sql = "DELETE FROM purchase_items WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete purchase item: {}", e))?;
+
+    // Update purchase total
+    let update_purchase_sql = "UPDATE purchases SET total_amount = (SELECT COALESCE(SUM(total), 0) FROM purchase_items WHERE purchase_id = ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_purchase_sql, &[purchase_id as &dyn rusqlite::ToSql, purchase_id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to update purchase total: {}", e))?;
+
+    Ok("Purchase item deleted successfully".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -947,7 +1420,17 @@ pub fn run() {
             create_product,
             get_products,
             update_product,
-            delete_product
+            delete_product,
+            init_purchases_table,
+            create_purchase,
+            get_purchases,
+            get_purchase,
+            update_purchase,
+            delete_purchase,
+            create_purchase_item,
+            get_purchase_items,
+            update_purchase_item,
+            delete_purchase_item
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

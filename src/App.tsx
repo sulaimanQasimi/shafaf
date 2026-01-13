@@ -14,6 +14,7 @@ import Login from "./components/Login";
 import CurrencyManagement from "./components/Currency";
 import SupplierManagement from "./components/Supplier";
 import ProductManagement from "./components/Product";
+import PurchaseManagement from "./components/Purchase";
 import "./App.css";
 
 interface User {
@@ -22,7 +23,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -169,6 +170,13 @@ function App() {
     );
   }
 
+  // Show purchase page if selected
+  if (currentPage === "purchase") {
+    return (
+      <PurchaseManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
   // Show product page if selected
   if (currentPage === "product") {
     return (
@@ -216,6 +224,15 @@ function App() {
               dir="rtl"
             >
               جنس
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setCurrentPage("purchase")}
+              className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-lg transition-all shadow-lg hover:shadow-xl"
+              dir="rtl"
+            >
+              خریداری
             </motion.button>
             <button
               onClick={handleLogout}

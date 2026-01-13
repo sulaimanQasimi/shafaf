@@ -36,7 +36,7 @@ export async function createSupplier(
   notes?: string | null
 ): Promise<Supplier> {
   return await invoke<Supplier>("create_supplier", {
-    full_name,
+    fullName: full_name,
     phone,
     address,
     email: email || null,
@@ -72,7 +72,7 @@ export async function updateSupplier(
 ): Promise<Supplier> {
   return await invoke<Supplier>("update_supplier", {
     id,
-    full_name,
+    fullName: full_name,
     phone,
     address,
     email: email || null,

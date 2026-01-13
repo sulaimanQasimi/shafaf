@@ -12,6 +12,7 @@ import {
 } from "./utils/db";
 import Login from "./components/Login";
 import CurrencyManagement from "./components/Currency";
+import SupplierManagement from "./components/Supplier";
 import "./App.css";
 
 interface User {
@@ -20,7 +21,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency";
+type Page = "dashboard" | "currency" | "supplier";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -160,6 +161,13 @@ function App() {
     );
   }
 
+  // Show supplier page if selected
+  if (currentPage === "supplier") {
+    return (
+      <SupplierManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex flex-col items-center justify-center p-8">
       <div className="w-full max-w-6xl">
@@ -182,6 +190,15 @@ function App() {
               dir="rtl"
             >
               مدیریت ارزها
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setCurrentPage("supplier")}
+              className="px-6 py-2 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-semibold rounded-lg transition-all shadow-lg hover:shadow-xl"
+              dir="rtl"
+            >
+              تمویل کننده ها
             </motion.button>
             <button
               onClick={handleLogout}

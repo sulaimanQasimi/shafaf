@@ -716,6 +716,142 @@ fn delete_supplier(
     Ok("Supplier deleted successfully".to_string())
 }
 
+// Unit Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Unit {
+    pub id: i64,
+    pub name: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Initialize units table schema
+#[tauri::command]
+fn init_units_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS units (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create units table: {}", e))?;
+
+    Ok("Units table initialized successfully".to_string())
+}
+
+/// Create a new unit
+#[tauri::command]
+fn create_unit(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    name: String,
+) -> Result<Unit, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Insert new unit
+    let insert_sql = "INSERT INTO units (name) VALUES (?)";
+    db.execute(insert_sql, &[&name as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to insert unit: {}", e))?;
+
+    // Get the created unit
+    let unit_sql = "SELECT id, name, created_at, updated_at FROM units WHERE name = ?";
+    let units = db
+        .query(unit_sql, &[&name as &dyn rusqlite::ToSql], |row| {
+            Ok(Unit {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch unit: {}", e))?;
+
+    if let Some(unit) = units.first() {
+        Ok(unit.clone())
+    } else {
+        Err("Failed to retrieve created unit".to_string())
+    }
+}
+
+/// Get all units
+#[tauri::command]
+fn get_units(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Unit>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, name, created_at, updated_at FROM units ORDER BY name ASC";
+    let units = db
+        .query(sql, &[], |row| {
+            Ok(Unit {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch units: {}", e))?;
+
+    Ok(units)
+}
+
+/// Update a unit
+#[tauri::command]
+fn update_unit(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    name: String,
+) -> Result<Unit, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Update unit
+    let update_sql = "UPDATE units SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_sql, &[&name as &dyn rusqlite::ToSql, &id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to update unit: {}", e))?;
+
+    // Get the updated unit
+    let unit_sql = "SELECT id, name, created_at, updated_at FROM units WHERE id = ?";
+    let units = db
+        .query(unit_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Unit {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch unit: {}", e))?;
+
+    if let Some(unit) = units.first() {
+        Ok(unit.clone())
+    } else {
+        Err("Failed to retrieve updated unit".to_string())
+    }
+}
+
+/// Delete a unit
+#[tauri::command]
+fn delete_unit(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let delete_sql = "DELETE FROM units WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete unit: {}", e))?;
+
+    Ok("Unit deleted successfully".to_string())
+}
+
 // Product Model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Product {
@@ -935,7 +1071,7 @@ pub struct PurchaseItem {
     pub id: i64,
     pub purchase_id: i64,
     pub product_id: i64,
-    pub unit_id: String,
+    pub unit_id: i64,
     pub per_price: f64,
     pub amount: f64,
     pub total: f64,
@@ -969,13 +1105,14 @@ fn init_purchases_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             purchase_id INTEGER NOT NULL,
             product_id INTEGER NOT NULL,
-            unit_id TEXT NOT NULL,
+            unit_id INTEGER NOT NULL,
             per_price REAL NOT NULL,
             amount REAL NOT NULL,
             total REAL NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
-            FOREIGN KEY (product_id) REFERENCES products(id)
+            FOREIGN KEY (product_id) REFERENCES products(id),
+            FOREIGN KEY (unit_id) REFERENCES units(id)
         )
     ";
 
@@ -992,7 +1129,7 @@ fn create_purchase(
     supplier_id: i64,
     date: String,
     notes: Option<String>,
-    items: Vec<(i64, String, f64, f64)>, // (product_id, unit_id, per_price, amount)
+    items: Vec<(i64, i64, f64, f64)>, // (product_id, unit_id, per_price, amount)
 ) -> Result<Purchase, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
@@ -1135,7 +1272,7 @@ fn update_purchase(
     supplier_id: i64,
     date: String,
     notes: Option<String>,
-    items: Vec<(i64, String, f64, f64)>, // (product_id, unit_id, per_price, amount)
+    items: Vec<(i64, i64, f64, f64)>, // (product_id, unit_id, per_price, amount)
 ) -> Result<Purchase, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
@@ -1220,7 +1357,7 @@ fn create_purchase_item(
     db_state: State<'_, Mutex<Option<Database>>>,
     purchase_id: i64,
     product_id: i64,
-    unit_id: String,
+    unit_id: i64,
     per_price: f64,
     amount: f64,
 ) -> Result<PurchaseItem, String> {
@@ -1300,7 +1437,7 @@ fn update_purchase_item(
     db_state: State<'_, Mutex<Option<Database>>>,
     id: i64,
     product_id: i64,
-    unit_id: String,
+    unit_id: i64,
     per_price: f64,
     amount: f64,
 ) -> Result<PurchaseItem, String> {
@@ -1430,7 +1567,12 @@ pub fn run() {
             create_purchase_item,
             get_purchase_items,
             update_purchase_item,
-            delete_purchase_item
+            delete_purchase_item,
+            init_units_table,
+            create_unit,
+            get_units,
+            update_unit,
+            delete_unit
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

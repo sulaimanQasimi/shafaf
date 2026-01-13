@@ -15,6 +15,7 @@ import CurrencyManagement from "./components/Currency";
 import SupplierManagement from "./components/Supplier";
 import ProductManagement from "./components/Product";
 import PurchaseManagement from "./components/Purchase";
+import UnitManagement from "./components/Unit";
 import "./App.css";
 
 interface User {
@@ -23,7 +24,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "unit";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -170,6 +171,13 @@ function App() {
     );
   }
 
+  // Show unit page if selected
+  if (currentPage === "unit") {
+    return (
+      <UnitManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
   // Show purchase page if selected
   if (currentPage === "purchase") {
     return (
@@ -219,8 +227,17 @@ function App() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => setCurrentPage("product")}
+              onClick={() => setCurrentPage("unit")}
               className="px-6 py-2 bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-700 hover:to-pink-700 text-white font-semibold rounded-lg transition-all shadow-lg hover:shadow-xl"
+              dir="rtl"
+            >
+              واحد
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setCurrentPage("product")}
+              className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold rounded-lg transition-all shadow-lg hover:shadow-xl"
               dir="rtl"
             >
               جنس

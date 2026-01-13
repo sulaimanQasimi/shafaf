@@ -14,7 +14,7 @@ export interface PurchaseItem {
   id: number;
   purchase_id: number;
   product_id: number;
-  unit_id: string;
+  unit_id: number;
   per_price: number;
   amount: number;
   total: number;
@@ -28,7 +28,7 @@ export interface PurchaseWithItems {
 
 export interface PurchaseItemInput {
   product_id: number;
-  unit_id: string;
+  unit_id: number;
   per_price: number;
   amount: number;
 }
@@ -56,7 +56,7 @@ export async function createPurchase(
   items: PurchaseItemInput[]
 ): Promise<Purchase> {
   // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
-  const itemsTuple: [number, string, number, number][] = items.map(item => [
+  const itemsTuple: [number, number, number, number][] = items.map(item => [
     item.product_id,
     item.unit_id,
     item.per_price,
@@ -146,7 +146,7 @@ export async function deletePurchase(id: number): Promise<string> {
 export async function createPurchaseItem(
   purchase_id: number,
   product_id: number,
-  unit_id: string,
+  unit_id: number,
   per_price: number,
   amount: number
 ): Promise<PurchaseItem> {
@@ -180,7 +180,7 @@ export async function getPurchaseItems(purchase_id: number): Promise<PurchaseIte
 export async function updatePurchaseItem(
   id: number,
   product_id: number,
-  unit_id: string,
+  unit_id: number,
   per_price: number,
   amount: number
 ): Promise<PurchaseItem> {

@@ -30,7 +30,7 @@ function App() {
       try {
         const dbOpen = await isDatabaseOpen();
         if (!dbOpen) {
-          // Open existing database at C:\db.sqlite
+          // Open existing database (path from .env file or default)
           try {
             await openDatabase("db");
           } catch (err: any) {

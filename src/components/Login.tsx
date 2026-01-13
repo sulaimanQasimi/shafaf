@@ -63,9 +63,10 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
 
     try {
-      // Ensure database is open
+      // Ensure database is open (path from .env file or default)
       const dbOpen = await isDatabaseOpen();
       if (!dbOpen) {
+        // Open database using path from .env file (DATABASE_PATH)
         await openDatabase("db");
       }
 

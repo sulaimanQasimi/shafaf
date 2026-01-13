@@ -55,19 +55,39 @@ fn get_db_path(_app: &AppHandle, _db_name: &str) -> Result<PathBuf, String> {
     Ok(db_path)
 }
 
-/// Create a new SQLite database file (not used - database must exist at C:\data\db.sqlite)
+/// Get the current database path from environment configuration
 #[tauri::command]
-fn db_create(_app: AppHandle, _db_name: String) -> Result<String, String> {
-    Err("Database creation is disabled. Please create C:\\data\\db.sqlite manually.".to_string())
+fn get_database_path(_app: AppHandle) -> Result<String, String> {
+    load_env();
+    
+    let db_path_str = std::env::var("DATABASE_PATH")
+        .unwrap_or_else(|_| {
+            if cfg!(windows) {
+                "E:\\db.sqlite".to_string()
+            } else {
+                "./data/db.sqlite".to_string()
+            }
+        });
+    
+    Ok(db_path_str)
 }
 
-/// Open an existing database from C:\db.sqlite
+/// Create a new SQLite database file (not used - database path comes from .env file)
+#[tauri::command]
+fn db_create(_app: AppHandle, _db_name: String) -> Result<String, String> {
+    load_env();
+    let db_path = get_db_path(&_app, &_db_name)?;
+    Err(format!("Database creation is disabled. Please create the database file manually at: {}", db_path.display()))
+}
+
+/// Open an existing database (path from .env file or default)
 #[tauri::command]
 fn db_open(app: AppHandle, _db_name: String) -> Result<String, String> {
+    load_env();
     let db_path = get_db_path(&app, "")?;
     
     if !db_path.exists() {
-        return Err(format!("Database does not exist at C:\\data\\db.sqlite. Please create it first."));
+        return Err(format!("Database does not exist at {}. Please create it first or check your DATABASE_PATH in .env file.", db_path.display()));
     }
 
     let db = Database::new(db_path.clone());
@@ -1562,6 +1582,7 @@ pub fn run() {
             db_is_open,
             db_execute,
             db_query,
+            get_database_path,
             init_users_table,
             register_user,
             login_user,

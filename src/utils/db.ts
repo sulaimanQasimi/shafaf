@@ -20,11 +20,20 @@ export async function createDatabase(dbName: string): Promise<string> {
 
 /**
  * Open an existing database
- * @param dbName Name of the database (without .db extension)
+ * Database path is read from .env file (DATABASE_PATH) or uses default
+ * @param dbName Name of the database (without .db extension) - currently not used, path comes from .env
  * @returns Promise with the database path
  */
 export async function openDatabase(dbName: string): Promise<string> {
   return await invoke<string>("db_open", { dbName });
+}
+
+/**
+ * Get the current database path from environment configuration
+ * @returns Promise with the database path string
+ */
+export async function getDatabasePath(): Promise<string> {
+  return await invoke<string>("get_database_path");
 }
 
 /**

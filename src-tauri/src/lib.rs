@@ -716,6 +716,207 @@ fn delete_supplier(
     Ok("Supplier deleted successfully".to_string())
 }
 
+// Product Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Product {
+    pub id: i64,
+    pub name: String,
+    pub description: Option<String>,
+    pub price: Option<f64>,
+    pub currency_id: Option<i64>,
+    pub supplier_id: Option<i64>,
+    pub stock_quantity: Option<f64>,
+    pub unit: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Initialize products table schema
+#[tauri::command]
+fn init_products_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            price REAL,
+            currency_id INTEGER,
+            supplier_id INTEGER,
+            stock_quantity REAL,
+            unit TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (currency_id) REFERENCES currencies(id),
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create products table: {}", e))?;
+
+    Ok("Products table initialized successfully".to_string())
+}
+
+/// Create a new product
+#[tauri::command]
+fn create_product(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    name: String,
+    description: Option<String>,
+    price: Option<f64>,
+    currency_id: Option<i64>,
+    supplier_id: Option<i64>,
+    stock_quantity: Option<f64>,
+    unit: Option<String>,
+) -> Result<Product, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Insert new product
+    let insert_sql = "INSERT INTO products (name, description, price, currency_id, supplier_id, stock_quantity, unit) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    let description_str: Option<&str> = description.as_ref().map(|s| s.as_str());
+    let unit_str: Option<&str> = unit.as_ref().map(|s| s.as_str());
+    db.execute(insert_sql, &[
+        &name as &dyn rusqlite::ToSql,
+        &description_str as &dyn rusqlite::ToSql,
+        &price as &dyn rusqlite::ToSql,
+        &currency_id as &dyn rusqlite::ToSql,
+        &supplier_id as &dyn rusqlite::ToSql,
+        &stock_quantity as &dyn rusqlite::ToSql,
+        &unit_str as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert product: {}", e))?;
+
+    // Get the created product
+    let product_sql = "SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, created_at, updated_at FROM products WHERE name = ? ORDER BY id DESC LIMIT 1";
+    let products = db
+        .query(product_sql, &[&name as &dyn rusqlite::ToSql], |row| {
+            Ok(Product {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get::<_, Option<String>>(2)?,
+                price: row.get::<_, Option<f64>>(3)?,
+                currency_id: row.get::<_, Option<i64>>(4)?,
+                supplier_id: row.get::<_, Option<i64>>(5)?,
+                stock_quantity: row.get::<_, Option<f64>>(6)?,
+                unit: row.get::<_, Option<String>>(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch product: {}", e))?;
+
+    if let Some(product) = products.first() {
+        Ok(product.clone())
+    } else {
+        Err("Failed to retrieve created product".to_string())
+    }
+}
+
+/// Get all products
+#[tauri::command]
+fn get_products(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Product>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, created_at, updated_at FROM products ORDER BY created_at DESC";
+    let products = db
+        .query(sql, &[], |row| {
+            Ok(Product {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get::<_, Option<String>>(2)?,
+                price: row.get::<_, Option<f64>>(3)?,
+                currency_id: row.get::<_, Option<i64>>(4)?,
+                supplier_id: row.get::<_, Option<i64>>(5)?,
+                stock_quantity: row.get::<_, Option<f64>>(6)?,
+                unit: row.get::<_, Option<String>>(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch products: {}", e))?;
+
+    Ok(products)
+}
+
+/// Update a product
+#[tauri::command]
+fn update_product(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    name: String,
+    description: Option<String>,
+    price: Option<f64>,
+    currency_id: Option<i64>,
+    supplier_id: Option<i64>,
+    stock_quantity: Option<f64>,
+    unit: Option<String>,
+) -> Result<Product, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Update product
+    let update_sql = "UPDATE products SET name = ?, description = ?, price = ?, currency_id = ?, supplier_id = ?, stock_quantity = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let description_str: Option<&str> = description.as_ref().map(|s| s.as_str());
+    let unit_str: Option<&str> = unit.as_ref().map(|s| s.as_str());
+    db.execute(update_sql, &[
+        &name as &dyn rusqlite::ToSql,
+        &description_str as &dyn rusqlite::ToSql,
+        &price as &dyn rusqlite::ToSql,
+        &currency_id as &dyn rusqlite::ToSql,
+        &supplier_id as &dyn rusqlite::ToSql,
+        &stock_quantity as &dyn rusqlite::ToSql,
+        &unit_str as &dyn rusqlite::ToSql,
+        &id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update product: {}", e))?;
+
+    // Get the updated product
+    let product_sql = "SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, created_at, updated_at FROM products WHERE id = ?";
+    let products = db
+        .query(product_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Product {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get::<_, Option<String>>(2)?,
+                price: row.get::<_, Option<f64>>(3)?,
+                currency_id: row.get::<_, Option<i64>>(4)?,
+                supplier_id: row.get::<_, Option<i64>>(5)?,
+                stock_quantity: row.get::<_, Option<f64>>(6)?,
+                unit: row.get::<_, Option<String>>(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch product: {}", e))?;
+
+    if let Some(product) = products.first() {
+        Ok(product.clone())
+    } else {
+        Err("Failed to retrieve updated product".to_string())
+    }
+}
+
+/// Delete a product
+#[tauri::command]
+fn delete_product(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let delete_sql = "DELETE FROM products WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete product: {}", e))?;
+
+    Ok("Product deleted successfully".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -741,7 +942,12 @@ pub fn run() {
             create_supplier,
             get_suppliers,
             update_supplier,
-            delete_supplier
+            delete_supplier,
+            init_products_table,
+            create_product,
+            get_products,
+            update_product,
+            delete_product
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

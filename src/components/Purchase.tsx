@@ -354,62 +354,142 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
           </div>
         ) : purchases.length === 0 ? (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-16 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-3xl shadow-xl"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="text-center py-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-purple-100 dark:border-purple-900/30"
           >
-            <p className="text-gray-600 dark:text-gray-400 text-lg">
-              {translations.noPurchases}
-            </p>
+            <div className="flex flex-col items-center gap-4">
+              <motion.div
+                animate={{
+                  y: [0, -10, 0],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                className="w-24 h-24 bg-gradient-to-br from-purple-100 to-blue-100 dark:from-purple-900/30 dark:to-blue-900/30 rounded-full flex items-center justify-center"
+              >
+                <svg className="w-12 h-12 text-purple-500 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+              </motion.div>
+              <p className="text-gray-600 dark:text-gray-400 text-xl font-semibold">
+                {translations.noPurchases}
+              </p>
+              <p className="text-gray-500 dark:text-gray-500 text-sm">
+                برای شروع، یک خریداری جدید اضافه کنید
+              </p>
+            </div>
           </motion.div>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-5">
             <AnimatePresence>
-              {purchases.map((purchase) => (
+              {purchases.map((purchase, index) => (
                 <motion.div
                   key={purchase.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-lg p-6 border border-white/20 dark:border-gray-700/50"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ delay: index * 0.05 }}
+                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                  className="group bg-gradient-to-br from-white to-purple-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-6 border border-purple-100/50 dark:border-purple-900/30 transition-all duration-300"
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4 mb-3">
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                          {getSupplierName(purchase.supplier_id)}
-                        </h3>
-                        <span className="px-3 py-1 bg-gradient-to-r from-green-400 to-emerald-500 text-white text-sm font-bold rounded-full">
-                          {new Date(purchase.date).toLocaleDateString('fa-IR')}
-                        </span>
+                  <div className="flex justify-between items-start gap-6">
+                    <div className="flex-1 space-y-4">
+                      {/* Header Section */}
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+                              {getSupplierName(purchase.supplier_id)}
+                            </h3>
+                            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span>{new Date(purchase.created_at).toLocaleDateString('fa-IR')}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <motion.span
+                          whileHover={{ scale: 1.05 }}
+                          className="px-4 py-2 bg-gradient-to-r from-green-400 to-emerald-500 text-white text-sm font-bold rounded-xl shadow-md"
+                        >
+                          <div className="flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {new Date(purchase.date).toLocaleDateString('fa-IR')}
+                          </div>
+                        </motion.span>
                       </div>
-                      <div className="text-lg font-semibold text-purple-600 dark:text-purple-400 mb-2">
-                        {translations.totalAmount}: {purchase.total_amount.toLocaleString('fa-IR')}
+
+                      {/* Amount Section */}
+                      <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl border border-purple-200/50 dark:border-purple-700/30">
+                        <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="flex-1">
+                          <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">{translations.totalAmount}</div>
+                          <div className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                            {purchase.total_amount.toLocaleString('fa-IR')} افغانی
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Notes Section */}
                       {purchase.notes && (
-                        <p className="text-gray-600 dark:text-gray-400 text-sm mb-2">
-                          {purchase.notes}
-                        </p>
+                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-600">
+                          <svg className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                          </svg>
+                          <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
+                            {purchase.notes}
+                          </p>
+                        </div>
                       )}
-                      <div className="flex gap-4 text-sm text-gray-500 dark:text-gray-500">
-                        <span>{new Date(purchase.created_at).toLocaleDateString('fa-IR')}</span>
-                      </div>
                     </div>
-                    <div className="flex gap-2">
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-col gap-2">
                       <motion.button
-                        whileHover={{ scale: 1.05 }}
+                        whileHover={{ scale: 1.05, x: -2 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleViewPurchase(purchase)}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        مشاهده
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.05, x: -2 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => handleOpenModal(purchase)}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                        className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
                       >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
                         {translations.edit}
                       </motion.button>
                       <motion.button
-                        whileHover={{ scale: 1.05 }}
+                        whileHover={{ scale: 1.05, x: -2 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => setDeleteConfirm(purchase.id)}
-                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                        className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
                       >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
                         {translations.delete}
                       </motion.button>
                     </div>
@@ -658,25 +738,38 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4"
               onClick={() => setIsViewModalOpen(false)}
             >
               <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-5xl max-h-[90vh] overflow-y-auto border border-purple-100 dark:border-purple-900/30"
               >
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    جزئیات خریداری
-                  </h2>
+                {/* Header */}
+                <div className="flex justify-between items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg">
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+                        جزئیات خریداری
+                      </h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        مشاهده اطلاعات کامل خریداری
+                      </p>
+                    </div>
+                  </div>
                   <motion.button
-                    whileHover={{ scale: 1.1 }}
+                    whileHover={{ scale: 1.1, rotate: 90 }}
                     whileTap={{ scale: 0.9 }}
                     onClick={() => setIsViewModalOpen(false)}
-                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200"
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -684,94 +777,136 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                   </motion.button>
                 </div>
 
-                <div className="space-y-4 mb-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                {/* Purchase Info */}
+                <div className="grid grid-cols-2 gap-6 mb-8">
+                  <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    className="p-5 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-2xl border border-purple-200/50 dark:border-purple-700/30">
+                    <div className="flex items-center gap-3 mb-2">
+                      <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
                         {translations.supplier}
                       </label>
-                      <p className="text-gray-900 dark:text-white">
-                        {getSupplierName(viewingPurchase.purchase.supplier_id)}
-                      </p>
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white mr-8">
+                      {getSupplierName(viewingPurchase.purchase.supplier_id)}
+                    </p>
+                  </motion.div>
+                  <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    className="p-5 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-2xl border border-green-200/50 dark:border-green-700/30">
+                    <div className="flex items-center gap-3 mb-2">
+                      <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
                         {translations.date}
                       </label>
-                      <p className="text-gray-900 dark:text-white">
-                        {new Date(viewingPurchase.purchase.date).toLocaleDateString('fa-IR')}
-                      </p>
                     </div>
-                  </div>
-                  {viewingPurchase.purchase.notes && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                        {translations.notes}
-                      </label>
-                      <p className="text-gray-900 dark:text-white">
-                        {viewingPurchase.purchase.notes}
-                      </p>
-                    </div>
-                  )}
+                    <p className="text-lg font-semibold text-gray-900 dark:text-white mr-8">
+                      {new Date(viewingPurchase.purchase.date).toLocaleDateString('fa-IR')}
+                    </p>
+                  </motion.div>
                 </div>
 
-                <div className="mb-6">
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-                    {translations.items}
-                  </h3>
-                  <div className="overflow-x-auto">
+                {viewingPurchase.purchase.notes && (
+                  <motion.div
+                    whileHover={{ scale: 1.01 }}
+                    className="mb-8 p-5 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl border border-amber-200/50 dark:border-amber-700/30">
+                    <div className="flex items-center gap-3 mb-3">
+                      <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                      </svg>
+                      <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                        {translations.notes}
+                      </label>
+                    </div>
+                    <p className="text-gray-800 dark:text-gray-200 leading-relaxed mr-8">
+                      {viewingPurchase.purchase.notes}
+                    </p>
+                  </motion.div>
+                )}
+
+                {/* Items Table */}
+                <div className="mb-8">
+                  <div className="flex items-center gap-3 mb-5">
+                    <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                      {translations.items}
+                    </h3>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
                     <table className="w-full">
                       <thead>
-                        <tr className="bg-gray-100 dark:bg-gray-700">
-                          <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        <tr className="bg-gradient-to-r from-purple-600 to-blue-600">
+                          <th className="px-6 py-4 text-right text-sm font-bold text-white">
                             {translations.product}
                           </th>
-                          <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          <th className="px-6 py-4 text-right text-sm font-bold text-white">
                             {translations.unit}
                           </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          <th className="px-6 py-4 text-left text-sm font-bold text-white">
                             {translations.perPrice}
                           </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          <th className="px-6 py-4 text-left text-sm font-bold text-white">
                             {translations.amount}
                           </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          <th className="px-6 py-4 text-left text-sm font-bold text-white">
                             {translations.total}
                           </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {viewingPurchase.items.map((item) => {
+                        {viewingPurchase.items.map((item, index) => {
                           const product = products.find(p => p.id === item.product_id);
                           const unit = units.find(u => u.id === item.unit_id);
                           return (
-                            <tr key={item.id} className="border-b border-gray-200 dark:border-gray-700">
-                              <td className="px-4 py-3 text-gray-900 dark:text-white">
+                            <motion.tr
+                              key={item.id}
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: index * 0.05 }}
+                              className="border-b border-gray-200 dark:border-gray-700 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors"
+                            >
+                              <td className="px-6 py-4 text-gray-900 dark:text-white font-medium">
                                 {product?.name || `ID: ${item.product_id}`}
                               </td>
-                              <td className="px-4 py-3 text-gray-900 dark:text-white">
+                              <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
                                 {unit ? `${unit.name} ${unit.symbol ? `(${unit.symbol})` : ''}` : `ID: ${item.unit_id}`}
                               </td>
-                              <td className="px-4 py-3 text-gray-900 dark:text-white text-left">
+                              <td className="px-6 py-4 text-gray-900 dark:text-white text-left font-semibold">
                                 {item.per_price.toLocaleString('fa-IR')}
                               </td>
-                              <td className="px-4 py-3 text-gray-900 dark:text-white text-left">
+                              <td className="px-6 py-4 text-gray-900 dark:text-white text-left font-semibold">
                                 {item.amount.toLocaleString('fa-IR')}
                               </td>
-                              <td className="px-4 py-3 text-gray-900 dark:text-white text-left font-semibold">
-                                {item.total.toLocaleString('fa-IR')}
+                              <td className="px-6 py-4 text-left">
+                                <span className="inline-block px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-bold rounded-lg">
+                                  {item.total.toLocaleString('fa-IR')}
+                                </span>
                               </td>
-                            </tr>
+                            </motion.tr>
                           );
                         })}
                       </tbody>
                       <tfoot>
-                        <tr className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/30 dark:to-blue-900/30">
-                          <td colSpan={4} className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white">
-                            {translations.totalAmount}:
+                        <tr className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/40 dark:to-blue-900/40">
+                          <td colSpan={4} className="px-6 py-5 text-right font-bold text-gray-900 dark:text-white text-lg">
+                            <div className="flex items-center justify-end gap-2">
+                              <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {translations.totalAmount}:
+                            </div>
                           </td>
-                          <td className="px-4 py-3 text-left font-bold text-purple-600 dark:text-purple-400 text-lg">
-                            {viewingPurchase.purchase.total_amount.toLocaleString('fa-IR')}
+                          <td className="px-6 py-5 text-left">
+                            <span className="inline-block px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-xl rounded-xl shadow-lg">
+                              {viewingPurchase.purchase.total_amount.toLocaleString('fa-IR')} افغانی
+                            </span>
                           </td>
                         </tr>
                       </tfoot>
@@ -779,14 +914,14 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                   </div>
                 </div>
 
-                <div className="flex justify-end">
+                {/* Footer */}
+                <div className="flex justify-end gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => setIsViewModalOpen(false)}
-                    className="px-6 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-colors"
-                  >
-                    {translations.cancel}
+                    className="px-8 py-3 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200">
+                    بستن
                   </motion.button>
                 </div>
               </motion.div>
@@ -801,28 +936,53 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4"
               onClick={() => setDeleteConfirm(null)}
             >
               <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-md"
+                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-md border border-red-100 dark:border-red-900/30"
               >
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                {/* Warning Icon */}
+                <div className="flex justify-center mb-6">
+                  <motion.div
+                    animate={{
+                      scale: [1, 1.1, 1],
+                      rotate: [0, -5, 5, -5, 0]
+                    }}
+                    transition={{
+                      duration: 0.5,
+                      repeat: Infinity,
+                      repeatDelay: 2
+                    }}
+                    className="w-20 h-20 bg-gradient-to-br from-red-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg"
+                  >
+                    <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </motion.div>
+                </div>
+
+                {/* Title */}
+                <h2 className="text-2xl font-bold text-center text-gray-900 dark:text-white mb-3">
                   {translations.delete}
                 </h2>
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
+
+                {/* Message */}
+                <p className="text-center text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
                   {translations.confirmDelete}
                 </p>
+
+                {/* Action Buttons */}
                 <div className="flex gap-3">
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => setDeleteConfirm(null)}
-                    className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-colors"
+                    className="flex-1 px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg"
                   >
                     {translations.cancel}
                   </motion.button>
@@ -831,9 +991,25 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handleDelete(deleteConfirm)}
                     disabled={loading}
-                    className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors disabled:opacity-50"
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white font-bold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
                   >
-                    {translations.delete}
+                    {loading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                          className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+                        />
+                        در حال حذف...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        {translations.delete}
+                      </span>
+                    )}
                   </motion.button>
                 </div>
               </motion.div>

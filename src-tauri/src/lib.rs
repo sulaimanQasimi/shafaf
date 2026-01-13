@@ -6,6 +6,11 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
+// Load environment variables at startup
+fn load_env() {
+    let _ = dotenv::dotenv();
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct QueryResult {
     pub columns: Vec<String>,
@@ -23,9 +28,23 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-/// Get database path - always use C:\data\db.sqlite
+/// Get database path from environment variable or use default
 fn get_db_path(_app: &AppHandle, _db_name: &str) -> Result<PathBuf, String> {
-    let db_path = PathBuf::from("E:\\db.sqlite");
+    // Load environment variables
+    load_env();
+    
+    // Get database path from environment variable, or use default
+    let db_path_str = std::env::var("DATABASE_PATH")
+        .unwrap_or_else(|_| {
+            // Default path based on OS
+            if cfg!(windows) {
+                "E:\\db.sqlite".to_string()
+            } else {
+                "./data/db.sqlite".to_string()
+            }
+        });
+    
+    let db_path = PathBuf::from(&db_path_str);
     
     // Create data directory if it doesn't exist
     if let Some(parent) = db_path.parent() {
@@ -1529,6 +1548,9 @@ fn delete_purchase_item(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Load environment variables at startup
+    load_env();
+    
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(None::<Database>))

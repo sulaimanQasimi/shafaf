@@ -2579,6 +2579,510 @@ fn delete_expense(
     Ok("Expense deleted successfully".to_string())
 }
 
+// Employee Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Employee {
+    pub id: i64,
+    pub full_name: String,
+    pub phone: String,
+    pub email: Option<String>,
+    pub address: String,
+    pub position: Option<String>,
+    pub hire_date: Option<String>,
+    pub base_salary: Option<f64>,
+    pub photo_path: Option<String>,
+    pub notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Initialize employees table schema
+#[tauri::command]
+fn init_employees_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS employees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            email TEXT,
+            address TEXT NOT NULL,
+            position TEXT,
+            hire_date TEXT,
+            base_salary REAL,
+            photo_path TEXT,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create employees table: {}", e))?;
+
+    Ok("Employees table initialized successfully".to_string())
+}
+
+/// Create a new employee
+#[tauri::command]
+fn create_employee(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    full_name: String,
+    phone: String,
+    email: Option<String>,
+    address: String,
+    position: Option<String>,
+    hire_date: Option<String>,
+    base_salary: Option<f64>,
+    photo_path: Option<String>,
+    notes: Option<String>,
+) -> Result<Employee, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Insert new employee
+    let insert_sql = "INSERT INTO employees (full_name, phone, email, address, position, hire_date, base_salary, photo_path, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    let email_str: Option<&str> = email.as_ref().map(|s| s.as_str());
+    let position_str: Option<&str> = position.as_ref().map(|s| s.as_str());
+    let hire_date_str: Option<&str> = hire_date.as_ref().map(|s| s.as_str());
+    let photo_path_str: Option<&str> = photo_path.as_ref().map(|s| s.as_str());
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+    
+    db.execute(insert_sql, &[
+        &full_name as &dyn rusqlite::ToSql,
+        &phone as &dyn rusqlite::ToSql,
+        &email_str as &dyn rusqlite::ToSql,
+        &address as &dyn rusqlite::ToSql,
+        &position_str as &dyn rusqlite::ToSql,
+        &hire_date_str as &dyn rusqlite::ToSql,
+        &base_salary as &dyn rusqlite::ToSql,
+        &photo_path_str as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert employee: {}", e))?;
+
+    // Get the created employee
+    let employee_sql = "SELECT id, full_name, phone, email, address, position, hire_date, base_salary, photo_path, notes, created_at, updated_at FROM employees WHERE full_name = ? AND phone = ? ORDER BY id DESC LIMIT 1";
+    let employees = db
+        .query(employee_sql, &[&full_name as &dyn rusqlite::ToSql, &phone as &dyn rusqlite::ToSql], |row| {
+            Ok(Employee {
+                id: row.get(0)?,
+                full_name: row.get(1)?,
+                phone: row.get(2)?,
+                email: row.get::<_, Option<String>>(3)?,
+                address: row.get(4)?,
+                position: row.get::<_, Option<String>>(5)?,
+                hire_date: row.get::<_, Option<String>>(6)?,
+                base_salary: row.get::<_, Option<f64>>(7)?,
+                photo_path: row.get::<_, Option<String>>(8)?,
+                notes: row.get::<_, Option<String>>(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch employee: {}", e))?;
+
+    if let Some(employee) = employees.first() {
+        Ok(employee.clone())
+    } else {
+        Err("Failed to retrieve created employee".to_string())
+    }
+}
+
+/// Get all employees
+#[tauri::command]
+fn get_employees(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Employee>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, full_name, phone, email, address, position, hire_date, base_salary, photo_path, notes, created_at, updated_at FROM employees ORDER BY created_at DESC";
+    let employees = db
+        .query(sql, &[], |row| {
+            Ok(Employee {
+                id: row.get(0)?,
+                full_name: row.get(1)?,
+                phone: row.get(2)?,
+                email: row.get::<_, Option<String>>(3)?,
+                address: row.get(4)?,
+                position: row.get::<_, Option<String>>(5)?,
+                hire_date: row.get::<_, Option<String>>(6)?,
+                base_salary: row.get::<_, Option<f64>>(7)?,
+                photo_path: row.get::<_, Option<String>>(8)?,
+                notes: row.get::<_, Option<String>>(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch employees: {}", e))?;
+
+    Ok(employees)
+}
+
+/// Get employee by ID
+#[tauri::command]
+fn get_employee(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<Employee, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, full_name, phone, email, address, position, hire_date, base_salary, photo_path, notes, created_at, updated_at FROM employees WHERE id = ?";
+    let employees = db
+        .query(sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Employee {
+                id: row.get(0)?,
+                full_name: row.get(1)?,
+                phone: row.get(2)?,
+                email: row.get::<_, Option<String>>(3)?,
+                address: row.get(4)?,
+                position: row.get::<_, Option<String>>(5)?,
+                hire_date: row.get::<_, Option<String>>(6)?,
+                base_salary: row.get::<_, Option<f64>>(7)?,
+                photo_path: row.get::<_, Option<String>>(8)?,
+                notes: row.get::<_, Option<String>>(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch employee: {}", e))?;
+
+    if let Some(employee) = employees.first() {
+        Ok(employee.clone())
+    } else {
+        Err("Employee not found".to_string())
+    }
+}
+
+/// Update an employee
+#[tauri::command]
+fn update_employee(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    full_name: String,
+    phone: String,
+    email: Option<String>,
+    address: String,
+    position: Option<String>,
+    hire_date: Option<String>,
+    base_salary: Option<f64>,
+    photo_path: Option<String>,
+    notes: Option<String>,
+) -> Result<Employee, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Update employee
+    let update_sql = "UPDATE employees SET full_name = ?, phone = ?, email = ?, address = ?, position = ?, hire_date = ?, base_salary = ?, photo_path = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let email_str: Option<&str> = email.as_ref().map(|s| s.as_str());
+    let position_str: Option<&str> = position.as_ref().map(|s| s.as_str());
+    let hire_date_str: Option<&str> = hire_date.as_ref().map(|s| s.as_str());
+    let photo_path_str: Option<&str> = photo_path.as_ref().map(|s| s.as_str());
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+    
+    db.execute(update_sql, &[
+        &full_name as &dyn rusqlite::ToSql,
+        &phone as &dyn rusqlite::ToSql,
+        &email_str as &dyn rusqlite::ToSql,
+        &address as &dyn rusqlite::ToSql,
+        &position_str as &dyn rusqlite::ToSql,
+        &hire_date_str as &dyn rusqlite::ToSql,
+        &base_salary as &dyn rusqlite::ToSql,
+        &photo_path_str as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+        &id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update employee: {}", e))?;
+
+    // Get the updated employee
+    let employee_sql = "SELECT id, full_name, phone, email, address, position, hire_date, base_salary, photo_path, notes, created_at, updated_at FROM employees WHERE id = ?";
+    let employees = db
+        .query(employee_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Employee {
+                id: row.get(0)?,
+                full_name: row.get(1)?,
+                phone: row.get(2)?,
+                email: row.get::<_, Option<String>>(3)?,
+                address: row.get(4)?,
+                position: row.get::<_, Option<String>>(5)?,
+                hire_date: row.get::<_, Option<String>>(6)?,
+                base_salary: row.get::<_, Option<f64>>(7)?,
+                photo_path: row.get::<_, Option<String>>(8)?,
+                notes: row.get::<_, Option<String>>(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch employee: {}", e))?;
+
+    if let Some(employee) = employees.first() {
+        Ok(employee.clone())
+    } else {
+        Err("Failed to retrieve updated employee".to_string())
+    }
+}
+
+/// Delete an employee
+#[tauri::command]
+fn delete_employee(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let delete_sql = "DELETE FROM employees WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete employee: {}", e))?;
+
+    Ok("Employee deleted successfully".to_string())
+}
+
+// Salary Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Salary {
+    pub id: i64,
+    pub employee_id: i64,
+    pub year: i32,
+    pub month: String, // Dari month name like حمل, ثور
+    pub amount: f64,
+    pub notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Initialize salaries table schema
+#[tauri::command]
+fn init_salaries_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS salaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            month TEXT NOT NULL,
+            amount REAL NOT NULL,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+            UNIQUE(employee_id, year, month)
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create salaries table: {}", e))?;
+
+    Ok("Salaries table initialized successfully".to_string())
+}
+
+/// Create a new salary
+#[tauri::command]
+fn create_salary(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    employee_id: i64,
+    year: i32,
+    month: String,
+    amount: f64,
+    notes: Option<String>,
+) -> Result<Salary, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Insert new salary
+    let insert_sql = "INSERT INTO salaries (employee_id, year, month, amount, notes) VALUES (?, ?, ?, ?, ?)";
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+    
+    db.execute(insert_sql, &[
+        &employee_id as &dyn rusqlite::ToSql,
+        &year as &dyn rusqlite::ToSql,
+        &month as &dyn rusqlite::ToSql,
+        &amount as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert salary: {}", e))?;
+
+    // Get the created salary
+    let salary_sql = "SELECT id, employee_id, year, month, amount, notes, created_at, updated_at FROM salaries WHERE employee_id = ? AND year = ? AND month = ? ORDER BY id DESC LIMIT 1";
+    let salaries = db
+        .query(salary_sql, &[&employee_id as &dyn rusqlite::ToSql, &year as &dyn rusqlite::ToSql, &month as &dyn rusqlite::ToSql], |row| {
+            Ok(Salary {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                year: row.get(2)?,
+                month: row.get(3)?,
+                amount: row.get(4)?,
+                notes: row.get::<_, Option<String>>(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch salary: {}", e))?;
+
+    if let Some(salary) = salaries.first() {
+        Ok(salary.clone())
+    } else {
+        Err("Failed to retrieve created salary".to_string())
+    }
+}
+
+/// Get all salaries
+#[tauri::command]
+fn get_salaries(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Salary>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, employee_id, year, month, amount, notes, created_at, updated_at FROM salaries ORDER BY year DESC, month DESC, created_at DESC";
+    let salaries = db
+        .query(sql, &[], |row| {
+            Ok(Salary {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                year: row.get(2)?,
+                month: row.get(3)?,
+                amount: row.get(4)?,
+                notes: row.get::<_, Option<String>>(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch salaries: {}", e))?;
+
+    Ok(salaries)
+}
+
+/// Get salaries by employee ID
+#[tauri::command]
+fn get_salaries_by_employee(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    employee_id: i64,
+) -> Result<Vec<Salary>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, employee_id, year, month, amount, notes, created_at, updated_at FROM salaries WHERE employee_id = ? ORDER BY year DESC, month DESC";
+    let salaries = db
+        .query(sql, &[&employee_id as &dyn rusqlite::ToSql], |row| {
+            Ok(Salary {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                year: row.get(2)?,
+                month: row.get(3)?,
+                amount: row.get(4)?,
+                notes: row.get::<_, Option<String>>(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch salaries: {}", e))?;
+
+    Ok(salaries)
+}
+
+/// Get salary by ID
+#[tauri::command]
+fn get_salary(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<Salary, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, employee_id, year, month, amount, notes, created_at, updated_at FROM salaries WHERE id = ?";
+    let salaries = db
+        .query(sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Salary {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                year: row.get(2)?,
+                month: row.get(3)?,
+                amount: row.get(4)?,
+                notes: row.get::<_, Option<String>>(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch salary: {}", e))?;
+
+    if let Some(salary) = salaries.first() {
+        Ok(salary.clone())
+    } else {
+        Err("Salary not found".to_string())
+    }
+}
+
+/// Update a salary
+#[tauri::command]
+fn update_salary(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    employee_id: i64,
+    year: i32,
+    month: String,
+    amount: f64,
+    notes: Option<String>,
+) -> Result<Salary, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Update salary
+    let update_sql = "UPDATE salaries SET employee_id = ?, year = ?, month = ?, amount = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+    
+    db.execute(update_sql, &[
+        &employee_id as &dyn rusqlite::ToSql,
+        &year as &dyn rusqlite::ToSql,
+        &month as &dyn rusqlite::ToSql,
+        &amount as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+        &id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update salary: {}", e))?;
+
+    // Get the updated salary
+    let salary_sql = "SELECT id, employee_id, year, month, amount, notes, created_at, updated_at FROM salaries WHERE id = ?";
+    let salaries = db
+        .query(salary_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Salary {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                year: row.get(2)?,
+                month: row.get(3)?,
+                amount: row.get(4)?,
+                notes: row.get::<_, Option<String>>(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch salary: {}", e))?;
+
+    if let Some(salary) = salaries.first() {
+        Ok(salary.clone())
+    } else {
+        Err("Failed to retrieve updated salary".to_string())
+    }
+}
+
+/// Delete a salary
+#[tauri::command]
+fn delete_salary(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let delete_sql = "DELETE FROM salaries WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete salary: {}", e))?;
+
+    Ok("Salary deleted successfully".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Load environment variables at startup
@@ -2652,7 +3156,20 @@ pub fn run() {
             get_expenses,
             get_expense,
             update_expense,
-            delete_expense
+            delete_expense,
+            init_employees_table,
+            create_employee,
+            get_employees,
+            get_employee,
+            update_employee,
+            delete_employee,
+            init_salaries_table,
+            create_salary,
+            get_salaries,
+            get_salaries_by_employee,
+            get_salary,
+            update_salary,
+            delete_salary
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

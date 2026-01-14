@@ -5,7 +5,6 @@ import {
     initExpensesTable,
     createExpense,
     getExpenses,
-    getExpense,
     updateExpense,
     deleteExpense,
     type Expense,
@@ -330,7 +329,7 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                         </div>
                     </motion.div>
                 ) : (
-                    <div className="grid gap-5">
+                    <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                         <AnimatePresence>
                             {expenses.map((expense, index) => (
                                 <motion.div
@@ -339,82 +338,77 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, scale: 0.95 }}
                                     transition={{ delay: index * 0.05 }}
-                                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                                    className="group bg-gradient-to-br from-white to-red-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-6 border border-red-100/50 dark:border-red-900/30 transition-all duration-300"
+                                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                                    className="group bg-gradient-to-br from-white to-red-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-5 border border-red-100/50 dark:border-red-900/30 transition-all duration-300 flex flex-col justify-between"
                                 >
-                                    <div className="flex justify-between items-center gap-6">
-                                        <div className="flex items-center gap-4 flex-1">
-                                            <div className="w-14 h-14 bg-gradient-to-br from-red-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                                    <div>
+                                        {/* Header */}
+                                        <div className="flex items-center gap-4 mb-5">
+                                            <div className="w-14 h-14 bg-gradient-to-br from-red-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-md">
                                                 <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
                                                 </svg>
                                             </div>
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-3 mb-2">
-                                                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                                                        {expense.name}
-                                                    </h3>
-                                                </div>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                                    <div>
-                                                        <span className="text-gray-500 dark:text-gray-400">مقدار:</span>
-                                                        <span className="mr-2 font-semibold text-gray-900 dark:text-white">
-                                                            {expense.amount.toLocaleString('fa-IR')}
-                                                        </span>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-gray-500 dark:text-gray-400">ارز:</span>
-                                                        <span className="mr-2 font-semibold text-gray-900 dark:text-white">
-                                                            {expense.currency}
-                                                        </span>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-gray-500 dark:text-gray-400">نرخ:</span>
-                                                        <span className="mr-2 font-semibold text-gray-900 dark:text-white">
-                                                            {expense.rate.toLocaleString('fa-IR')}
-                                                        </span>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-gray-500 dark:text-gray-400">مجموع:</span>
-                                                        <span className="mr-2 font-semibold text-red-600 dark:text-red-400">
-                                                            {expense.total.toLocaleString('fa-IR')}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-500 mt-2">
-                                                    <div className="flex items-center gap-1">
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                        </svg>
-                                                        <span>{new Date(expense.date).toLocaleDateString('fa-IR')}</span>
-                                                    </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="text-xl font-bold text-gray-900 dark:text-white truncate">
+                                                    {expense.name}
+                                                </h3>
+                                                <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                    <span>{new Date(expense.date).toLocaleDateString('fa-IR')}</span>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <motion.button
-                                                whileHover={{ scale: 1.05 }}
-                                                whileTap={{ scale: 0.95 }}
-                                                onClick={() => handleOpenModal(expense)}
-                                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                                {translations.edit}
-                                            </motion.button>
-                                            <motion.button
-                                                whileHover={{ scale: 1.05 }}
-                                                whileTap={{ scale: 0.95 }}
-                                                onClick={() => setDeleteConfirm(expense.id)}
-                                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                                {translations.delete}
-                                            </motion.button>
+
+                                        {/* Info Grid */}
+                                        <div className="grid grid-cols-2 gap-3 mb-5">
+                                            <div className="p-3 bg-red-50/50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-800/30">
+                                                <span className="text-xs text-red-600/80 dark:text-red-400/80 block mb-1">مقدار</span>
+                                                <span className="text-sm font-bold text-red-700 dark:text-red-400">
+                                                    {expense.amount.toLocaleString()} <span className="text-xs font-normal opacity-70">{expense.currency}</span>
+                                                </span>
+                                            </div>
+                                            <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-600/50">
+                                                <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">نرخ تبادله</span>
+                                                <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                                                    {expense.rate.toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div className="col-span-2 p-3 bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 rounded-xl border border-red-100 dark:border-red-800/30 flex justify-between items-center">
+                                                <span className="text-sm text-red-700 dark:text-red-300 font-medium">مجموع کل</span>
+                                                <span className="text-lg font-bold text-red-800 dark:text-red-200">
+                                                    {expense.total.toLocaleString()}
+                                                </span>
+                                            </div>
                                         </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-3 pt-4 border-t border-red-100/50 dark:border-gray-700/50">
+                                        <motion.button
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={() => handleOpenModal(expense)}
+                                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg transition-colors text-sm font-semibold"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                            {translations.edit}
+                                        </motion.button>
+                                        <motion.button
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={() => setDeleteConfirm(expense.id)}
+                                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg transition-colors text-sm font-semibold"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                            {translations.delete}
+                                        </motion.button>
                                     </div>
                                 </motion.div>
                             ))}

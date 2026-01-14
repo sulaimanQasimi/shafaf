@@ -5,8 +5,6 @@ import {
     initSalariesTable,
     createSalary,
     getSalaries,
-    getSalariesByEmployee,
-    getSalary,
     updateSalary,
     deleteSalary,
     type Salary,
@@ -219,10 +217,7 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
         }
     };
 
-    const getEmployeeName = (employeeId: number) => {
-        const employee = employees.find((e) => e.id === employeeId);
-        return employee ? employee.full_name : `کارمند #${employeeId}`;
-    };
+
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6" dir="rtl">
@@ -301,70 +296,94 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                         <p className="text-xl text-gray-600 dark:text-gray-400">{translations.noSalaries}</p>
                     </motion.div>
                 ) : (
-                    <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-lg overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead className="bg-gradient-to-r from-purple-600 to-blue-600 text-white">
-                                    <tr>
-                                        <th className="px-6 py-4 text-right font-bold">کارمند</th>
-                                        <th className="px-6 py-4 text-right font-bold">سال</th>
-                                        <th className="px-6 py-4 text-right font-bold">ماه</th>
-                                        <th className="px-6 py-4 text-right font-bold">مقدار</th>
-                                        <th className="px-6 py-4 text-right font-bold">یادداشت</th>
-                                        <th className="px-6 py-4 text-right font-bold">{translations.actions}</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <AnimatePresence>
-                                        {salaries.map((salary) => (
-                                            <motion.tr
-                                                key={salary.id}
-                                                initial={{ opacity: 0, y: 20 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: -20 }}
-                                                className="border-b border-gray-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700/50 transition-colors"
-                                            >
-                                                <td className="px-6 py-4 text-gray-900 dark:text-white font-semibold">
-                                                    {getEmployeeName(salary.employee_id)}
-                                                </td>
-                                                <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
-                                                    {salary.year}
-                                                </td>
-                                                <td className="px-6 py-4 text-gray-700 dark:text-gray-300 font-semibold">
-                                                    {salary.month}
-                                                </td>
-                                                <td className="px-6 py-4 text-gray-900 dark:text-white font-bold">
-                                                    {salary.amount.toLocaleString()} افغانی
-                                                </td>
-                                                <td className="px-6 py-4 text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                                                    {salary.notes || "-"}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex gap-2">
-                                                        <motion.button
-                                                            whileHover={{ scale: 1.05 }}
-                                                            whileTap={{ scale: 0.95 }}
-                                                            onClick={() => handleOpenModal(salary)}
-                                                            className="px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold text-sm"
-                                                        >
-                                                            {translations.edit}
-                                                        </motion.button>
-                                                        <motion.button
-                                                            whileHover={{ scale: 1.05 }}
-                                                            whileTap={{ scale: 0.95 }}
-                                                            onClick={() => setDeleteConfirm(salary.id)}
-                                                            className="px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold text-sm"
-                                                        >
-                                                            {translations.delete}
-                                                        </motion.button>
+                    <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                        <AnimatePresence>
+                            {salaries.map((salary, index) => {
+                                const employee = employees.find(e => e.id === salary.employee_id);
+                                return (
+                                    <motion.div
+                                        key={salary.id}
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.95 }}
+                                        transition={{ delay: index * 0.05 }}
+                                        whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                                        className="group bg-gradient-to-br from-white to-purple-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-5 border border-purple-100/50 dark:border-purple-900/30 transition-all duration-300 flex flex-col justify-between"
+                                    >
+                                        <div>
+                                            <div className="flex items-center gap-4 mb-5">
+                                                {employee?.photo_path ? (
+                                                    <img
+                                                        src={employee.photo_path}
+                                                        alt={employee.full_name}
+                                                        className="w-14 h-14 rounded-2xl object-cover shadow-md border-2 border-white dark:border-gray-700"
+                                                    />
+                                                ) : (
+                                                    <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center shadow-md text-white text-xl font-bold">
+                                                        {employee?.full_name?.charAt(0) || "؟"}
                                                     </div>
-                                                </td>
-                                            </motion.tr>
-                                        ))}
-                                    </AnimatePresence>
-                                </tbody>
-                            </table>
-                        </div>
+                                                )}
+                                                <div>
+                                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
+                                                        {employee ? employee.full_name : "کارمند ناشناس"}
+                                                    </h3>
+                                                    <div className="text-purple-600 dark:text-purple-400 text-sm font-medium mt-1">
+                                                        {salary.month} {salary.year}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-3 mb-5">
+                                                <div className="p-3 bg-green-50/50 dark:bg-green-900/10 rounded-xl border border-green-100 dark:border-green-800/30 flex justify-between items-center px-4">
+                                                    <span className="text-sm text-green-600/80 dark:text-green-400/80">مبلغ پرداختی</span>
+                                                    <span className="text-lg font-bold text-green-700 dark:text-green-400">
+                                                        {salary.amount.toLocaleString()} <span className="text-xs opacity-70">افغانی</span>
+                                                    </span>
+                                                </div>
+
+                                                {salary.notes && (
+                                                    <div className="flex items-start gap-3 p-3 bg-gray-50/80 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-600/50">
+                                                        <div className="p-1 min-w-[24px] text-gray-400">
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                            </svg>
+                                                        </div>
+                                                        <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                                                            {salary.notes}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-3 pt-4 border-t border-purple-100/50 dark:border-gray-700/50">
+                                            <motion.button
+                                                whileHover={{ scale: 1.02 }}
+                                                whileTap={{ scale: 0.98 }}
+                                                onClick={() => handleOpenModal(salary)}
+                                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg transition-colors text-sm font-semibold"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                                {translations.edit}
+                                            </motion.button>
+                                            <motion.button
+                                                whileHover={{ scale: 1.02 }}
+                                                whileTap={{ scale: 0.98 }}
+                                                onClick={() => setDeleteConfirm(salary.id)}
+                                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg transition-colors text-sm font-semibold"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                                {translations.delete}
+                                            </motion.button>
+                                        </div>
+                                    </motion.div>
+                                );
+                            })}
+                        </AnimatePresence>
                     </div>
                 )}
 

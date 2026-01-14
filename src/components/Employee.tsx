@@ -7,7 +7,6 @@ import {
     initEmployeesTable,
     createEmployee,
     getEmployees,
-    getEmployee,
     updateEmployee,
     deleteEmployee,
     type Employee,
@@ -331,83 +330,98 @@ export default function EmployeeManagement({ onBack }: EmployeeManagementProps) 
                         <p className="text-xl text-gray-600 dark:text-gray-400">{translations.noEmployees}</p>
                     </motion.div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                         <AnimatePresence>
-                            {employees.map((employee) => (
+                            {employees.map((employee, index) => (
                                 <motion.div
                                     key={employee.id}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
-                                    whileHover={{ y: -5 }}
-                                    className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-6 border border-purple-100/50 dark:border-purple-900/30 transition-all duration-300"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    transition={{ delay: index * 0.05 }}
+                                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                                    className="group bg-gradient-to-br from-white to-purple-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-5 border border-purple-100/50 dark:border-purple-900/30 transition-all duration-300 flex flex-col justify-between"
                                 >
-                                    <div className="flex items-start gap-4 mb-4">
-                                        {employee.photo_path ? (
-                                            <img
-                                                src={employee.photo_path}
-                                                alt={employee.full_name}
-                                                className="w-20 h-20 rounded-full object-cover border-4 border-purple-200 dark:border-purple-800"
-                                            />
-                                        ) : (
-                                            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-2xl font-bold border-4 border-purple-200 dark:border-purple-800">
-                                                {employee.full_name.charAt(0)}
+                                    <div>
+                                        <div className="flex items-center gap-4 mb-5">
+                                            {employee.photo_path ? (
+                                                <img
+                                                    src={employee.photo_path}
+                                                    alt={employee.full_name}
+                                                    className="w-16 h-16 rounded-2xl object-cover shadow-md border-2 border-white dark:border-gray-700"
+                                                />
+                                            ) : (
+                                                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center shadow-md text-white text-2xl font-bold">
+                                                    {employee.full_name.charAt(0)}
+                                                </div>
+                                            )}
+                                            <div>
+                                                <h3 className="text-xl font-bold text-gray-900 dark:text-white leading-tight">
+                                                    {employee.full_name}
+                                                </h3>
+                                                {employee.position && (
+                                                    <div className="text-purple-600 dark:text-purple-400 text-sm font-medium mt-1">
+                                                        {employee.position}
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
-                                        <div className="flex-1">
-                                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
-                                                {employee.full_name}
-                                            </h3>
-                                            {employee.position && (
-                                                <p className="text-sm text-purple-600 dark:text-purple-400 font-semibold">
-                                                    {employee.position}
-                                                </p>
+                                        </div>
+
+                                        <div className="space-y-3 mb-5">
+                                            <div className="flex items-center gap-3 p-2.5 bg-gray-50/80 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-600/50 hover:bg-white dark:hover:bg-gray-700/50 transition-colors">
+                                                <div className="p-1.5 bg-blue-100/50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                                    </svg>
+                                                </div>
+                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{employee.phone}</span>
+                                            </div>
+
+                                            {employee.email && (
+                                                <div className="flex items-center gap-3 p-2.5 bg-gray-50/80 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-600/50 hover:bg-white dark:hover:bg-gray-700/50 transition-colors">
+                                                    <div className="p-1.5 bg-indigo-100/50 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                        </svg>
+                                                    </div>
+                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">{employee.email}</span>
+                                                </div>
+                                            )}
+
+                                            {employee.base_salary && (
+                                                <div className="flex items-center gap-3 p-2.5 bg-green-50/50 dark:bg-green-900/10 rounded-xl border border-green-100 dark:border-green-800/30">
+                                                    <div className="p-1.5 bg-green-100/50 dark:bg-green-900/30 rounded-lg text-green-600 dark:text-green-400">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                    </div>
+                                                    <span className="text-sm font-bold text-green-700 dark:text-green-400">
+                                                        {employee.base_salary.toLocaleString()} افغانی
+                                                    </span>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="space-y-2 mb-4">
-                                        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                            </svg>
-                                            <span className="text-sm">{employee.phone}</span>
-                                        </div>
-                                        {employee.email && (
-                                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                                </svg>
-                                                <span className="text-sm">{employee.email}</span>
-                                            </div>
-                                        )}
-                                        {employee.base_salary && (
-                                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                <span className="text-sm">{employee.base_salary.toLocaleString()} افغانی</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="flex gap-2">
+
+                                    <div className="flex gap-3 pt-4 border-t border-purple-100/50 dark:border-gray-700/50">
                                         <motion.button
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
                                             onClick={() => handleOpenModal(employee)}
-                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
+                                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg transition-colors text-sm font-semibold"
                                         >
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                             </svg>
                                             {translations.edit}
                                         </motion.button>
                                         <motion.button
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
                                             onClick={() => setDeleteConfirm(employee.id)}
-                                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
+                                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg transition-colors text-sm font-semibold"
                                         >
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                             </svg>
                                             {translations.delete}

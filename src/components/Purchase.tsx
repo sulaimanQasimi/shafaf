@@ -9,7 +9,6 @@ import {
   updatePurchase,
   deletePurchase,
   type Purchase,
-  type PurchaseItem,
   type PurchaseItemInput,
   type PurchaseWithItems,
 } from "../utils/purchase";
@@ -625,7 +624,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                                 <option value={0}>انتخاب واحد</option>
                                 {units.map((unit) => (
                                   <option key={unit.id} value={unit.id}>
-                                    {unit.name} {unit.symbol ? `(${unit.symbol})` : ''}
+                                    {unit.name}
                                   </option>
                                 ))}
                               </select>
@@ -876,7 +875,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                                 {product?.name || `ID: ${item.product_id}`}
                               </td>
                               <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
-                                {unit ? `${unit.name} ${unit.symbol ? `(${unit.symbol})` : ''}` : `ID: ${item.unit_id}`}
+                                {unit ? unit.name : `ID: ${item.unit_id}`}
                               </td>
                               <td className="px-6 py-4 text-gray-900 dark:text-white text-left font-semibold">
                                 {item.per_price.toLocaleString('fa-IR')}

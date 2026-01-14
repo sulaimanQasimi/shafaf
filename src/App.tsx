@@ -9,7 +9,11 @@ import CurrencyManagement from "./components/Currency";
 import SupplierManagement from "./components/Supplier";
 import ProductManagement from "./components/Product";
 import PurchaseManagement from "./components/Purchase";
+import SalesManagement from "./components/Sales";
 import UnitManagement from "./components/Unit";
+import CustomerManagement from "./components/Customer";
+import UserManagement from "./components/UserManagement";
+import ProfileEdit from "./components/ProfileEdit";
 import "./App.css";
 
 interface User {
@@ -18,7 +22,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "unit";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "users" | "profile";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -75,10 +79,16 @@ function App() {
     );
   }
 
-  // Show purchase page if selected
   if (currentPage === "purchase") {
     return (
       <PurchaseManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
+  // Show sales page if selected
+  if (currentPage === "sales") {
+    return (
+      <SalesManagement onBack={() => setCurrentPage("dashboard")} />
     );
   }
 
@@ -86,6 +96,40 @@ function App() {
   if (currentPage === "product") {
     return (
       <ProductManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
+  // Show customer page if selected
+  if (currentPage === "customer") {
+    return (
+      <CustomerManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
+  // Show users management page if selected
+  if (currentPage === "users") {
+    return (
+      <UserManagement
+        onBack={() => setCurrentPage("dashboard")}
+        currentUser={user}
+      />
+    );
+  }
+
+  // Show profile edit page if selected
+  if (currentPage === "profile") {
+    return (
+      <ProfileEdit
+        userId={user.id}
+        onBack={() => setCurrentPage("dashboard")}
+        onProfileUpdate={(updatedUser) => {
+          setUser({
+            id: updatedUser.id,
+            username: updatedUser.username,
+            email: updatedUser.email,
+          });
+        }}
+      />
     );
   }
 
@@ -125,9 +169,22 @@ function App() {
                 <p className="font-semibold text-gray-900 dark:text-white">{user.username}</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
               </div>
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-lg">{user.username.charAt(0).toUpperCase()}</span>
-              </div>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setCurrentPage("profile")}
+                className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:shadow-xl transition-all duration-200 group relative"
+                title="ویرایش پروفایل"
+              >
+                <span className="text-white font-bold text-lg group-hover:scale-110 transition-transform">
+                  {user.username.charAt(0).toUpperCase()}
+                </span>
+                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-md border-2 border-white dark:border-gray-800">
+                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </div>
+              </motion.button>
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -226,6 +283,13 @@ function App() {
                 page: "purchase" as Page,
               },
               {
+                title: "مدیریت فروشات",
+                description: "ثبت و مدیریت فروشات، صدور فاکتور و کنترل موجودی",
+                icon: "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z",
+                color: "from-emerald-500 to-teal-500",
+                page: "sales" as Page,
+              },
+              {
                 title: "تمویل کننده ها",
                 description: "مدیریت اطلاعات تمویل کننده ها و توزیع کننده ها",
                 icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
@@ -245,6 +309,20 @@ function App() {
                 icon: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
                 color: "from-pink-500 to-rose-500",
                 page: "unit" as Page,
+              },
+              {
+                title: "مدیریت مشتری ها",
+                description: "افزودن، ویرایش و مدیریت اطلاعات مشتریان",
+                icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
+                color: "from-indigo-500 to-blue-500",
+                page: "customer" as Page,
+              },
+              {
+                title: "مدیریت کاربران",
+                description: "ایجاد، ویرایش و مدیریت کاربران سیستم",
+                icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m9 5.197v-1a6 6 0 00-9-5.197",
+                color: "from-cyan-500 to-blue-500",
+                page: "users" as Page,
               },
             ].map((item, index) => (
               <motion.button

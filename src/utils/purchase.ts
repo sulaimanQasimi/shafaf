@@ -108,8 +108,8 @@ export async function updatePurchase(
   notes: string | null,
   items: PurchaseItemInput[]
 ): Promise<Purchase> {
-  // Convert items to tuple format expected by Rust
-  const itemsTuple: [number, string, number, number][] = items.map(item => [
+  // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
+  const itemsTuple: [number, number, number, number][] = items.map(item => [
     item.product_id,
     item.unit_id,
     item.per_price,

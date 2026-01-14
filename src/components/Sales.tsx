@@ -67,7 +67,6 @@ const translations = {
         selectUnit: "واحد را انتخاب کنید",
     },
     selectUnit: "واحد را انتخاب کنید",
-},
     payments: {
         title: "پرداخت‌ها",
         add: "افزودن پرداخت",
@@ -1120,8 +1119,7 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
                                             ))}
                                         </tbody>
                                     </table>
-                                </table>
-                            </div>
+                                </div>
 
                             {/* Payments Section */}
                             <div className="mt-8">
@@ -1222,8 +1220,10 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
                                     </div>
                                 </div>
                             </div>
-
-                        </AnimatePresence>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* Delete Confirmation Modal */}
                     <AnimatePresence>

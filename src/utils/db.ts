@@ -22,9 +22,9 @@ export async function createDatabase(dbName: string): Promise<string> {
 /**
  * Open database (creates it automatically if it doesn't exist)
  * Database path is automatically determined based on OS:
- * - Windows: %LOCALAPPDATA%\tauri-app\db.sqlite
- * - macOS: ~/Library/Application Support/tauri-app/db.sqlite
- * - Linux: ~/.local/share/tauri-app/db.sqlite or $XDG_DATA_HOME/tauri-app/db.sqlite
+ * - Windows: %LOCALAPPDATA%\finance-app\db.sqlite
+ * - macOS: ~/Library/Application Support/finance-app/db.sqlite
+ * - Linux: ~/.local/share/finance-app/db.sqlite or $XDG_DATA_HOME/finance-app/db.sqlite
  * @param dbName Name of the database (without .db extension) - currently not used
  * @returns Promise with the database path
  */

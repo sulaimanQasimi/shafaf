@@ -39,7 +39,7 @@ fn get_db_path(_app: &AppHandle, _db_name: &str) -> Result<PathBuf, String> {
                 // Fallback to current directory if LOCALAPPDATA is not set
                 PathBuf::from(".")
             })
-            .join("tauri-app")
+            .join("finance-app")
     } else if cfg!(target_os = "macos") {
         // macOS: Use ~/Library/Application Support/<app_name>
         std::env::var("HOME")
@@ -54,7 +54,7 @@ fn get_db_path(_app: &AppHandle, _db_name: &str) -> Result<PathBuf, String> {
                     .map(|home| PathBuf::from(home).join(".local").join("share"))
                     .unwrap_or_else(|_| PathBuf::from("."))
             })
-            .join("tauri-app")
+            .join("finance-app")
     };
     
     // Create data directory if it doesn't exist

@@ -11,6 +11,7 @@ export interface ExecuteResult {
 
 /**
  * Create a new SQLite database file
+ * Database is automatically created in the OS-specific data directory if it doesn't exist
  * @param dbName Name of the database (without .db extension)
  * @returns Promise with the database path
  */
@@ -19,9 +20,12 @@ export async function createDatabase(dbName: string): Promise<string> {
 }
 
 /**
- * Open an existing database
- * Database path is read from .env file (DATABASE_PATH) or uses default
- * @param dbName Name of the database (without .db extension) - currently not used, path comes from .env
+ * Open database (creates it automatically if it doesn't exist)
+ * Database path is automatically determined based on OS:
+ * - Windows: %LOCALAPPDATA%\tauri-app\db.sqlite
+ * - macOS: ~/Library/Application Support/tauri-app/db.sqlite
+ * - Linux: ~/.local/share/tauri-app/db.sqlite or $XDG_DATA_HOME/tauri-app/db.sqlite
+ * @param dbName Name of the database (without .db extension) - currently not used
  * @returns Promise with the database path
  */
 export async function openDatabase(dbName: string): Promise<string> {
@@ -29,7 +33,7 @@ export async function openDatabase(dbName: string): Promise<string> {
 }
 
 /**
- * Get the current database path from environment configuration
+ * Get the current database path
  * @returns Promise with the database path string
  */
 export async function getDatabasePath(): Promise<string> {

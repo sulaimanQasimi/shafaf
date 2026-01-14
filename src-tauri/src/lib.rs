@@ -28,67 +28,66 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-/// Get database path from environment variable or use default
+/// Get database path using standard OS data directory
 fn get_db_path(_app: &AppHandle, _db_name: &str) -> Result<PathBuf, String> {
-    // Load environment variables
-    load_env();
-    
-    // Get database path from environment variable, or use default
-    let db_path_str = std::env::var("DATABASE_PATH")
-        .unwrap_or_else(|_| {
-            // Default path based on OS
-            if cfg!(windows) {
-                "E:\\db.sqlite".to_string()
-            } else {
-                "./data/db.sqlite".to_string()
-            }
-        });
-    
-    let db_path = PathBuf::from(&db_path_str);
+    // Get standard data directory based on OS
+    let data_dir = if cfg!(windows) {
+        // Windows: Use AppData\Local\<app_name>
+        std::env::var("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                // Fallback to current directory if LOCALAPPDATA is not set
+                PathBuf::from(".")
+            })
+            .join("tauri-app")
+    } else if cfg!(target_os = "macos") {
+        // macOS: Use ~/Library/Application Support/<app_name>
+        std::env::var("HOME")
+            .map(|home| PathBuf::from(home).join("Library").join("Application Support").join("tauri-app"))
+            .unwrap_or_else(|_| PathBuf::from("."))
+    } else {
+        // Linux: Use ~/.local/share/<app_name> or XDG_DATA_HOME
+        std::env::var("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::env::var("HOME")
+                    .map(|home| PathBuf::from(home).join(".local").join("share"))
+                    .unwrap_or_else(|_| PathBuf::from("."))
+            })
+            .join("tauri-app")
+    };
     
     // Create data directory if it doesn't exist
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create data directory: {}", e))?;
-    }
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("Failed to create data directory: {}", e))?;
+    
+    // Database file path
+    let db_path = data_dir.join("db.sqlite");
     
     Ok(db_path)
 }
 
-/// Get the current database path from environment configuration
+/// Get the current database path
 #[tauri::command]
-fn get_database_path(_app: AppHandle) -> Result<String, String> {
-    load_env();
-    
-    let db_path_str = std::env::var("DATABASE_PATH")
-        .unwrap_or_else(|_| {
-            if cfg!(windows) {
-                "E:\\db.sqlite".to_string()
-            } else {
-                "./data/db.sqlite".to_string()
-            }
-        });
-    
-    Ok(db_path_str)
+fn get_database_path(app: AppHandle) -> Result<String, String> {
+    let db_path = get_db_path(&app, "")?;
+    Ok(db_path.to_string_lossy().to_string())
 }
 
-/// Create a new SQLite database file (not used - database path comes from .env file)
+/// Create a new SQLite database file (creates database automatically on open)
 #[tauri::command]
-fn db_create(_app: AppHandle, _db_name: String) -> Result<String, String> {
-    load_env();
-    let db_path = get_db_path(&_app, &_db_name)?;
-    Err(format!("Database creation is disabled. Please create the database file manually at: {}", db_path.display()))
+fn db_create(app: AppHandle, _db_name: String) -> Result<String, String> {
+    let db_path = get_db_path(&app, &_db_name)?;
+    let db = Database::new(db_path.clone());
+    db.open()
+        .map_err(|e| format!("Failed to create database: {}", e))?;
+    Ok(format!("Database created at: {:?}", db_path))
 }
 
-/// Open an existing database (path from .env file or default)
+/// Open database (creates it automatically if it doesn't exist)
 #[tauri::command]
 fn db_open(app: AppHandle, _db_name: String) -> Result<String, String> {
-    load_env();
     let db_path = get_db_path(&app, "")?;
-    
-    if !db_path.exists() {
-        return Err(format!("Database does not exist at {}. Please create it first or check your DATABASE_PATH in .env file.", db_path.display()));
-    }
 
     let db = Database::new(db_path.clone());
     db.open()
@@ -99,7 +98,11 @@ fn db_open(app: AppHandle, _db_name: String) -> Result<String, String> {
     let mut db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     *db_guard = Some(db);
 
-    Ok(format!("Database opened: {:?}", db_path))
+    if db_path.exists() {
+        Ok(format!("Database opened: {:?}", db_path))
+    } else {
+        Ok(format!("Database created and opened: {:?}", db_path))
+    }
 }
 
 /// Close the current database

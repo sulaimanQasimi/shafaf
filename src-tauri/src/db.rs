@@ -31,17 +31,15 @@ impl Database {
     }
 
     /// Open the database connection with explicit read-write access
+    /// Creates the database file if it doesn't exist
     pub fn open(&self) -> Result<()> {
-        if !self.db_path.exists() {
-            return Err(anyhow::anyhow!("Database does not exist. Please create it first."));
-        }
-
         let mut conn_guard = self.conn.lock().unwrap();
         if conn_guard.is_some() {
             return Ok(()); // Already open
         }
 
         // Open with explicit read-write flags to ensure write access
+        // SQLITE_OPEN_CREATE flag will create the database if it doesn't exist
         let flags = OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE;
         let conn = Connection::open_with_flags(&self.db_path, flags)?;
         *conn_guard = Some(conn);

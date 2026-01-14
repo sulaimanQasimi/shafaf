@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import { useRef } from "react";
 import { PurchaseWithItems } from "../utils/purchase";
 import { Supplier } from "../utils/supplier";
 import { Product } from "../utils/product";
@@ -219,9 +219,128 @@ export default function PurchaseInvoice({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-            <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-                <div ref={printRef} className="invoice-container">
+        <>
+            <style>{`
+                .invoice-container {
+                    max-width: 800px;
+                    margin: 0 auto;
+                    background: white;
+                    padding: 40px;
+                    direction: rtl;
+                }
+                .invoice-header {
+                    border-bottom: 3px solid #059669;
+                    padding-bottom: 20px;
+                    margin-bottom: 30px;
+                }
+                .invoice-title {
+                    font-size: 32px;
+                    font-weight: bold;
+                    color: #059669;
+                    margin-bottom: 10px;
+                }
+                .invoice-number {
+                    font-size: 18px;
+                    color: #64748b;
+                }
+                .info-section {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 30px;
+                    margin-bottom: 30px;
+                }
+                .info-box {
+                    background: #f0fdf4;
+                    padding: 20px;
+                    border-radius: 8px;
+                    border-right: 4px solid #059669;
+                }
+                .info-title {
+                    font-size: 14px;
+                    color: #64748b;
+                    margin-bottom: 8px;
+                    font-weight: 600;
+                }
+                .info-value {
+                    font-size: 16px;
+                    color: #1a1a1a;
+                    font-weight: 500;
+                }
+                .items-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 30px;
+                }
+                .items-table thead {
+                    background: #059669;
+                    color: white;
+                }
+                .items-table th {
+                    padding: 15px;
+                    text-align: right;
+                    font-weight: 600;
+                    font-size: 14px;
+                }
+                .items-table td {
+                    padding: 15px;
+                    border-bottom: 1px solid #e2e8f0;
+                }
+                .items-table tbody tr:hover {
+                    background: #f0fdf4;
+                }
+                .total-section {
+                    margin-top: 20px;
+                    padding-top: 20px;
+                    border-top: 2px solid #e2e8f0;
+                }
+                .total-row {
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 12px 0;
+                    font-size: 16px;
+                }
+                .total-label {
+                    color: #64748b;
+                    font-weight: 600;
+                }
+                .total-value {
+                    color: #1a1a1a;
+                    font-weight: 700;
+                    font-size: 18px;
+                }
+                .grand-total {
+                    background: #059669;
+                    color: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-top: 20px;
+                }
+                .grand-total .total-label,
+                .grand-total .total-value {
+                    color: white;
+                    font-size: 20px;
+                }
+                .notes-section {
+                    margin-top: 30px;
+                    padding: 20px;
+                    background: #f0fdf4;
+                    border-radius: 8px;
+                    border-right: 4px solid #059669;
+                }
+                .notes-title {
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #059669;
+                    margin-bottom: 10px;
+                }
+                .notes-text {
+                    color: #64748b;
+                    line-height: 1.6;
+                }
+            `}</style>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+                <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                    <div ref={printRef} className="invoice-container">
                     {/* Header */}
                     <div className="invoice-header">
                         <div className="flex justify-between items-start mb-4">
@@ -306,26 +425,27 @@ export default function PurchaseInvoice({
                             <div className="notes-text">{purchaseData.purchase.notes}</div>
                         </div>
                     )}
-                </div>
+                    </div>
 
-                {/* Action Buttons */}
-                <div className="no-print flex justify-end gap-4 p-6 border-t bg-gray-50">
-                    <button
-                        onClick={handlePrint}
-                        className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
-                    >
-                        چاپ فاکتور
-                    </button>
-                    {onClose && (
+                    {/* Action Buttons */}
+                    <div className="no-print flex justify-end gap-4 p-6 border-t bg-gray-50">
                         <button
-                            onClick={onClose}
-                            className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors font-semibold"
+                            onClick={handlePrint}
+                            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
                         >
-                            بستن
+                            چاپ فاکتور
                         </button>
-                    )}
+                        {onClose && (
+                            <button
+                                onClick={onClose}
+                                className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors font-semibold"
+                            >
+                                بستن
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 }

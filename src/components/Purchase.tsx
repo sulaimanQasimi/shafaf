@@ -16,6 +16,7 @@ import { getSuppliers, type Supplier } from "../utils/supplier";
 import { getProducts, type Product } from "../utils/product";
 import { getUnits, type Unit } from "../utils/unit";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import PurchaseInvoice from "./PurchaseInvoice";
 
 // Dari translations
 const translations = {
@@ -83,6 +84,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
     items: [] as PurchaseItemInput[],
   });
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [showInvoice, setShowInvoice] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -764,16 +766,30 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                       </p>
                     </div>
                   </div>
-                  <motion.button
-                    whileHover={{ scale: 1.1, rotate: 90 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => setIsViewModalOpen(false)}
-                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </motion.button>
+                  <div className="flex gap-2">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setShowInvoice(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl shadow-md transition-all duration-200"
+                      title="چاپ فاکتور"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                      </svg>
+                      چاپ فاکتور
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.1, rotate: 90 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => setIsViewModalOpen(false)}
+                      className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </motion.button>
+                  </div>
                 </div>
 
                 {/* Purchase Info */}
@@ -1015,6 +1031,17 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Invoice Modal */}
+        {showInvoice && viewingPurchase && (
+          <PurchaseInvoice
+            purchaseData={viewingPurchase}
+            supplier={suppliers.find(s => s.id === viewingPurchase.purchase.supplier_id)!}
+            products={products}
+            units={units}
+            onClose={() => setShowInvoice(false)}
+          />
+        )}
       </div>
     </div>
   );

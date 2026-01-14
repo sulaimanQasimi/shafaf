@@ -20,6 +20,7 @@ import { getCustomers, type Customer } from "../utils/customer";
 import { getProducts, type Product } from "../utils/product";
 import { getUnits, type Unit } from "../utils/unit";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import SaleInvoice from "./SaleInvoice";
 
 // Dari translations
 const translations = {
@@ -105,6 +106,7 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
         date: new Date().toISOString().split('T')[0],
     });
     const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+    const [showInvoice, setShowInvoice] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -405,98 +407,15 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
         return units.find(u => u.id === unitId)?.name || `ID: ${unitId}`;
     };
 
-    const printInvoice = (saleData: SaleWithItems) => {
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) return;
-
-        const customer = customers.find(c => c.id === saleData.sale.customer_id);
-
-        const html = `
-      <!DOCTYPE html>
-      <html dir="rtl">
-      <head>
-        <title>فاکتور فروش #${saleData.sale.id}</title>
-        <style>
-          body { font-family: 'Tahoma', sans-serif; padding: 20px; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
-          .meta { display: flex; justify-content: space-between; margin-bottom: 20px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
-          th { background-color: #f8f9fa; }
-          .totals { margin-top: 20px; width: 300px; float: left; }
-          .total-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; }
-          .total-row.final { font-weight: bold; font-size: 1.2em; border-top: 2px solid #000; border-bottom: none; margin-top: 10px; padding-top: 10px; }
-          @media print {
-            .no-print { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>فروشگاه داروخانه شفاف</h1>
-          <p>شماره فاکتور: #${saleData.sale.id}</p>
-        </div>
-        
-        <div class="meta">
-          <div>
-            <strong>مشتری:</strong> ${customer?.full_name || '-'}<br>
-            <strong>آدرس:</strong> ${customer?.address || '-'}<br>
-            <strong>تلفن:</strong> ${customer?.phone || '-'}
-          </div>
-          <div>
-            <strong>تاریخ:</strong> ${new Date(saleData.sale.date).toLocaleDateString('fa-IR')}
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>محصول</th>
-              <th>واحد</th>
-              <th>قیمت واحد</th>
-              <th>تعداد</th>
-              <th>مجموع</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${saleData.items.map((item, index) => `
-              <tr>
-                <td>${index + 1}</td>
-                <td>${getProductName(item.product_id)}</td>
-                <td>${getUnitName(item.unit_id)}</td>
-                <td>${item.per_price.toLocaleString('fa-IR')}</td>
-                <td>${item.amount}</td>
-                <td>${(item.per_price * item.amount).toLocaleString('fa-IR')}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-
-        <div class="totals">
-          <div class="total-row">
-            <span>مبلغ کل:</span>
-            <span>${saleData.sale.total_amount.toLocaleString('fa-IR')}</span>
-          </div>
-          <div class="total-row">
-            <span>پرداخت شده:</span>
-            <span>${saleData.sale.paid_amount.toLocaleString('fa-IR')}</span>
-          </div>
-          <div class="total-row final">
-            <span>باقی مانده:</span>
-            <span>${(saleData.sale.total_amount - saleData.sale.paid_amount).toLocaleString('fa-IR')}</span>
-          </div>
-        </div>
-
-        <script>
-          window.onload = function() { window.print(); }
-        </script>
-      </body>
-      </html>
-    `;
-
-        printWindow.document.write(html);
-        printWindow.document.close();
+    const handlePrintInvoice = async (saleData: SaleWithItems) => {
+        try {
+            const salePayments = await getSalePayments(saleData.sale.id);
+            setPayments(salePayments);
+            setShowInvoice(true);
+        } catch (error) {
+            console.error("Error loading payments:", error);
+            setShowInvoice(true);
+        }
     };
 
     return (
@@ -1010,8 +929,8 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
                                         <motion.button
                                             whileHover={{ scale: 1.05 }}
                                             whileTap={{ scale: 0.95 }}
-                                            onClick={() => printInvoice(viewingSale)}
-                                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-xl shadow-md transition-all duration-200"
+                                            onClick={() => handlePrintInvoice(viewingSale)}
+                                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl shadow-md transition-all duration-200"
                                             title="چاپ فاکتور"
                                         >
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1313,6 +1232,18 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
                             </motion.div>
                         )}
                     </AnimatePresence>
+
+                    {/* Invoice Modal */}
+                    {showInvoice && viewingSale && (
+                        <SaleInvoice
+                            saleData={viewingSale}
+                            customer={customers.find(c => c.id === viewingSale.sale.customer_id)!}
+                            products={products}
+                            units={units}
+                            payments={payments}
+                            onClose={() => setShowInvoice(false)}
+                        />
+                    )}
             </div>
         </div>
     );

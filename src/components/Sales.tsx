@@ -10,6 +10,7 @@ import {
     deleteSale,
     createSalePayment,
     getSalePayments,
+    deleteSalePayment,
     type Sale,
     type SaleItemInput,
     type SaleWithItems,

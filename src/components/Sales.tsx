@@ -8,9 +8,12 @@ import {
     getSale,
     updateSale,
     deleteSale,
+    createSalePayment,
+    getSalePayments,
     type Sale,
     type SaleItemInput,
     type SaleWithItems,
+    type SalePayment,
 } from "../utils/sales";
 import { getCustomers, type Customer } from "../utils/customer";
 import { getProducts, type Product } from "../utils/product";
@@ -63,6 +66,16 @@ const translations = {
         selectProduct: "محصول را انتخاب کنید",
         selectUnit: "واحد را انتخاب کنید",
     },
+    selectUnit: "واحد را انتخاب کنید",
+},
+    payments: {
+        title: "پرداخت‌ها",
+        add: "افزودن پرداخت",
+        amount: "مبلغ",
+        date: "تاریخ",
+        history: "تاریخچه پرداخت‌ها",
+        noPayments: "هیچ پرداختی ثبت نشده است",
+    }
 };
 
 interface SalesManagementProps {
@@ -85,6 +98,11 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
         notes: "",
         paid_amount: 0,
         items: [] as SaleItemInput[],
+    });
+    const [payments, setPayments] = useState<SalePayment[]>([]);
+    const [newPayment, setNewPayment] = useState({
+        amount: '',
+        date: new Date().toISOString().split('T')[0],
     });
     const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
@@ -147,6 +165,69 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
         }
     };
 
+    const loadPayments = async (saleId: number) => {
+        try {
+            const paymentsData = await getSalePayments(saleId);
+            setPayments(paymentsData);
+        } catch (error) {
+            console.error("Error loading payments:", error);
+            toast.error("خطا در دریافت لیست پرداخت‌ها");
+        }
+    };
+
+    const handleAddPayment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!viewingSale) return;
+
+        if (!newPayment.amount || parseFloat(newPayment.amount) <= 0) {
+            toast.error("مبلغ پرداخت باید بیشتر از صفر باشد");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            await createSalePayment(viewingSale.sale.id, parseFloat(newPayment.amount), newPayment.date);
+            toast.success("پرداخت با موفقیت ثبت شد");
+            setNewPayment({
+                amount: '',
+                date: new Date().toISOString().split('T')[0],
+            });
+            await loadPayments(viewingSale.sale.id);
+            // Reload sale to update paid amount in main list/view logic if needed
+            // But main list (sales state) needs refresh too
+            await loadData();
+            // Update viewingSale state as well
+            const updatedSale = await getSale(viewingSale.sale.id);
+            setViewingSale(updatedSale);
+        } catch (error) {
+            console.error("Error adding payment:", error);
+            toast.error("خطا در ثبت پرداخت");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeletePayment = async (paymentId: number) => {
+        if (!viewingSale) return;
+        try {
+            // Confirm? Maybe too annoying with another modal within modal. Just do it or browser confirm.
+            if (!window.confirm("آیا از حذف این پرداخت اطمینان دارید؟")) return;
+
+            setLoading(true);
+            await deleteSalePayment(paymentId);
+            toast.success("پرداخت حذف شد");
+            await loadPayments(viewingSale.sale.id);
+            await loadData();
+            const updatedSale = await getSale(viewingSale.sale.id);
+            setViewingSale(updatedSale);
+        } catch (error) {
+            console.error("Error deleting payment:", error);
+            toast.error("خطا در حذف پرداخت");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleOpenModal = async (sale?: Sale) => {
         if (sale) {
             await loadSaleDetails(sale.id);
@@ -189,6 +270,7 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
         try {
             const saleData = await getSale(sale.id);
             setViewingSale(saleData);
+            await loadPayments(sale.id);
             setIsViewModalOpen(true);
         } catch (error: any) {
             toast.error("خطا در دریافت جزئیات فروش");
@@ -1038,100 +1120,198 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
                                             ))}
                                         </tbody>
                                     </table>
+                                </table>
+                            </div>
+
+                            {/* Payments Section */}
+                            <div className="mt-8">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                        <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                                        </svg>
+                                        {translations.payments.history}
+                                    </h3>
                                 </div>
 
-                            </motion.div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {/* Payments List */}
+                                    <div className="md:col-span-2 space-y-3 max-h-60 overflow-y-auto">
+                                        {payments.length === 0 ? (
+                                            <div className="text-center py-8 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
+                                                <p className="text-gray-500 dark:text-gray-400">{translations.payments.noPayments}</p>
+                                            </div>
+                                        ) : (
+                                            payments.map((payment) => (
+                                                <div key={payment.id} className="flex justify-between items-center p-4 bg-white dark:bg-gray-700 rounded-xl border border-gray-100 dark:border-gray-600 shadow-sm">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400 font-bold text-sm">
+                                                            $
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-bold text-gray-900 dark:text-white">
+                                                                {payment.amount.toLocaleString('fa-IR')}
+                                                            </div>
+                                                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                                                                {new Date(payment.date).toLocaleDateString('fa-IR')}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleDeletePayment(payment.id)}
+                                                        className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                        title={translations.delete}
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+
+                                    {/* Add Payment Form */}
+                                    <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-xl border border-gray-200 dark:border-gray-600 h-fit">
+                                        <h4 className="font-bold text-gray-900 dark:text-white mb-4 text-sm">{translations.payments.add}</h4>
+                                        <form onSubmit={handleAddPayment} className="space-y-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                                    {translations.payments.date}
+                                                </label>
+                                                <input
+                                                    type="date"
+                                                    value={newPayment.date}
+                                                    onChange={(e) => setNewPayment({ ...newPayment, date: e.target.value })}
+                                                    required
+                                                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                                    {translations.payments.amount}
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={newPayment.amount}
+                                                    onChange={(e) => setNewPayment({ ...newPayment, amount: e.target.value })}
+                                                    required
+                                                    placeholder="0.00"
+                                                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                                    dir="ltr"
+                                                />
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                disabled={loading}
+                                                className="w-full py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-lg text-sm shadow-md transition-all duration-200 flex justify-center items-center gap-2"
+                                            >
+                                                {loading ? (
+                                                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                ) : (
+                                                    <>
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                        </svg>
+                                                        {translations.payments.add}
+                                                    </>
+                                                )}
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </AnimatePresence>
 
                 {/* Delete Confirmation Modal */}
-                <AnimatePresence>
-                    {deleteConfirm && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4"
-                            onClick={() => setDeleteConfirm(null)}
-                        >
+                    <AnimatePresence>
+                        {deleteConfirm && (
                             <motion.div
-                                initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                                animate={{ scale: 1, opacity: 1, y: 0 }}
-                                exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-md border border-red-100 dark:border-red-900/30"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4"
+                                onClick={() => setDeleteConfirm(null)}
                             >
-                                {/* Warning Icon */}
-                                <div className="flex justify-center mb-6">
-                                    <motion.div
-                                        animate={{
-                                            scale: [1, 1.1, 1],
-                                            rotate: [0, -5, 5, -5, 0]
-                                        }}
-                                        transition={{
-                                            duration: 0.5,
-                                            repeat: Infinity,
-                                            repeatDelay: 2
-                                        }}
-                                        className="w-20 h-20 bg-gradient-to-br from-red-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg"
-                                    >
-                                        <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                        </svg>
-                                    </motion.div>
-                                </div>
+                                <motion.div
+                                    initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                                    exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-md border border-red-100 dark:border-red-900/30"
+                                >
+                                    {/* Warning Icon */}
+                                    <div className="flex justify-center mb-6">
+                                        <motion.div
+                                            animate={{
+                                                scale: [1, 1.1, 1],
+                                                rotate: [0, -5, 5, -5, 0]
+                                            }}
+                                            transition={{
+                                                duration: 0.5,
+                                                repeat: Infinity,
+                                                repeatDelay: 2
+                                            }}
+                                            className="w-20 h-20 bg-gradient-to-br from-red-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg"
+                                        >
+                                            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                            </svg>
+                                        </motion.div>
+                                    </div>
 
-                                {/* Title */}
-                                <h2 className="text-2xl font-bold text-center text-gray-900 dark:text-white mb-3">
-                                    {translations.delete}
-                                </h2>
+                                    {/* Title */}
+                                    <h2 className="text-2xl font-bold text-center text-gray-900 dark:text-white mb-3">
+                                        {translations.delete}
+                                    </h2>
 
-                                {/* Message */}
-                                <p className="text-center text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
-                                    {translations.confirmDelete}
-                                </p>
+                                    {/* Message */}
+                                    <p className="text-center text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
+                                        {translations.confirmDelete}
+                                    </p>
 
-                                {/* Action Buttons */}
-                                <div className="flex gap-3">
-                                    <motion.button
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => setDeleteConfirm(null)}
-                                        className="flex-1 px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg"
-                                    >
-                                        {translations.cancel}
-                                    </motion.button>
-                                    <motion.button
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => handleDelete(deleteConfirm)}
-                                        disabled={loading}
-                                        className="flex-1 px-6 py-3 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white font-bold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-                                    >
-                                        {loading ? (
-                                            <span className="flex items-center justify-center gap-2">
-                                                <motion.div
-                                                    animate={{ rotate: 360 }}
-                                                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                                    className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
-                                                />
-                                                در حال حذف...
-                                            </span>
-                                        ) : (
-                                            <span className="flex items-center justify-center gap-2">
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                                {translations.delete}
-                                            </span>
-                                        )}
-                                    </motion.button>
-                                </div>
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-3">
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => setDeleteConfirm(null)}
+                                            className="flex-1 px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg"
+                                        >
+                                            {translations.cancel}
+                                        </motion.button>
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => handleDelete(deleteConfirm)}
+                                            disabled={loading}
+                                            className="flex-1 px-6 py-3 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white font-bold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                                        >
+                                            {loading ? (
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <motion.div
+                                                        animate={{ rotate: 360 }}
+                                                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                                        className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+                                                    />
+                                                    در حال حذف...
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                    {translations.delete}
+                                                </span>
+                                            )}
+                                        </motion.button>
+                                    </div>
+                                </motion.div>
                             </motion.div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                        )}
+                    </AnimatePresence>
             </div>
         </div>
     );

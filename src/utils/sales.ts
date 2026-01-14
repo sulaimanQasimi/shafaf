@@ -28,6 +28,14 @@ export interface SaleWithItems {
     items: SaleItem[];
 }
 
+export interface SalePayment {
+    id: number;
+    sale_id: number;
+    amount: number;
+    date: string;
+    created_at: string;
+}
+
 export interface SaleItemInput {
     product_id: number;
     unit_id: number;
@@ -208,4 +216,41 @@ export async function updateSaleItem(
  */
 export async function deleteSaleItem(id: number): Promise<string> {
     return await invoke<string>("delete_sale_item", { id });
+}
+
+/**
+ * Create a sale payment
+ * @param sale_id Sale ID
+ * @param amount Payment Amount
+ * @param date Payment Date
+ * @returns Promise with SalePayment
+ */
+export async function createSalePayment(
+    sale_id: number,
+    amount: number,
+    date: string
+): Promise<SalePayment> {
+    return await invoke<SalePayment>("create_sale_payment", {
+        saleId: sale_id,
+        amount,
+        date,
+    });
+}
+
+/**
+ * Get payments for a sale
+ * @param sale_id Sale ID
+ * @returns Promise with array of SalePayment
+ */
+export async function getSalePayments(sale_id: number): Promise<SalePayment[]> {
+    return await invoke<SalePayment[]>("get_sale_payments", { saleId: sale_id });
+}
+
+/**
+ * Delete a sale payment
+ * @param id Payment ID
+ * @returns Promise with success message
+ */
+export async function deleteSalePayment(id: number): Promise<string> {
+    return await invoke<string>("delete_sale_payment", { id });
 }

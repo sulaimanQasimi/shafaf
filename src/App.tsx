@@ -12,6 +12,7 @@ import PurchaseManagement from "./components/Purchase";
 import SalesManagement from "./components/Sales";
 import UnitManagement from "./components/Unit";
 import CustomerManagement from "./components/Customer";
+import ExpenseManagement from "./components/Expense";
 import UserManagement from "./components/UserManagement";
 import ProfileEdit from "./components/ProfileEdit";
 import "./App.css";
@@ -22,7 +23,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "users" | "profile";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "users" | "profile";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -103,6 +104,13 @@ function App() {
   if (currentPage === "customer") {
     return (
       <CustomerManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
+  // Show expense page if selected
+  if (currentPage === "expense") {
+    return (
+      <ExpenseManagement onBack={() => setCurrentPage("dashboard")} />
     );
   }
 
@@ -316,6 +324,13 @@ function App() {
                 icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z",
                 color: "from-indigo-500 to-blue-500",
                 page: "customer" as Page,
+              },
+              {
+                title: "مدیریت مصارف",
+                description: "ثبت و مدیریت مصارف و هزینه‌های داروخانه",
+                icon: "M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z",
+                color: "from-red-500 to-pink-500",
+                page: "expense" as Page,
               },
               {
                 title: "مدیریت کاربران",

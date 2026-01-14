@@ -2366,6 +2366,219 @@ fn delete_sale_payment(
     Ok("Sale payment deleted successfully".to_string())
 }
 
+// Expense Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Expense {
+    pub id: i64,
+    pub name: String,
+    pub amount: f64,
+    pub currency: String,
+    pub rate: f64,
+    pub total: f64,
+    pub date: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Initialize expenses table schema
+#[tauri::command]
+fn init_expenses_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            amount REAL NOT NULL,
+            currency TEXT NOT NULL,
+            rate REAL NOT NULL DEFAULT 1.0,
+            total REAL NOT NULL,
+            date TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create expenses table: {}", e))?;
+
+    Ok("Expenses table initialized successfully".to_string())
+}
+
+/// Create a new expense
+#[tauri::command]
+fn create_expense(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    name: String,
+    amount: f64,
+    currency: String,
+    rate: f64,
+    total: f64,
+    date: String,
+) -> Result<Expense, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Insert new expense
+    let insert_sql = "INSERT INTO expenses (name, amount, currency, rate, total, date) VALUES (?, ?, ?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &name as &dyn rusqlite::ToSql,
+        &amount as &dyn rusqlite::ToSql,
+        &currency as &dyn rusqlite::ToSql,
+        &rate as &dyn rusqlite::ToSql,
+        &total as &dyn rusqlite::ToSql,
+        &date as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert expense: {}", e))?;
+
+    // Get the created expense
+    let expense_sql = "SELECT id, name, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE name = ? AND date = ? ORDER BY id DESC LIMIT 1";
+    let expenses = db
+        .query(expense_sql, &[&name as &dyn rusqlite::ToSql, &date as &dyn rusqlite::ToSql], |row| {
+            Ok(Expense {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                amount: row.get(2)?,
+                currency: row.get(3)?,
+                rate: row.get(4)?,
+                total: row.get(5)?,
+                date: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch expense: {}", e))?;
+
+    if let Some(expense) = expenses.first() {
+        Ok(expense.clone())
+    } else {
+        Err("Failed to retrieve created expense".to_string())
+    }
+}
+
+/// Get all expenses
+#[tauri::command]
+fn get_expenses(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Expense>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, name, amount, currency, rate, total, date, created_at, updated_at FROM expenses ORDER BY date DESC, created_at DESC";
+    let expenses = db
+        .query(sql, &[], |row| {
+            Ok(Expense {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                amount: row.get(2)?,
+                currency: row.get(3)?,
+                rate: row.get(4)?,
+                total: row.get(5)?,
+                date: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch expenses: {}", e))?;
+
+    Ok(expenses)
+}
+
+/// Get a single expense
+#[tauri::command]
+fn get_expense(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<Expense, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let expense_sql = "SELECT id, name, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE id = ?";
+    let expenses = db
+        .query(expense_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Expense {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                amount: row.get(2)?,
+                currency: row.get(3)?,
+                rate: row.get(4)?,
+                total: row.get(5)?,
+                date: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch expense: {}", e))?;
+
+    let expense = expenses.first().ok_or("Expense not found")?;
+    Ok(expense.clone())
+}
+
+/// Update an expense
+#[tauri::command]
+fn update_expense(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    name: String,
+    amount: f64,
+    currency: String,
+    rate: f64,
+    total: f64,
+    date: String,
+) -> Result<Expense, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Update expense
+    let update_sql = "UPDATE expenses SET name = ?, amount = ?, currency = ?, rate = ?, total = ?, date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_sql, &[
+        &name as &dyn rusqlite::ToSql,
+        &amount as &dyn rusqlite::ToSql,
+        &currency as &dyn rusqlite::ToSql,
+        &rate as &dyn rusqlite::ToSql,
+        &total as &dyn rusqlite::ToSql,
+        &date as &dyn rusqlite::ToSql,
+        &id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update expense: {}", e))?;
+
+    // Get the updated expense
+    let expense_sql = "SELECT id, name, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE id = ?";
+    let expenses = db
+        .query(expense_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Expense {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                amount: row.get(2)?,
+                currency: row.get(3)?,
+                rate: row.get(4)?,
+                total: row.get(5)?,
+                date: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch expense: {}", e))?;
+
+    if let Some(expense) = expenses.first() {
+        Ok(expense.clone())
+    } else {
+        Err("Failed to retrieve updated expense".to_string())
+    }
+}
+
+/// Delete an expense
+#[tauri::command]
+fn delete_expense(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let delete_sql = "DELETE FROM expenses WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete expense: {}", e))?;
+
+    Ok("Expense deleted successfully".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Load environment variables at startup
@@ -2433,7 +2646,13 @@ pub fn run() {
             delete_sale_item,
             create_sale_payment,
             get_sale_payments,
-            delete_sale_payment
+            delete_sale_payment,
+            init_expenses_table,
+            create_expense,
+            get_expenses,
+            get_expense,
+            update_expense,
+            delete_expense
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -3,6 +3,7 @@ import { PurchaseWithItems } from "../utils/purchase";
 import { Supplier } from "../utils/supplier";
 import { Product } from "../utils/product";
 import { Unit } from "../utils/unit";
+import { formatPersianDateLong } from "../utils/date";
 
 interface PurchaseInvoiceProps {
     purchaseData: PurchaseWithItems;
@@ -22,12 +23,7 @@ export default function PurchaseInvoice({
     const printRef = useRef<HTMLDivElement>(null);
 
     const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString("fa-AF", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-        });
+        return formatPersianDateLong(dateString);
     };
 
     const formatNumber = (num: number) => {

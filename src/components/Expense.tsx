@@ -11,6 +11,8 @@ import {
 } from "../utils/expense";
 import { getCurrencies, type Currency } from "../utils/currency";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import PersianDatePicker from "./PersianDatePicker";
+import { formatPersianDate, getCurrentPersianDate, persianToGeorgian } from "../utils/date";
 
 // Dari translations
 const translations = {
@@ -71,7 +73,7 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
         currency: "",
         rate: "1",
         total: "",
-        date: new Date().toISOString().split('T')[0],
+        date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
     });
     const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
@@ -357,7 +359,7 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                     </svg>
-                                                    <span>{new Date(expense.date).toLocaleDateString('fa-IR')}</span>
+                                                    <span>{formatPersianDate(expense.date)}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -520,13 +522,11 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                                             {translations.date}
                                         </label>
-                                        <input
-                                            type="date"
+                                        <PersianDatePicker
                                             value={formData.date}
-                                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                            onChange={(date) => setFormData({ ...formData, date })}
+                                            placeholder={translations.placeholders.date}
                                             required
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                                            dir="ltr"
                                         />
                                     </div>
                                     <div className="flex gap-3 pt-4">

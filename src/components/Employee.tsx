@@ -12,6 +12,8 @@ import {
     type Employee,
 } from "../utils/employee";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import PersianDatePicker from "./PersianDatePicker";
+import { formatPersianDate } from "../utils/date";
 
 // Dari translations
 const translations = {
@@ -531,12 +533,10 @@ export default function EmployeeManagement({ onBack }: EmployeeManagementProps) 
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                                                 {translations.hireDate}
                                             </label>
-                                            <input
-                                                type="date"
-                                                value={formData.hire_date}
-                                                onChange={(e) => setFormData({ ...formData, hire_date: e.target.value })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                                                dir="ltr"
+                                            <PersianDatePicker
+                                                value={formData.hire_date || ''}
+                                                onChange={(date) => setFormData({ ...formData, hire_date: date })}
+                                                placeholder="تاریخ استخدام را انتخاب کنید"
                                             />
                                         </div>
                                         <div>

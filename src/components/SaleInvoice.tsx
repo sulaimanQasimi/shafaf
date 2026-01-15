@@ -3,6 +3,7 @@ import { SaleWithItems, SalePayment } from "../utils/sales";
 import { Customer } from "../utils/customer";
 import { Product } from "../utils/product";
 import { Unit } from "../utils/unit";
+import { formatPersianDateLong } from "../utils/date";
 
 interface SaleInvoiceProps {
     saleData: SaleWithItems;
@@ -24,12 +25,7 @@ export default function SaleInvoice({
     const printRef = useRef<HTMLDivElement>(null);
 
     const formatDate = (dateString: string) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString("fa-AF", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-        });
+        return formatPersianDateLong(dateString);
     };
 
     const formatNumber = (num: number) => {

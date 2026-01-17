@@ -896,7 +896,7 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                                                         whileTap={{ scale: 0.95 }}
                                                         onClick={() => {
                                                             handleCloseExpenseTypeModal();
-                                                            setTimeout(() => handleOpenExpenseTypeModal(expenseType), 100);
+                                                            setTimeout(() => handleOpenExpenseTypeModal(), 100);
                                                         }}
                                                         className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-semibold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
                                                     >

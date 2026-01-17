@@ -22,7 +22,7 @@ export async function initExpensesTable(): Promise<string> {
 
 /**
  * Create a new expense
- * @param name Expense name
+ * @param expense_type_id Expense type ID
  * @param amount Expense amount
  * @param currency Currency name
  * @param rate Exchange rate
@@ -31,7 +31,7 @@ export async function initExpensesTable(): Promise<string> {
  * @returns Promise with Expense
  */
 export async function createExpense(
-    name: string,
+    expense_type_id: number,
     amount: number,
     currency: string,
     rate: number,
@@ -39,7 +39,7 @@ export async function createExpense(
     date: string
 ): Promise<Expense> {
     return await invoke<Expense>("create_expense", {
-        name,
+        expense_type_id,
         amount,
         currency,
         rate,

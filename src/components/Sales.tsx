@@ -117,7 +117,6 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
         date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
     });
     const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
-    const [showInvoice, setShowInvoice] = useState(false);
 
     // Pagination & Search
     const [page, setPage] = useState(1);
@@ -1239,18 +1238,6 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                             </motion.div>
                         )}
                     </AnimatePresence>
-
-                    {/* Invoice Modal */}
-                    {showInvoice && viewingSale && (
-                        <SaleInvoice
-                            saleData={viewingSale}
-                            customer={customers.find(c => c.id === viewingSale.sale.customer_id)!}
-                            products={products}
-                            units={units}
-                            payments={payments}
-                            onClose={() => setShowInvoice(false)}
-                        />
-        )}
         <Footer />
       </div>
     </div>

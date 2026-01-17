@@ -35,7 +35,6 @@ interface CompanySettingsProps {
 }
 
 export default function CompanySettings({ onBack }: CompanySettingsProps) {
-    const [settings, setSettings] = useState<CompanySettings | null>(null);
     const [loading, setLoading] = useState(false);
     const [fetchLoading, setFetchLoading] = useState(true);
     const [formData, setFormData] = useState({

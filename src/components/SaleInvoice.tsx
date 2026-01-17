@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef } from "react";
 import { SaleWithItems, SalePayment } from "../utils/sales";
 import { Customer } from "../utils/customer";
 import { Product } from "../utils/product";
@@ -19,7 +19,6 @@ export default function SaleInvoice({
     customer,
     products,
     units,
-    payments = [],
     onClose,
 }: SaleInvoiceProps) {
     const printRef = useRef<HTMLDivElement>(null);

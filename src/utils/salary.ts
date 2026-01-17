@@ -48,12 +48,37 @@ export async function createSalary(
   });
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 /**
- * Get all salaries
- * @returns Promise with array of Salary
+ * Get all salaries with pagination
+ * @param page Page number
+ * @param perPage Items per page
+ * @param search Search query
+ * @param sortBy Sort column
+ * @param sortOrder Sort order
+ * @returns Promise with paginated salaries
  */
-export async function getSalaries(): Promise<Salary[]> {
-  return await invoke<Salary[]>("get_salaries");
+export async function getSalaries(
+  page: number = 1,
+  perPage: number = 10,
+  search: string = "",
+  sortBy: string = "year",
+  sortOrder: "asc" | "desc" = "desc"
+): Promise<PaginatedResponse<Salary>> {
+  return await invoke<PaginatedResponse<Salary>>("get_salaries", {
+    page,
+    perPage,
+    search: search || null,
+    sortBy: sortBy || null,
+    sortOrder: sortOrder || null,
+  });
 }
 
 /**

@@ -33,6 +33,14 @@ export interface PurchaseItemInput {
   amount: number;
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 /**
  * Initialize the purchases table schema
  * @returns Promise with success message
@@ -72,11 +80,28 @@ export async function createPurchase(
 }
 
 /**
- * Get all purchases
- * @returns Promise with array of Purchase
+ * Get all purchases with pagination
+ * @param page Page number
+ * @param perPage Items per page
+ * @param search Search query
+ * @param sortBy Sort column
+ * @param sortOrder Sort order
+ * @returns Promise with paginated purchases
  */
-export async function getPurchases(): Promise<Purchase[]> {
-  return await invoke<Purchase[]>("get_purchases");
+export async function getPurchases(
+  page: number = 1,
+  perPage: number = 10,
+  search: string = "",
+  sortBy: string = "date",
+  sortOrder: "asc" | "desc" = "desc"
+): Promise<PaginatedResponse<Purchase>> {
+  return await invoke<PaginatedResponse<Purchase>>("get_purchases", {
+    page,
+    perPage,
+    search: search || null,
+    sortBy: sortBy || null,
+    sortOrder: sortOrder || null,
+  });
 }
 
 /**

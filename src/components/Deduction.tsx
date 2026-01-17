@@ -105,14 +105,14 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
                 console.log("Table initialization:", err);
             }
 
-            const [deductionsData, employeesData, currenciesData] = await Promise.all([
+            const [deductionsData, employeesResponse, currenciesData] = await Promise.all([
                 getDeductions(),
-                getEmployees(),
+                getEmployees(1, 1000), // Get all employees (large page size)
                 getCurrencies(),
             ]);
 
             setDeductions(deductionsData);
-            setEmployees(employeesData);
+            setEmployees(employeesResponse.items);
             setCurrencies(currenciesData);
         } catch (error: any) {
             toast.error(translations.errors.fetch);

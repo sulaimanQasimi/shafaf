@@ -48,12 +48,37 @@ export async function createExpense(
     });
 }
 
+export interface PaginatedResponse<T> {
+    items: T[];
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+}
+
 /**
- * Get all expenses
- * @returns Promise with array of Expense
+ * Get all expenses with pagination
+ * @param page Page number
+ * @param perPage Items per page
+ * @param search Search query
+ * @param sortBy Sort column
+ * @param sortOrder Sort order
+ * @returns Promise with paginated expenses
  */
-export async function getExpenses(): Promise<Expense[]> {
-    return await invoke<Expense[]>("get_expenses");
+export async function getExpenses(
+    page: number = 1,
+    perPage: number = 10,
+    search: string = "",
+    sortBy: string = "date",
+    sortOrder: "asc" | "desc" = "desc"
+): Promise<PaginatedResponse<Expense>> {
+    return await invoke<PaginatedResponse<Expense>>("get_expenses", {
+        page,
+        perPage,
+        search: search || null,
+        sortBy: sortBy || null,
+        sortOrder: sortOrder || null,
+    });
 }
 
 /**

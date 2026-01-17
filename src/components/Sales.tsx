@@ -24,6 +24,8 @@ import Footer from "./Footer";
 import SaleInvoice from "./SaleInvoice";
 import PersianDatePicker from "./PersianDatePicker";
 import { formatPersianDate, getCurrentPersianDate, persianToGeorgian } from "../utils/date";
+import Table from "./common/Table";
+import { Search } from "lucide-react";
 
 // Dari translations
 const translations = {
@@ -111,9 +113,17 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
     const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
     const [showInvoice, setShowInvoice] = useState(false);
 
+    // Pagination & Search
+    const [page, setPage] = useState(1);
+    const [perPage, setPerPage] = useState(10);
+    const [totalItems, setTotalItems] = useState(0);
+    const [search, setSearch] = useState("");
+    const [sortBy, setSortBy] = useState("date");
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
     useEffect(() => {
         loadData();
-    }, []);
+    }, [page, perPage, search, sortBy, sortOrder]);
 
     const loadData = async () => {
         try {
@@ -129,16 +139,17 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
                 console.log("Table initialization:", err);
             }
 
-            const [salesData, customersData, productsData, unitsData] = await Promise.all([
-                getSales(),
-                getCustomers(),
-                getProducts(),
+            const [salesResponse, customersResponse, productsResponse, unitsData] = await Promise.all([
+                getSales(page, perPage, search, sortBy, sortOrder),
+                getCustomers(1, 1000), // Get all customers (large page size)
+                getProducts(1, 1000), // Get all products (large page size)
                 getUnits(),
             ]);
 
-            setSales(salesData);
-            setCustomers(customersData);
-            setProducts(productsData);
+            setSales(salesResponse.items);
+            setTotalItems(salesResponse.total);
+            setCustomers(customersResponse.items);
+            setProducts(productsResponse.items);
             setUnits(unitsData);
         } catch (error: any) {
             toast.error(translations.errors.fetch);
@@ -410,6 +421,69 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
         return units.find(u => u.id === unitId)?.name || `ID: ${unitId}`;
     };
 
+    const columns = [
+        {
+            key: "id", label: "شماره", sortable: false,
+            render: (sale: Sale) => (
+                <span className="font-mono text-gray-700 dark:text-gray-300">#{sale.id}</span>
+            )
+        },
+        {
+            key: "customer_id", label: translations.customer, sortable: false,
+            render: (sale: Sale) => (
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                        {getCustomerName(sale.customer_id).charAt(0)}
+                    </div>
+                    <span className="font-medium text-gray-900 dark:text-white">{getCustomerName(sale.customer_id)}</span>
+                </div>
+            )
+        },
+        {
+            key: "date", label: translations.date, sortable: true,
+            render: (sale: Sale) => (
+                <span className="text-gray-700 dark:text-gray-300">
+                    {formatPersianDate(sale.date)}
+                </span>
+            )
+        },
+        {
+            key: "total_amount", label: translations.totalAmount, sortable: true,
+            render: (sale: Sale) => (
+                <span className="font-bold text-purple-700 dark:text-purple-300">
+                    {sale.total_amount.toLocaleString('fa-IR')} افغانی
+                </span>
+            )
+        },
+        {
+            key: "paid_amount", label: translations.paidAmount, sortable: true,
+            render: (sale: Sale) => (
+                <span className="font-bold text-green-700 dark:text-green-300">
+                    {sale.paid_amount.toLocaleString('fa-IR')} افغانی
+                </span>
+            )
+        },
+        {
+            key: "remaining", label: translations.remainingAmount, sortable: false,
+            render: (sale: Sale) => {
+                const remaining = sale.total_amount - sale.paid_amount;
+                return (
+                    <span className={`font-bold ${remaining > 0 ? 'text-red-700 dark:text-red-300' : 'text-gray-500'}`}>
+                        {remaining.toLocaleString('fa-IR')} افغانی
+                    </span>
+                );
+            }
+        },
+        {
+            key: "created_at", label: "تاریخ ایجاد", sortable: true,
+            render: (sale: Sale) => (
+                <span className="text-gray-600 dark:text-gray-400 text-sm">
+                    {new Date(sale.created_at).toLocaleDateString('fa-IR')}
+                </span>
+            )
+        }
+    ];
+
     const handlePrintInvoice = async (saleData: SaleWithItems) => {
         try {
             const salePayments = await getSalePayments(saleData.sale.id);
@@ -461,7 +535,7 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="mb-8"
+                    className="mb-8 space-y-6"
                 >
                     <div className="flex justify-between items-center mb-6">
                         <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
@@ -476,171 +550,79 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
                             {translations.addNew}
                         </motion.button>
                     </div>
-                </motion.div>
 
-                {loading && sales.length === 0 ? (
-                    <div className="flex justify-center items-center h-64">
-                        <motion.div
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                            className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full"
+                    {/* Search Bar */}
+                    <div className="relative max-w-md w-full">
+                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <Search className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => {
+                                setSearch(e.target.value);
+                                setPage(1);
+                            }}
+                            className="block w-full pr-10 pl-3 py-3 border border-gray-200 dark:border-gray-700 rounded-xl leading-5 bg-white dark:bg-gray-800 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 sm:text-sm transition-all shadow-sm hover:shadow-md"
+                            placeholder="جستجو بر اساس تاریخ، مشتری، شماره تماس یا یادداشت..."
                         />
                     </div>
-                ) : sales.length === 0 ? (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="text-center py-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-purple-100 dark:border-purple-900/30"
-                    >
-                        <div className="flex flex-col items-center gap-4">
-                            <motion.div
-                                animate={{
-                                    y: [0, -10, 0],
-                                }}
-                                transition={{
-                                    duration: 2,
-                                    repeat: Infinity,
-                                    ease: "easeInOut"
-                                }}
-                                className="w-24 h-24 bg-gradient-to-br from-purple-100 to-blue-100 dark:from-purple-900/30 dark:to-blue-900/30 rounded-full flex items-center justify-center"
+                </motion.div>
+
+                <Table
+                    data={sales}
+                    columns={columns}
+                    total={totalItems}
+                    page={page}
+                    perPage={perPage}
+                    onPageChange={setPage}
+                    onPerPageChange={setPerPage}
+                    onSort={(key, dir) => {
+                        setSortBy(key);
+                        setSortOrder(dir);
+                    }}
+                    sortBy={sortBy}
+                    sortOrder={sortOrder}
+                    loading={loading}
+                    actions={(sale) => (
+                        <div className="flex items-center gap-2">
+                            <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => handleViewSale(sale)}
+                                className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors"
+                                title="مشاهده"
                             >
-                                <svg className="w-12 h-12 text-purple-500 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                 </svg>
-                            </motion.div>
-                            <p className="text-gray-600 dark:text-gray-400 text-xl font-semibold">
-                                {translations.noSales}
-                            </p>
-                            <p className="text-gray-500 dark:text-gray-500 text-sm">
-                                برای شروع، یک فروش جدید ثبت کنید
-                            </p>
+                            </motion.button>
+                            <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => handleOpenModal(sale)}
+                                className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                                title={translations.edit}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                            </motion.button>
+                            <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => setDeleteConfirm(sale.id)}
+                                className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                                title={translations.delete}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </motion.button>
                         </div>
-                    </motion.div>
-                ) : (
-                    <div className="grid gap-5">
-                        <AnimatePresence>
-                            {sales.map((sale, index) => (
-                                <motion.div
-                                    key={sale.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, scale: 0.95 }}
-                                    transition={{ delay: index * 0.05 }}
-                                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                                    className="group bg-gradient-to-br from-white to-purple-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-6 border border-purple-100/50 dark:border-purple-900/30 transition-all duration-300"
-                                >
-                                    <div className="flex justify-between items-start gap-6">
-                                        <div className="flex-1 space-y-4">
-                                            {/* Header Section */}
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg">
-                                                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                                                        </svg>
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
-                                                            {getCustomerName(sale.customer_id)}
-                                                        </h3>
-                                                        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                                                            <span># {sale.id}</span>
-                                                            <span>•</span>
-                                                            <span>{new Date(sale.created_at).toLocaleDateString('fa-IR')}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <motion.span
-                                                    whileHover={{ scale: 1.05 }}
-                                                    className="px-4 py-2 bg-gradient-to-r from-green-400 to-emerald-500 text-white text-sm font-bold rounded-xl shadow-md"
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                        </svg>
-                                                        {formatPersianDate(sale.date)}
-                                                    </div>
-                                                </motion.span>
-                                            </div>
-
-                                            {/* Payment Status */}
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800">
-                                                    <div className="text-xs text-purple-600 dark:text-purple-400 font-bold mb-1">{translations.totalAmount}</div>
-                                                    <div className="text-lg font-bold text-purple-700 dark:text-purple-300">
-                                                        {sale.total_amount.toLocaleString('fa-IR')}
-                                                    </div>
-                                                </div>
-                                                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-800">
-                                                    <div className="text-xs text-green-600 dark:text-green-400 font-bold mb-1">{translations.paidAmount}</div>
-                                                    <div className="text-lg font-bold text-green-700 dark:text-green-300">
-                                                        {sale.paid_amount.toLocaleString('fa-IR')}
-                                                    </div>
-                                                </div>
-                                                <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800">
-                                                    <div className="text-xs text-red-600 dark:text-red-400 font-bold mb-1">{translations.remainingAmount}</div>
-                                                    <div className="text-lg font-bold text-red-700 dark:text-red-300">
-                                                        {(sale.total_amount - sale.paid_amount).toLocaleString('fa-IR')}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Notes Section */}
-                                            {sale.notes && (
-                                                <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-600">
-                                                    <svg className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                                                    </svg>
-                                                    <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
-                                                        {sale.notes}
-                                                    </p>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Action Buttons */}
-                                        <div className="flex flex-col gap-2">
-                                            <motion.button
-                                                whileHover={{ scale: 1.05, x: -2 }}
-                                                whileTap={{ scale: 0.95 }}
-                                                onClick={() => handleViewSale(sale)}
-                                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                </svg>
-                                                مشاهده
-                                            </motion.button>
-                                            <motion.button
-                                                whileHover={{ scale: 1.05, x: -2 }}
-                                                whileTap={{ scale: 0.95 }}
-                                                onClick={() => handleOpenModal(sale)}
-                                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                                {translations.edit}
-                                            </motion.button>
-                                            <motion.button
-                                                whileHover={{ scale: 1.05, x: -2 }}
-                                                whileTap={{ scale: 0.95 }}
-                                                onClick={() => setDeleteConfirm(sale.id)}
-                                                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                                {translations.delete}
-                                            </motion.button>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </AnimatePresence>
-                    </div>
-                )}
+                    )}
+                />
 
                 {/* Modal for Add/Edit */}
                 <AnimatePresence>

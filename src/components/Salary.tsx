@@ -4,14 +4,16 @@ import toast from "react-hot-toast";
 import {
     initSalariesTable,
     createSalary,
-    getSalaries,
     updateSalary,
+    getSalaries,
     deleteSalary,
     type Salary,
 } from "../utils/salary";
 import { getEmployees, type Employee } from "../utils/employee";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
+import Table from "./common/Table";
+import { Search } from "lucide-react";
 import { getCurrentPersianYear } from "../utils/date";
 import { Deduction, getDeductionsByEmployeeYearMonth } from "../utils/deduction";
 
@@ -85,11 +87,20 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
         deductions: "0",
         notes: "",
     });
+
+    // Pagination & Search
+    const [page, setPage] = useState(1);
+    const [perPage, setPerPage] = useState(10);
+    const [totalItems, setTotalItems] = useState(0);
+    const [search, setSearch] = useState("");
+    const [sortBy, setSortBy] = useState("year");
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
     const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [page, perPage, search, sortBy, sortOrder]);
 
     const loadData = async () => {
         try {
@@ -105,13 +116,14 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                 console.log("Table initialization:", err);
             }
 
-            const [salariesData, employeesData] = await Promise.all([
-                getSalaries(),
-                getEmployees(),
+            const [salariesResponse, employeesResponse] = await Promise.all([
+                getSalaries(page, perPage, search, sortBy, sortOrder),
+                getEmployees(1, 1000), // Get all employees for dropdown (up to 1000)
             ]);
 
-            setSalaries(salariesData);
-            setEmployees(employeesData);
+            setSalaries(salariesResponse.items);
+            setTotalItems(salariesResponse.total);
+            setEmployees(employeesResponse.items);
         } catch (error: any) {
             toast.error(translations.errors.fetch);
             console.error("Error loading data:", error);
@@ -183,14 +195,14 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                         year,
                         formData.month
                     );
-                    
+
                     setDeductions(fetchedDeductions);
-                    
+
                     // Calculate total deductions in AFN
                     const totalDeductions = fetchedDeductions.reduce((sum, deduction) => {
                         return sum + (deduction.amount * deduction.rate);
                     }, 0);
-                    
+
                     // Only auto-update deductions field when creating (not editing)
                     // This allows manual edits when editing existing salaries
                     if (!editingSalary) {
@@ -304,9 +316,75 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
 
 
 
+    const columns = [
+        {
+            key: "employee_id",
+            label: translations.employee,
+            sortable: false, // Cannot sort by employee name easily yet unless backend supports it directly or we join
+            render: (sal: Salary) => {
+                const emp = employees.find(e => e.id === sal.employee_id);
+                return (
+                    <div className="flex items-center gap-3">
+                        {emp?.photo_path ? (
+                            <img src={emp.photo_path} alt={emp.full_name} className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-700" />
+                        ) : (
+                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                {emp?.full_name?.charAt(0) || "؟"}
+                            </div>
+                        )}
+                        <div>
+                            <div className="font-bold text-gray-900 dark:text-white">{emp?.full_name || "Unknown"}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{emp?.position}</div>
+                        </div>
+                    </div>
+                );
+            }
+        },
+        {
+            key: "month",
+            label: translations.month,
+            sortable: true,
+            render: (sal: Salary) => (
+                <span className="font-medium text-gray-700 dark:text-gray-300">
+                    {sal.month} {sal.year}
+                </span>
+            )
+        },
+        {
+            key: "amount",
+            label: translations.baseSalary,
+            sortable: true,
+            render: (sal: Salary) => (
+                <span className="font-bold text-blue-600 dark:text-blue-400">
+                    {sal.amount.toLocaleString()}
+                </span>
+            )
+        },
+        {
+            key: "deductions",
+            label: translations.deductions,
+            sortable: true,
+            render: (sal: Salary) => (
+                <span className="font-bold text-red-600 dark:text-red-400">
+                    {sal.deductions.toLocaleString()}
+                </span>
+            )
+        },
+        {
+            key: "net_salary",
+            label: translations.netSalary,
+            sortable: false,
+            render: (sal: Salary) => (
+                <span className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-lg">
+                    {(sal.amount - sal.deductions).toLocaleString()}
+                </span>
+            )
+        },
+    ];
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6" dir="rtl">
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-7xl mx-auto">
                 {/* Beautiful Back Button */}
                 {onBack && (
                     <motion.div
@@ -344,7 +422,7 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="mb-8"
+                    className="mb-8 space-y-6"
                 >
                     <div className="flex justify-between items-center mb-6">
                         <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
@@ -359,132 +437,65 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                             {translations.addNew}
                         </motion.button>
                     </div>
-                </motion.div>
 
-                {loading && salaries.length === 0 ? (
-                    <div className="flex justify-center items-center h-64">
-                        <motion.div
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                            className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full"
+                    {/* Search Bar */}
+                    <div className="relative max-w-md w-full">
+                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <Search className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => {
+                                setSearch(e.target.value);
+                                setPage(1);
+                            }}
+                            className="block w-full pr-10 pl-3 py-3 border border-gray-200 dark:border-gray-700 rounded-xl leading-5 bg-white dark:bg-gray-800 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 sm:text-sm transition-all shadow-sm hover:shadow-md"
+                            placeholder="جستجو بر اساس سال، ماه یا نام کارمند..."
                         />
                     </div>
-                ) : salaries.length === 0 ? (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="text-center py-16 bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-lg"
-                    >
-                        <svg className="w-24 h-24 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <p className="text-xl text-gray-600 dark:text-gray-400">{translations.noSalaries}</p>
-                    </motion.div>
-                ) : (
-                    <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                        <AnimatePresence>
-                            {salaries.map((salary, index) => {
-                                const employee = employees.find(e => e.id === salary.employee_id);
-                                return (
-                                    <motion.div
-                                        key={salary.id}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, scale: 0.95 }}
-                                        transition={{ delay: index * 0.05 }}
-                                        whileHover={{ y: -5, transition: { duration: 0.2 } }}
-                                        className="group bg-gradient-to-br from-white to-purple-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-5 border border-purple-100/50 dark:border-purple-900/30 transition-all duration-300 flex flex-col justify-between"
-                                    >
-                                        <div>
-                                            <div className="flex items-center gap-4 mb-5">
-                                                {employee?.photo_path ? (
-                                                    <img
-                                                        src={employee.photo_path}
-                                                        alt={employee.full_name}
-                                                        className="w-14 h-14 rounded-2xl object-cover shadow-md border-2 border-white dark:border-gray-700"
-                                                    />
-                                                ) : (
-                                                    <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center shadow-md text-white text-xl font-bold">
-                                                        {employee?.full_name?.charAt(0) || "؟"}
-                                                    </div>
-                                                )}
-                                                <div>
-                                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
-                                                        {employee ? employee.full_name : "کارمند ناشناس"}
-                                                    </h3>
-                                                    <div className="text-purple-600 dark:text-purple-400 text-sm font-medium mt-1">
-                                                        {salary.month} {salary.year}
-                                                    </div>
-                                                </div>
-                                            </div>
+                </motion.div>
 
-                                            <div className="space-y-3 mb-5">
-                                                <div className="p-3 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30 flex justify-between items-center px-4">
-                                                    <span className="text-sm text-blue-600/80 dark:text-blue-400/80">{translations.baseSalary}</span>
-                                                    <span className="text-lg font-bold text-blue-700 dark:text-blue-400">
-                                                        {salary.amount.toLocaleString()} <span className="text-xs opacity-70">افغانی</span>
-                                                    </span>
-                                                </div>
-                                                {salary.deductions > 0 && (
-                                                    <div className="p-3 bg-red-50/50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-800/30 flex justify-between items-center px-4">
-                                                        <span className="text-sm text-red-600/80 dark:text-red-400/80">{translations.deductions}</span>
-                                                        <span className="text-lg font-bold text-red-700 dark:text-red-400">
-                                                            {salary.deductions.toLocaleString()} <span className="text-xs opacity-70">افغانی</span>
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                <div className="p-3 bg-green-50/50 dark:bg-green-900/10 rounded-xl border border-green-100 dark:border-green-800/30 flex justify-between items-center px-4">
-                                                    <span className="text-sm text-green-600/80 dark:text-green-400/80">{translations.netSalary}</span>
-                                                    <span className="text-lg font-bold text-green-700 dark:text-green-400">
-                                                        {(salary.amount - salary.deductions).toLocaleString()} <span className="text-xs opacity-70">افغانی</span>
-                                                    </span>
-                                                </div>
-
-                                                {salary.notes && (
-                                                    <div className="flex items-start gap-3 p-3 bg-gray-50/80 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-600/50">
-                                                        <div className="p-1 min-w-[24px] text-gray-400">
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                            </svg>
-                                                        </div>
-                                                        <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                                                            {salary.notes}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="flex gap-3 pt-4 border-t border-purple-100/50 dark:border-gray-700/50">
-                                            <motion.button
-                                                whileHover={{ scale: 1.02 }}
-                                                whileTap={{ scale: 0.98 }}
-                                                onClick={() => handleOpenModal(salary)}
-                                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg transition-colors text-sm font-semibold"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                                {translations.edit}
-                                            </motion.button>
-                                            <motion.button
-                                                whileHover={{ scale: 1.02 }}
-                                                whileTap={{ scale: 0.98 }}
-                                                onClick={() => setDeleteConfirm(salary.id)}
-                                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg transition-colors text-sm font-semibold"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                                {translations.delete}
-                                            </motion.button>
-                                        </div>
-                                    </motion.div>
-                                );
-                            })}
-                        </AnimatePresence>
-                    </div>
-                )}
+                <Table
+                    data={salaries}
+                    columns={columns}
+                    total={totalItems}
+                    page={page}
+                    perPage={perPage}
+                    onPageChange={setPage}
+                    onPerPageChange={setPerPage}
+                    onSort={(key, dir) => {
+                        setSortBy(key);
+                        setSortOrder(dir);
+                    }}
+                    sortBy={sortBy}
+                    sortOrder={sortOrder}
+                    loading={loading}
+                    actions={(sal) => (
+                        <div className="flex items-center gap-2">
+                            <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => handleOpenModal(sal)}
+                                className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                            </motion.button>
+                            <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => setDeleteConfirm(sal.id)}
+                                className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </motion.button>
+                        </div>
+                    )}
+                />
 
                 {/* Modal for Add/Edit */}
                 <AnimatePresence>

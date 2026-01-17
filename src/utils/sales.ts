@@ -84,12 +84,37 @@ export async function createSale(
     });
 }
 
+export interface PaginatedResponse<T> {
+    items: T[];
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+}
+
 /**
- * Get all sales
- * @returns Promise with array of Sale
+ * Get all sales with pagination
+ * @param page Page number
+ * @param perPage Items per page
+ * @param search Search query
+ * @param sortBy Sort column
+ * @param sortOrder Sort order
+ * @returns Promise with paginated sales
  */
-export async function getSales(): Promise<Sale[]> {
-    return await invoke<Sale[]>("get_sales");
+export async function getSales(
+    page: number = 1,
+    perPage: number = 10,
+    search: string = "",
+    sortBy: string = "date",
+    sortOrder: "asc" | "desc" = "desc"
+): Promise<PaginatedResponse<Sale>> {
+    return await invoke<PaginatedResponse<Sale>>("get_sales", {
+        page,
+        perPage,
+        search: search || null,
+        sortBy: sortBy || null,
+        sortOrder: sortOrder || null,
+    });
 }
 
 /**

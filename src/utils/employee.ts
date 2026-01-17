@@ -60,12 +60,37 @@ export async function createEmployee(
   });
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 /**
- * Get all employees
- * @returns Promise with array of Employee
+ * Get all employees with pagination, search and sort
+ * @param page Page number (default 1)
+ * @param perPage Items per page (default 10)
+ * @param search Search query
+ * @param sortBy Sort column
+ * @param sortOrder Sort order (asc/desc)
+ * @returns Promise with paginated employees
  */
-export async function getEmployees(): Promise<Employee[]> {
-  return await invoke<Employee[]>("get_employees");
+export async function getEmployees(
+  page: number = 1,
+  perPage: number = 10,
+  search: string = "",
+  sortBy: string = "created_at",
+  sortOrder: "asc" | "desc" = "desc"
+): Promise<PaginatedResponse<Employee>> {
+  return await invoke<PaginatedResponse<Employee>>("get_employees", {
+    page,
+    perPage,
+    search: search || null,
+    sortBy: sortBy || null,
+    sortOrder: sortOrder || null,
+  });
 }
 
 /**

@@ -52,12 +52,37 @@ export async function createProduct(
   });
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 /**
- * Get all products
- * @returns Promise with array of Product
+ * Get all products with pagination
+ * @param page Page number
+ * @param perPage Items per page
+ * @param search Search query
+ * @param sortBy Sort column
+ * @param sortOrder Sort order
+ * @returns Promise with paginated products
  */
-export async function getProducts(): Promise<Product[]> {
-  return await invoke<Product[]>("get_products");
+export async function getProducts(
+  page: number = 1,
+  perPage: number = 10,
+  search: string = "",
+  sortBy: string = "created_at",
+  sortOrder: "asc" | "desc" = "desc"
+): Promise<PaginatedResponse<Product>> {
+  return await invoke<PaginatedResponse<Product>>("get_products", {
+    page,
+    perPage,
+    search: search || null,
+    sortBy: sortBy || null,
+    sortOrder: sortOrder || null,
+  });
 }
 
 /**

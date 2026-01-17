@@ -44,12 +44,37 @@ export async function createCustomer(
   });
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 /**
- * Get all customers
- * @returns Promise with array of Customer
+ * Get all customers with pagination
+ * @param page Page number
+ * @param perPage Items per page
+ * @param search Search query
+ * @param sortBy Sort column
+ * @param sortOrder Sort order
+ * @returns Promise with paginated customers
  */
-export async function getCustomers(): Promise<Customer[]> {
-  return await invoke<Customer[]>("get_customers");
+export async function getCustomers(
+  page: number = 1,
+  perPage: number = 10,
+  search: string = "",
+  sortBy: string = "created_at",
+  sortOrder: "asc" | "desc" = "desc"
+): Promise<PaginatedResponse<Customer>> {
+  return await invoke<PaginatedResponse<Customer>>("get_customers", {
+    page,
+    perPage,
+    search: search || null,
+    sortBy: sortBy || null,
+    sortOrder: sortOrder || null,
+  });
 }
 
 /**

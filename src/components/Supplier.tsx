@@ -11,6 +11,8 @@ import {
 } from "../utils/supplier";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
+import Table from "./common/Table";
+import { Search } from "lucide-react";
 
 // Dari translations
 const translations = {
@@ -73,9 +75,17 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
   });
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
+  // Pagination & Search
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
   useEffect(() => {
     loadSuppliers();
-  }, []);
+  }, [page, perPage, search, sortBy, sortOrder]);
 
   const loadSuppliers = async () => {
     try {
@@ -91,8 +101,9 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
         console.log("Table initialization:", err);
       }
 
-      const data = await getSuppliers();
-      setSuppliers(data);
+      const response = await getSuppliers(page, perPage, search, sortBy, sortOrder);
+      setSuppliers(response.items);
+      setTotalItems(response.total);
     } catch (error: any) {
       toast.error(translations.errors.fetch);
       console.error("Error loading suppliers:", error);
@@ -201,9 +212,51 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
     }
   };
 
+  const columns = [
+    {
+      key: "full_name", label: translations.fullName, sortable: true,
+      render: (s: Supplier) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-teal-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
+            {s.full_name.charAt(0)}
+          </div>
+          <span className="font-medium text-gray-900 dark:text-white">{s.full_name}</span>
+        </div>
+      )
+    },
+    {
+      key: "phone", label: translations.phone, sortable: true,
+      render: (s: Supplier) => (
+        <span className="font-mono text-gray-700 dark:text-gray-300" dir="ltr">{s.phone}</span>
+      )
+    },
+    {
+      key: "address", label: translations.address, sortable: false,
+      render: (s: Supplier) => (
+        <span className="text-gray-600 dark:text-gray-400 text-sm truncate max-w-xs block" title={s.address}>
+          {s.address}
+        </span>
+      )
+    },
+    {
+      key: "email", label: translations.email, sortable: true,
+      render: (s: Supplier) => s.email ? (
+        <span className="text-gray-600 dark:text-gray-400 text-sm" dir="ltr">{s.email}</span>
+      ) : <span className="text-gray-400">-</span>
+    },
+    {
+      key: "created_at", label: translations.createdAt, sortable: true,
+      render: (s: Supplier) => (
+        <span className="text-gray-600 dark:text-gray-400 text-sm">
+          {new Date(s.created_at).toLocaleDateString('fa-IR')}
+        </span>
+      )
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6" dir="rtl">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Beautiful Back Button */}
         {onBack && (
           <motion.div
@@ -241,7 +294,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-8 space-y-6"
         >
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
@@ -256,170 +309,67 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
               {translations.addNew}
             </motion.button>
           </div>
-        </motion.div>
 
-        {loading && suppliers.length === 0 ? (
-          <div className="flex justify-center items-center h-64">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-              className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full"
+          {/* Search Bar */}
+          <div className="relative max-w-md w-full">
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+              <Search className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="block w-full pr-10 pl-3 py-3 border border-gray-200 dark:border-gray-700 rounded-xl leading-5 bg-white dark:bg-gray-800 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 sm:text-sm transition-all shadow-sm hover:shadow-md"
+              placeholder="جستجو بر اساس نام، شماره تماس یا ایمیل..."
             />
           </div>
-        ) : suppliers.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="text-center py-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-green-100 dark:border-green-900/30"
-          >
-            <div className="flex flex-col items-center gap-4">
-              <motion.div
-                animate={{
-                  y: [0, -10, 0],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-                className="w-24 h-24 bg-gradient-to-br from-green-100 to-teal-100 dark:from-green-900/30 dark:to-teal-900/30 rounded-full flex items-center justify-center"
+        </motion.div>
+
+        <Table
+          data={suppliers}
+          columns={columns}
+          total={totalItems}
+          page={page}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={setPerPage}
+          onSort={(key, dir) => {
+            setSortBy(key);
+            setSortOrder(dir);
+          }}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          loading={loading}
+          actions={(supplier) => (
+            <div className="flex items-center gap-2">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => handleOpenModal(supplier)}
+                className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                title={translations.edit}
               >
-                <svg className="w-12 h-12 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
-              </motion.div>
-              <p className="text-gray-600 dark:text-gray-400 text-xl font-semibold">
-                {translations.noSuppliers}
-              </p>
-              <p className="text-gray-500 dark:text-gray-500 text-sm">
-                برای شروع، یک تمویل کننده جدید اضافه کنید
-              </p>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setDeleteConfirm(supplier.id)}
+                className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                title={translations.delete}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </motion.button>
             </div>
-          </motion.div>
-        ) : (
-          <div className="grid gap-5">
-            <AnimatePresence>
-              {suppliers.map((supplier, index) => (
-                <motion.div
-                  key={supplier.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: index * 0.05 }}
-                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                  className="group bg-gradient-to-br from-white to-green-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-6 border border-green-100/50 dark:border-green-900/30 transition-all duration-300"
-                >
-                  <div className="flex justify-between items-start gap-6">
-                    <div className="flex-1 space-y-4">
-                      {/* Header */}
-                      <div className="flex items-center gap-3">
-                        <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-teal-500 rounded-xl flex items-center justify-center shadow-lg">
-                          <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        </div>
-                        <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                          {supplier.full_name}
-                        </h3>
-                      </div>
-
-                      {/* Info Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <motion.div
-                          whileHover={{ scale: 1.02 }}
-                          className="flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl border border-blue-200/50 dark:border-blue-700/30"
-                        >
-                          <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                          <div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">{translations.phone}</div>
-                            <div className="font-bold text-gray-900 dark:text-white">{supplier.phone}</div>
-                          </div>
-                        </motion.div>
-
-                        <motion.div
-                          whileHover={{ scale: 1.02 }}
-                          className="flex items-center gap-3 p-3 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl border border-purple-200/50 dark:border-purple-700/30"
-                        >
-                          <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          <div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">{translations.address}</div>
-                            <div className="font-bold text-gray-900 dark:text-white text-sm">{supplier.address}</div>
-                          </div>
-                        </motion.div>
-
-                        {supplier.email && (
-                          <motion.div
-                            whileHover={{ scale: 1.02 }}
-                            className="flex items-center gap-3 p-3 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-xl border border-amber-200/50 dark:border-amber-700/30"
-                          >
-                            <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                            <div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">{translations.email}</div>
-                              <div className="font-bold text-gray-900 dark:text-white text-sm" dir="ltr">{supplier.email}</div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </div>
-
-                      {/* Notes */}
-                      {supplier.notes && (
-                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-600">
-                          <svg className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">{supplier.notes}</p>
-                        </div>
-                      )}
-
-                      {/* Timestamps */}
-                      <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-500 pt-2 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <span>{new Date(supplier.created_at).toLocaleDateString('fa-IR')}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex flex-col gap-2">
-                      <motion.button
-                        whileHover={{ scale: 1.05, x: -2 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => handleOpenModal(supplier)}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        {translations.edit}
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.05, x: -2 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setDeleteConfirm(supplier.id)}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        {translations.delete}
-                      </motion.button>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
+          )}
+        />
 
         {/* Modal for Add/Edit */}
         <AnimatePresence>

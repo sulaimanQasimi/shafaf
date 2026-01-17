@@ -10,9 +10,11 @@ import {
   type Product,
 } from "../utils/product";
 import { getCurrencies, type Currency } from "../utils/currency";
-import { getSuppliers, type Supplier } from "../utils/supplier";
+import { getSuppliers, type Supplier } from "../utils/supplier"; // getSuppliers is now paginated
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
+import Table from "./common/Table";
+import { Search } from "lucide-react";
 
 // Dari translations
 const translations = {
@@ -83,9 +85,17 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
   });
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
+  // Pagination & Search
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
   useEffect(() => {
     loadData();
-  }, []);
+  }, [page, perPage, search, sortBy, sortOrder]);
 
   const loadData = async () => {
     try {
@@ -101,15 +111,17 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
         console.log("Table initialization:", err);
       }
 
-      const [productsData, currenciesData, suppliersData] = await Promise.all([
-        getProducts(),
+      // Fetch products paginated, currencies (all), suppliers (all for dropdown - large perPage)
+      const [productsResponse, currenciesData, suppliersResponse] = await Promise.all([
+        getProducts(page, perPage, search, sortBy, sortOrder),
         getCurrencies().catch(() => []),
-        getSuppliers().catch(() => []),
+        getSuppliers(1, 1000).catch(() => ({ items: [] } as any)),
       ]);
 
-      setProducts(productsData);
+      setProducts(productsResponse.items);
+      setTotalItems(productsResponse.total);
       setCurrencies(currenciesData);
-      setSuppliers(suppliersData);
+      setSuppliers(suppliersResponse.items || []);
     } catch (error: any) {
       toast.error(translations.errors.fetch);
       console.error("Error loading data:", error);
@@ -240,9 +252,56 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
     return supplier?.full_name || null;
   };
 
+  const columns = [
+    {
+      key: "name", label: translations.name, sortable: true,
+      render: (p: Product) => (
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm">
+            {p.name.charAt(0)}
+          </div>
+          <div>
+            <div className="font-medium text-gray-900 dark:text-white">{p.name}</div>
+            {p.description && <div className="text-xs text-gray-500 truncate max-w-[150px]">{p.description}</div>}
+          </div>
+        </div>
+      )
+    },
+    {
+      key: "price", label: translations.price, sortable: true,
+      render: (p: Product) => p.price ? (
+        <span className="font-medium text-gray-900 dark:text-white">
+          {p.price.toLocaleString('fa-IR')} <span className="text-xs text-gray-500">{getCurrencyName(p.currency_id)}</span>
+        </span>
+      ) : <span className="text-gray-400">-</span>
+    },
+    {
+      key: "stock_quantity", label: translations.stockQuantity, sortable: true,
+      render: (p: Product) => p.stock_quantity ? (
+        <span className="font-medium text-gray-900 dark:text-white">
+          {p.stock_quantity.toLocaleString('fa-IR')} <span className="text-xs text-gray-500">{p.unit}</span>
+        </span>
+      ) : <span className="text-gray-400">-</span>
+    },
+    {
+      key: "supplier_id", label: translations.supplier, sortable: false,
+      render: (p: Product) => (
+        <span className="text-sm text-gray-700 dark:text-gray-300">{getSupplierName(p.supplier_id) || "-"}</span>
+      )
+    },
+    {
+      key: "created_at", label: translations.createdAt, sortable: true,
+      render: (p: Product) => (
+        <span className="text-gray-600 dark:text-gray-400 text-sm">
+          {new Date(p.created_at).toLocaleDateString('fa-IR')}
+        </span>
+      )
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6" dir="rtl">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Beautiful Back Button */}
         {onBack && (
           <motion.div
@@ -280,7 +339,7 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-8 space-y-6"
         >
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
@@ -295,182 +354,67 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
               {translations.addNew}
             </motion.button>
           </div>
-        </motion.div>
 
-        {loading && products.length === 0 ? (
-          <div className="flex justify-center items-center h-64">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-              className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full"
+          {/* Search Bar */}
+          <div className="relative max-w-md w-full">
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+              <Search className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="block w-full pr-10 pl-3 py-3 border border-gray-200 dark:border-gray-700 rounded-xl leading-5 bg-white dark:bg-gray-800 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 sm:text-sm transition-all shadow-sm hover:shadow-md"
+              placeholder="جستجو بر اساس نام..."
             />
           </div>
-        ) : products.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="text-center py-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-purple-100 dark:border-purple-900/30"
-          >
-            <div className="flex flex-col items-center gap-4">
-              <motion.div
-                animate={{
-                  y: [0, -10, 0],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-                className="w-24 h-24 bg-gradient-to-br from-purple-100 to-blue-100 dark:from-purple-900/30 dark:to-blue-900/30 rounded-full flex items-center justify-center"
+        </motion.div>
+
+        <Table
+          data={products}
+          columns={columns}
+          total={totalItems}
+          page={page}
+          perPage={perPage}
+          onPageChange={setPage}
+          onPerPageChange={setPerPage}
+          onSort={(key, dir) => {
+            setSortBy(key);
+            setSortOrder(dir);
+          }}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          loading={loading}
+          actions={(product) => (
+            <div className="flex items-center gap-2">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => handleOpenModal(product)}
+                className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                title={translations.edit}
               >
-                <svg className="w-12 h-12 text-purple-500 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
-              </motion.div>
-              <p className="text-gray-600 dark:text-gray-400 text-xl font-semibold">
-                {translations.noProducts}
-              </p>
-              <p className="text-gray-500 dark:text-gray-500 text-sm">
-                برای شروع، یک جنس جدید اضافه کنید
-              </p>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setDeleteConfirm(product.id)}
+                className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                title={translations.delete}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </motion.button>
             </div>
-          </motion.div>
-        ) : (
-          <div className="grid gap-5">
-            <AnimatePresence>
-              {products.map((product, index) => (
-                <motion.div
-                  key={product.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: index * 0.05 }}
-                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                  className="group bg-gradient-to-br from-white to-purple-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-6 border border-purple-100/50 dark:border-purple-900/30 transition-all duration-300"
-                >
-                  <div className="flex justify-between items-start gap-6">
-                    <div className="flex-1 space-y-4">
-                      {/* Header Section */}
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg">
-                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                          </svg>
-                        </div>
-                        <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                          {product.name}
-                        </h3>
-                      </div>
-
-                      {/* Description */}
-                      {product.description && (
-                        <div className="flex gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-600">
-                          <svg className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
-                            {product.description}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Info Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {product.price !== null && product.price !== undefined && (
-                          <motion.div
-                            whileHover={{ scale: 1.02 }}
-                            className="flex items-center gap-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-200/50 dark:border-green-700/30">
-                            <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">{translations.price}</div>
-                              <div className="font-bold text-gray-900 dark:text-white">
-                                {product.price.toLocaleString('fa-IR')} {getCurrencyName(product.currency_id) || ""}
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                        {product.stock_quantity !== null && product.stock_quantity !== undefined && (
-                          <motion.div
-                            whileHover={{ scale: 1.02 }}
-                            className="flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl border border-blue-200/50 dark:border-blue-700/30">
-                            <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                            </svg>
-                            <div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">{translations.stockQuantity}</div>
-                              <div className="font-bold text-gray-900 dark:text-white">
-                                {product.stock_quantity.toLocaleString('fa-IR')} {product.unit || ""}
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                        {getSupplierName(product.supplier_id) && (
-                          <motion.div
-                            whileHover={{ scale: 1.02 }}
-                            className="flex items-center gap-3 p-3 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl border border-purple-200/50 dark:border-purple-700/30">
-                            <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            <div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">{translations.supplier}</div>
-                              <div className="font-bold text-gray-900 dark:text-white">
-                                {getSupplierName(product.supplier_id)}
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </div>
-
-                      {/* Timestamps */}
-                      <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-500 pt-2 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <span>{new Date(product.created_at).toLocaleDateString('fa-IR')}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                          <span>{new Date(product.updated_at).toLocaleDateString('fa-IR')}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex flex-col gap-2">
-                      <motion.button
-                        whileHover={{ scale: 1.05, x: -2 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => handleOpenModal(product)}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        {translations.edit}
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.05, x: -2 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setDeleteConfirm(product.id)}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-semibold"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        {translations.delete}
-                      </motion.button>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
+          )}
+        />
 
         {/* Modal for Add/Edit */}
         <AnimatePresence>

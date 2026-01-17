@@ -30,13 +30,6 @@ pub struct PaginatedResponse<T> {
     pub per_page: i64,
     pub total_pages: i64,
 }
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 /// Get database path using standard OS data directory
 fn get_db_path(_app: &AppHandle, _db_name: &str) -> Result<PathBuf, String> {
     // Get standard data directory based on OS
@@ -676,14 +669,74 @@ fn create_supplier(
 
 /// Get all suppliers
 #[tauri::command]
-fn get_suppliers(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Supplier>, String> {
+fn get_suppliers(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<Supplier>, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, full_name, phone, address, email, notes, created_at, updated_at FROM suppliers ORDER BY created_at DESC";
-    let suppliers = db
-        .query(sql, &[], |row| {
-            Ok(Supplier {
+    let offset = (page - 1) * per_page;
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+            let search_term = format!("%{}%", s);
+            where_clause = "WHERE (full_name LIKE ? OR phone LIKE ? OR email LIKE ?)".to_string();
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term));
+        }
+    }
+
+    let count_sql = format!("SELECT COUNT(*) FROM suppliers {}", where_clause);
+    let total: i64 = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+        let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        Ok(count)
+    }).map_err(|e| format!("Failed to count suppliers: {}", e))?;
+
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "ASC".to_string());
+        let allowed_cols = ["full_name", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+            format!("ORDER BY {} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY created_at DESC".to_string()
+        }
+    } else {
+        "ORDER BY created_at DESC".to_string()
+    };
+
+    let sql = format!("SELECT id, full_name, phone, address, email, notes, created_at, updated_at FROM suppliers {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    
+    params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
+    params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
+
+    let suppliers = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                serde_json::Value::Number(n) => rusqlite::types::Value::Integer(n.as_i64().unwrap_or(0)),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let rows = stmt.query_map(rusqlite::params_from_iter(rusqlite_params.iter()), |row| {
+             Ok(Supplier {
                 id: row.get(0)?,
                 full_name: row.get(1)?,
                 phone: row.get(2)?,
@@ -693,10 +746,24 @@ fn get_suppliers(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Sup
                 created_at: row.get(6)?,
                 updated_at: row.get(7)?,
             })
-        })
-        .map_err(|e| format!("Failed to fetch suppliers: {}", e))?;
+        }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    Ok(suppliers)
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| anyhow::anyhow!("{}", e))?);
+        }
+        Ok(result)
+    }).map_err(|e| format!("Failed to fetch suppliers: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+    
+    Ok(PaginatedResponse {
+        items: suppliers,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
 }
 
 /// Update a supplier
@@ -857,14 +924,74 @@ fn create_customer(
 
 /// Get all customers
 #[tauri::command]
-fn get_customers(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Customer>, String> {
+fn get_customers(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<Customer>, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, full_name, phone, address, email, notes, created_at, updated_at FROM customers ORDER BY created_at DESC";
-    let customers = db
-        .query(sql, &[], |row| {
-            Ok(Customer {
+    let offset = (page - 1) * per_page;
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+            let search_term = format!("%{}%", s);
+            where_clause = "WHERE (full_name LIKE ? OR phone LIKE ? OR email LIKE ?)".to_string();
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term));
+        }
+    }
+
+    let count_sql = format!("SELECT COUNT(*) FROM customers {}", where_clause);
+    let total: i64 = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+        let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        Ok(count)
+    }).map_err(|e| format!("Failed to count customers: {}", e))?;
+
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "ASC".to_string());
+        let allowed_cols = ["full_name", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+            format!("ORDER BY {} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY created_at DESC".to_string()
+        }
+    } else {
+        "ORDER BY created_at DESC".to_string()
+    };
+
+    let sql = format!("SELECT id, full_name, phone, address, email, notes, created_at, updated_at FROM customers {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    
+    params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
+    params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
+
+    let customers = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                serde_json::Value::Number(n) => rusqlite::types::Value::Integer(n.as_i64().unwrap_or(0)),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let rows = stmt.query_map(rusqlite::params_from_iter(rusqlite_params.iter()), |row| {
+             Ok(Customer {
                 id: row.get(0)?,
                 full_name: row.get(1)?,
                 phone: row.get(2)?,
@@ -874,10 +1001,24 @@ fn get_customers(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Cus
                 created_at: row.get(6)?,
                 updated_at: row.get(7)?,
             })
-        })
-        .map_err(|e| format!("Failed to fetch customers: {}", e))?;
+        }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    Ok(customers)
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| anyhow::anyhow!("{}", e))?);
+        }
+        Ok(result)
+    }).map_err(|e| format!("Failed to fetch customers: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+    
+    Ok(PaginatedResponse {
+        items: customers,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
 }
 
 /// Update a customer
@@ -1186,14 +1327,72 @@ fn create_product(
 
 /// Get all products
 #[tauri::command]
-fn get_products(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Product>, String> {
+fn get_products(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<Product>, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, created_at, updated_at FROM products ORDER BY created_at DESC";
-    let products = db
-        .query(sql, &[], |row| {
-            Ok(Product {
+    let offset = (page - 1) * per_page;
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+            let search_term = format!("%{}%", s);
+            where_clause = "WHERE (name LIKE ?)".to_string();
+            params.push(serde_json::Value::String(search_term.clone()));
+        }
+    }
+
+    let count_sql = format!("SELECT COUNT(*) FROM products {}", where_clause);
+    let total: i64 = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+        let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        Ok(count)
+    }).map_err(|e| format!("Failed to count products: {}", e))?;
+
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "ASC".to_string());
+        let allowed_cols = ["name", "price", "stock_quantity", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+            format!("ORDER BY {} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY created_at DESC".to_string()
+        }
+    } else {
+        "ORDER BY created_at DESC".to_string()
+    };
+
+    let sql = format!("SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, created_at, updated_at FROM products {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    
+    params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
+    params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
+
+    let products = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+             match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                serde_json::Value::Number(n) => rusqlite::types::Value::Integer(n.as_i64().unwrap_or(0)),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let rows = stmt.query_map(rusqlite::params_from_iter(rusqlite_params.iter()), |row| {
+             Ok(Product {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 description: row.get::<_, Option<String>>(2)?,
@@ -1205,10 +1404,24 @@ fn get_products(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Prod
                 created_at: row.get(8)?,
                 updated_at: row.get(9)?,
             })
-        })
-        .map_err(|e| format!("Failed to fetch products: {}", e))?;
+        }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    Ok(products)
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| anyhow::anyhow!("{}", e))?);
+        }
+        Ok(result)
+    }).map_err(|e| format!("Failed to fetch products: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+    
+    Ok(PaginatedResponse {
+        items: products,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
 }
 
 /// Update a product
@@ -1277,6 +1490,39 @@ fn delete_product(
 ) -> Result<String, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Check if product is used in purchase_items
+    let purchase_check_sql = "SELECT COUNT(*) FROM purchase_items WHERE product_id = ?";
+    let purchase_count: i64 = db
+        .query(purchase_check_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get(0)?)
+        })
+        .map_err(|e| format!("Failed to check purchase items: {}", e))?
+        .first()
+        .cloned()
+        .unwrap_or(0);
+
+    // Check if product is used in sale_items
+    let sale_check_sql = "SELECT COUNT(*) FROM sale_items WHERE product_id = ?";
+    let sale_count: i64 = db
+        .query(sale_check_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get(0)?)
+        })
+        .map_err(|e| format!("Failed to check sale items: {}", e))?
+        .first()
+        .cloned()
+        .unwrap_or(0);
+
+    if purchase_count > 0 || sale_count > 0 {
+        let mut reasons = Vec::new();
+        if purchase_count > 0 {
+            reasons.push(format!("used in {} purchase(s)", purchase_count));
+        }
+        if sale_count > 0 {
+            reasons.push(format!("used in {} sale(s)", sale_count));
+        }
+        return Err(format!("Cannot delete product: it is {}", reasons.join(" and ")));
+    }
 
     let delete_sql = "DELETE FROM products WHERE id = ?";
     db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
@@ -1428,15 +1674,79 @@ fn create_purchase(
     }
 }
 
-/// Get all purchases
+/// Get all purchases with pagination
 #[tauri::command]
-fn get_purchases(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Purchase>, String> {
+fn get_purchases(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<Purchase>, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, supplier_id, date, notes, total_amount, created_at, updated_at FROM purchases ORDER BY date DESC, created_at DESC";
-    let purchases = db
-        .query(sql, &[], |row| {
+    let offset = (page - 1) * per_page;
+
+    // Build WHERE clause
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+            let search_term = format!("%{}%", s);
+            where_clause = "WHERE (CAST(p.date AS TEXT) LIKE ? OR p.notes LIKE ? OR p.supplier_id IN (SELECT id FROM suppliers WHERE full_name LIKE ?))".to_string();
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term));
+        }
+    }
+
+    // Get total count
+    let count_sql = format!("SELECT COUNT(*) FROM purchases p {}", where_clause);
+    let total: i64 = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+        let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        Ok(count)
+    }).map_err(|e| format!("Failed to count purchases: {}", e))?;
+
+    // Build Order By
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "DESC".to_string());
+        let allowed_cols = ["date", "total_amount", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+            format!("ORDER BY p.{} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY p.date DESC, p.created_at DESC".to_string()
+        }
+    } else {
+        "ORDER BY p.date DESC, p.created_at DESC".to_string()
+    };
+
+    let sql = format!("SELECT p.id, p.supplier_id, p.date, p.notes, p.total_amount, p.created_at, p.updated_at FROM purchases p {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    
+    params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
+    params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
+
+    let purchases = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                serde_json::Value::Number(n) => rusqlite::types::Value::Integer(n.as_i64().unwrap_or(0)),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let rows = stmt.query_map(rusqlite::params_from_iter(rusqlite_params.iter()), |row| {
             Ok(Purchase {
                 id: row.get(0)?,
                 supplier_id: row.get(1)?,
@@ -1446,10 +1756,24 @@ fn get_purchases(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Pur
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
             })
-        })
-        .map_err(|e| format!("Failed to fetch purchases: {}", e))?;
+        }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    Ok(purchases)
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| anyhow::anyhow!("{}", e))?);
+        }
+        Ok(result)
+    }).map_err(|e| format!("Failed to fetch purchases: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+    
+    Ok(PaginatedResponse {
+        items: purchases,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
 }
 
 /// Get a single purchase with its items
@@ -1942,29 +2266,108 @@ fn create_sale(
     }
 }
 
-/// Get all sales
+/// Get all sales with pagination
 #[tauri::command]
-fn get_sales(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Sale>, String> {
+fn get_sales(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<Sale>, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, customer_id, date, notes, total_amount, paid_amount, created_at, updated_at FROM sales ORDER BY date DESC, created_at DESC";
-    let sales = db
-        .query(sql, &[], |row| {
+    let offset = (page - 1) * per_page;
+
+    // Build WHERE clause
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+            let search_term = format!("%{}%", s);
+            where_clause = "WHERE (CAST(s.date AS TEXT) LIKE ? OR s.notes LIKE ? OR s.customer_id IN (SELECT id FROM customers WHERE full_name LIKE ? OR phone LIKE ?))".to_string();
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term));
+        }
+    }
+
+    // Get total count
+    let count_sql = format!("SELECT COUNT(*) FROM sales s {}", where_clause);
+    let total: i64 = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+        let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        Ok(count)
+    }).map_err(|e| format!("Failed to count sales: {}", e))?;
+
+    // Build Order By
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "DESC".to_string());
+        let allowed_cols = ["date", "total_amount", "paid_amount", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+            format!("ORDER BY s.{} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY s.date DESC, s.created_at DESC".to_string()
+        }
+    } else {
+        "ORDER BY s.date DESC, s.created_at DESC".to_string()
+    };
+
+    let sql = format!("SELECT s.id, s.customer_id, s.date, s.notes, s.total_amount, s.paid_amount, s.created_at, s.updated_at FROM sales s {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    
+    params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
+    params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
+
+    let sales = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                serde_json::Value::Number(n) => rusqlite::types::Value::Integer(n.as_i64().unwrap_or(0)),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let rows = stmt.query_map(rusqlite::params_from_iter(rusqlite_params.iter()), |row| {
             Ok(Sale {
                 id: row.get(0)?,
                 customer_id: row.get(1)?,
                 date: row.get(2)?,
-                notes: row.get(3)?,
+                notes: row.get::<_, Option<String>>(3)?,
                 total_amount: row.get(4)?,
                 paid_amount: row.get(5)?,
                 created_at: row.get(6)?,
                 updated_at: row.get(7)?,
             })
-        })
-        .map_err(|e| format!("Failed to fetch sales: {}", e))?;
+        }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    Ok(sales)
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| anyhow::anyhow!("{}", e))?);
+        }
+        Ok(result)
+    }).map_err(|e| format!("Failed to fetch sales: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+    
+    Ok(PaginatedResponse {
+        items: sales,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
 }
 
 /// Get a single sale with its items
@@ -2634,16 +3037,78 @@ fn create_expense(
     }
 }
 
-/// Get all expenses
 #[tauri::command]
-fn get_expenses(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Expense>, String> {
+fn get_expenses(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<Expense>, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, created_at, updated_at FROM expenses ORDER BY date DESC, created_at DESC";
-    let expenses = db
-        .query(sql, &[], |row| {
-            Ok(Expense {
+    let offset = (page - 1) * per_page;
+
+    // Build WHERE clause
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+             let search_term = format!("%{}%", s);
+             where_clause = "WHERE (currency LIKE ? OR date LIKE ?)".to_string();
+             params.push(serde_json::Value::String(search_term.clone()));
+             params.push(serde_json::Value::String(search_term));
+        }
+    }
+
+    // Get total count
+    let count_sql = format!("SELECT COUNT(*) FROM expenses {}", where_clause);
+    let total: i64 = db.with_connection(|conn| {
+         let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+         let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+         let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+             .map_err(|e| anyhow::anyhow!("{}", e))?;
+         Ok(count)
+    }).map_err(|e| format!("Failed to count expenses: {}", e))?;
+
+    // Build Order By
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "ASC".to_string());
+        let allowed_cols = ["amount", "currency", "rate", "total", "date", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+             format!("ORDER BY {} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY date DESC, created_at DESC".to_string()
+        }
+    } else {
+        "ORDER BY date DESC, created_at DESC".to_string()
+    };
+
+    let sql = format!("SELECT id, expense_type_id, amount, currency, rate, total, date, created_at, updated_at FROM expenses {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    
+    params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
+    params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
+
+    let expenses = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+             match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                serde_json::Value::Number(n) => rusqlite::types::Value::Integer(n.as_i64().unwrap_or(0)),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let rows = stmt.query_map(rusqlite::params_from_iter(rusqlite_params.iter()), |row| {
+             Ok(Expense {
                 id: row.get(0)?,
                 expense_type_id: row.get(1)?,
                 amount: row.get(2)?,
@@ -2654,10 +3119,24 @@ fn get_expenses(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Expe
                 created_at: row.get(7)?,
                 updated_at: row.get(8)?,
             })
-        })
-        .map_err(|e| format!("Failed to fetch expenses: {}", e))?;
+        }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    Ok(expenses)
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| anyhow::anyhow!("{}", e))?);
+        }
+        Ok(result)
+    }).map_err(|e| format!("Failed to fetch expenses: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+    
+    Ok(PaginatedResponse {
+        items: expenses,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
 }
 
 /// Get a single expense
@@ -2870,14 +3349,91 @@ fn create_employee(
 
 /// Get all employees
 #[tauri::command]
-fn get_employees(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Employee>, String> {
+fn get_employees(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<Employee>, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, full_name, phone, email, address, position, hire_date, base_salary, photo_path, notes, created_at, updated_at FROM employees ORDER BY created_at DESC";
-    let employees = db
-        .query(sql, &[], |row| {
-            Ok(Employee {
+    let offset = (page - 1) * per_page;
+    
+    // Build WHERE clause
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+            let search_term = format!("%{}%", s);
+            where_clause = "WHERE (full_name LIKE ? OR phone LIKE ? OR email LIKE ? OR position LIKE ?)".to_string();
+            params.push(serde_json::Value::String(search_term.clone())); // full_name
+            params.push(serde_json::Value::String(search_term.clone())); // phone
+            params.push(serde_json::Value::String(search_term.clone())); // email
+            params.push(serde_json::Value::String(search_term)); // position
+        }
+    }
+
+    // Get total count
+    let count_sql = format!("SELECT COUNT(*) FROM employees {}", where_clause);
+    // We need to use db_query logic here or similar. 
+    // Since we are inside the lib, we can access db.query directly if we construct params correctly.
+    // But db.query uses `rusqlite::ToSql`. `params` above are `serde_json::Value`.
+    // Let's reuse the logic from `db_query` or just implement it here cleanly.
+    
+    // We'll reimplement a simple query wrapper here for the count since strict ownership is annoying
+    let total: i64 = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        
+        // Convert json params to sqlite params
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null, // simplified for search which is only string
+            }
+        }).collect();
+
+        let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+             .map_err(|e| anyhow::anyhow!("{}", e))?;
+        Ok(count)
+    }).map_err(|e| format!("Failed to count employees: {}", e))?;
+
+    // Build Order By
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "ASC".to_string());
+        // Validate sort column to prevent injection (basic check)
+        let allowed_cols = ["full_name", "phone", "email", "address", "position", "hire_date", "base_salary", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+             format!("ORDER BY {} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY created_at DESC".to_string()
+        }
+    } else {
+        "ORDER BY created_at DESC".to_string()
+    };
+
+    let sql = format!("SELECT id, full_name, phone, email, address, position, hire_date, base_salary, photo_path, notes, created_at, updated_at FROM employees {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+
+    // Add pagination params
+    params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
+    params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
+
+    let employees = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                serde_json::Value::Number(n) => rusqlite::types::Value::Integer(n.as_i64().unwrap_or(0)),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let rows = stmt.query_map(rusqlite::params_from_iter(rusqlite_params.iter()), |row| {
+             Ok(Employee {
                 id: row.get(0)?,
                 full_name: row.get(1)?,
                 phone: row.get(2)?,
@@ -2891,10 +3447,24 @@ fn get_employees(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Emp
                 created_at: row.get(10)?,
                 updated_at: row.get(11)?,
             })
-        })
-        .map_err(|e| format!("Failed to fetch employees: {}", e))?;
+        }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    Ok(employees)
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| anyhow::anyhow!("{}", e))?);
+        }
+        Ok(result)
+    }).map_err(|e| format!("Failed to fetch employees: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+
+    Ok(PaginatedResponse {
+        items: employees,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
 }
 
 /// Get employee by ID
@@ -3130,14 +3700,78 @@ fn create_salary(
 
 /// Get all salaries
 #[tauri::command]
-fn get_salaries(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Salary>, String> {
+fn get_salaries(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<Salary>, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, employee_id, year, month, amount, COALESCE(deductions, 0) as deductions, notes, created_at, updated_at FROM salaries ORDER BY year DESC, month DESC, created_at DESC";
-    let salaries = db
-        .query(sql, &[], |row| {
-            Ok(Salary {
+    let offset = (page - 1) * per_page;
+
+    // Build WHERE clause
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+             let search_term = format!("%{}%", s);
+             where_clause = "WHERE (CAST(s.year AS TEXT) LIKE ? OR s.month LIKE ? OR s.employee_id IN (SELECT id FROM employees WHERE full_name LIKE ?))".to_string();
+             params.push(serde_json::Value::String(search_term.clone()));
+             params.push(serde_json::Value::String(search_term.clone()));
+             params.push(serde_json::Value::String(search_term));
+        }
+    }
+
+    // Get total count
+    let count_sql = format!("SELECT COUNT(*) FROM salaries s {}", where_clause);
+    let total: i64 = db.with_connection(|conn| {
+         let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+         let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+         let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+             .map_err(|e| anyhow::anyhow!("{}", e))?;
+         Ok(count)
+    }).map_err(|e| format!("Failed to count salaries: {}", e))?;
+
+    // Build Order By
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "ASC".to_string());
+        let allowed_cols = ["amount", "year", "month", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+             format!("ORDER BY s.{} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY s.year DESC, s.month DESC".to_string()
+        }
+    } else {
+        "ORDER BY s.year DESC, s.month DESC".to_string()
+    };
+
+    let sql = format!("SELECT s.id, s.employee_id, s.year, s.month, s.amount, COALESCE(s.deductions, 0) as deductions, s.notes, s.created_at, s.updated_at FROM salaries s {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    
+    params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
+    params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
+
+    let salaries = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+             match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                serde_json::Value::Number(n) => rusqlite::types::Value::Integer(n.as_i64().unwrap_or(0)),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let rows = stmt.query_map(rusqlite::params_from_iter(rusqlite_params.iter()), |row| {
+             Ok(Salary {
                 id: row.get(0)?,
                 employee_id: row.get(1)?,
                 year: row.get(2)?,
@@ -3148,10 +3782,24 @@ fn get_salaries(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Sala
                 created_at: row.get(7)?,
                 updated_at: row.get(8)?,
             })
-        })
-        .map_err(|e| format!("Failed to fetch salaries: {}", e))?;
+        }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    Ok(salaries)
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| anyhow::anyhow!("{}", e))?);
+        }
+        Ok(result)
+    }).map_err(|e| format!("Failed to fetch salaries: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+    
+    Ok(PaginatedResponse {
+        items: salaries,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
 }
 
 /// Get salaries by employee ID
@@ -3601,7 +4249,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(None::<Database>))
         .invoke_handler(tauri::generate_handler![
-            greet,
             db_create,
             db_open,
             db_close,

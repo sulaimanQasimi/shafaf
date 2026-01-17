@@ -6,6 +6,7 @@ export interface Salary {
   year: number;
   month: string; // Dari month name like حمل, ثور
   amount: number;
+  deductions: number;
   notes?: string | null;
   created_at: string;
   updated_at: string;
@@ -25,6 +26,7 @@ export async function initSalariesTable(): Promise<string> {
  * @param year Persian year
  * @param month Dari month name (e.g., حمل, ثور)
  * @param amount Salary amount
+ * @param deductions Deductions amount
  * @param notes Optional notes
  * @returns Promise with Salary
  */
@@ -33,6 +35,7 @@ export async function createSalary(
   year: number,
   month: string,
   amount: number,
+  deductions: number,
   notes?: string | null
 ): Promise<Salary> {
   return await invoke<Salary>("create_salary", {
@@ -40,6 +43,7 @@ export async function createSalary(
     year,
     month,
     amount,
+    deductions,
     notes: notes || null,
   });
 }
@@ -79,6 +83,7 @@ export async function getSalary(id: number): Promise<Salary> {
  * @param year Persian year
  * @param month Dari month name (e.g., حمل, ثور)
  * @param amount Salary amount
+ * @param deductions Deductions amount
  * @param notes Optional notes
  * @returns Promise with Salary
  */
@@ -88,6 +93,7 @@ export async function updateSalary(
   year: number,
   month: string,
   amount: number,
+  deductions: number,
   notes?: string | null
 ): Promise<Salary> {
   return await invoke<Salary>("update_salary", {
@@ -96,6 +102,7 @@ export async function updateSalary(
     year,
     month,
     amount,
+    deductions,
     notes: notes || null,
   });
 }

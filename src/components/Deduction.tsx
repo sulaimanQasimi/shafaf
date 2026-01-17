@@ -2,85 +2,75 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import {
-    initSalariesTable,
-    createSalary,
-    getSalaries,
-    updateSalary,
-    deleteSalary,
-    type Salary,
-} from "../utils/salary";
+    initDeductionsTable,
+    createDeduction,
+    getDeductions,
+    updateDeduction,
+    deleteDeduction,
+    type Deduction,
+} from "../utils/deduction";
 import { getEmployees, type Employee } from "../utils/employee";
+import { getCurrencies, type Currency } from "../utils/currency";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
-import { getCurrentPersianYear } from "../utils/date";
-
-// Dari month names
-const dariMonths = [
-    "حمل", "ثور", "جوزا", "سرطان", "اسد", "سنبله",
-    "میزان", "عقرب", "قوس", "جدی", "دلو", "حوت"
-];
 
 // Dari translations
 const translations = {
-    title: "مدیریت معاشات",
-    addNew: "ثبت معاش جدید",
+    title: "مدیریت کسرها",
+    addNew: "ثبت کسر جدید",
     edit: "ویرایش",
     delete: "حذف",
     cancel: "لغو",
     save: "ذخیره",
     employee: "کارمند",
-    year: "سال",
-    month: "ماه",
-    amount: "مقدار حقوق",
-    deductions: "کسر",
-    netSalary: "حقوق خالص",
-    baseSalary: "حقوق پایه",
-    notes: "یادداشت",
+    currency: "ارز",
+    rate: "نرخ",
+    amount: "مقدار",
+    total: "مجموع",
     actions: "عملیات",
     createdAt: "تاریخ ایجاد",
     updatedAt: "آخرین بروزرسانی",
-    noSalaries: "هیچ معاشی ثبت نشده است",
-    confirmDelete: "آیا از حذف این معاش اطمینان دارید؟",
+    noDeductions: "هیچ کسری ثبت نشده است",
+    confirmDelete: "آیا از حذف این کسر اطمینان دارید؟",
     backToDashboard: "بازگشت به داشبورد",
     success: {
-        created: "معاش با موفقیت ثبت شد",
-        updated: "معاش با موفقیت بروزرسانی شد",
-        deleted: "معاش با موفقیت حذف شد",
+        created: "کسر با موفقیت ثبت شد",
+        updated: "کسر با موفقیت بروزرسانی شد",
+        deleted: "کسر با موفقیت حذف شد",
     },
     errors: {
-        create: "خطا در ثبت معاش",
-        update: "خطا در بروزرسانی معاش",
-        delete: "خطا در حذف معاش",
-        fetch: "خطا در دریافت لیست معاشات",
+        create: "خطا در ثبت کسر",
+        update: "خطا در بروزرسانی کسر",
+        delete: "خطا در حذف کسر",
+        fetch: "خطا در دریافت لیست کسرها",
         employeeRequired: "انتخاب کارمند الزامی است",
-        yearRequired: "سال الزامی است",
-        monthRequired: "ماه الزامی است",
-        amountRequired: "مقدار معاش الزامی است",
+        currencyRequired: "انتخاب ارز الزامی است",
+        amountRequired: "مقدار الزامی است",
     },
     placeholders: {
         employee: "کارمند را انتخاب کنید",
-        year: "سال را وارد کنید",
-        amount: "مقدار معاش را وارد کنید",
-        notes: "یادداشت را وارد کنید",
+        currency: "ارز را انتخاب کنید",
+        amount: "مقدار را وارد کنید",
+        rate: "نرخ ارز",
     },
 };
 
-interface SalaryManagementProps {
+interface DeductionManagementProps {
     onBack?: () => void;
 }
 
-export default function SalaryManagement({ onBack }: SalaryManagementProps) {
-    const [salaries, setSalaries] = useState<Salary[]>([]);
+export default function DeductionManagement({ onBack }: DeductionManagementProps) {
+    const [deductions, setDeductions] = useState<Deduction[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
+    const [currencies, setCurrencies] = useState<Currency[]>([]);
     const [loading, setLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingSalary, setEditingSalary] = useState<Salary | null>(null);
+    const [editingDeduction, setEditingDeduction] = useState<Deduction | null>(null);
     const [formData, setFormData] = useState({
         employee_id: "",
-        year: getCurrentPersianYear().toString(),
-        month: "",
+        currency: "",
+        rate: "1",
         amount: "",
-        deductions: "0",
-        notes: "",
+        total: "",
     });
     const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
@@ -97,18 +87,20 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
             }
 
             try {
-                await initSalariesTable();
+                await initDeductionsTable();
             } catch (err) {
                 console.log("Table initialization:", err);
             }
 
-            const [salariesData, employeesData] = await Promise.all([
-                getSalaries(),
+            const [deductionsData, employeesData, currenciesData] = await Promise.all([
+                getDeductions(),
                 getEmployees(),
+                getCurrencies(),
             ]);
 
-            setSalaries(salariesData);
+            setDeductions(deductionsData);
             setEmployees(employeesData);
+            setCurrencies(currenciesData);
         } catch (error: any) {
             toast.error(translations.errors.fetch);
             console.error("Error loading data:", error);
@@ -117,26 +109,35 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
         }
     };
 
-    const handleOpenModal = (salary?: Salary) => {
-        if (salary) {
-            setEditingSalary(salary);
+    const calculateTotal = () => {
+        const amount = parseFloat(formData.amount) || 0;
+        const rate = parseFloat(formData.rate) || 1;
+        return amount * rate;
+    };
+
+    useEffect(() => {
+        const total = calculateTotal();
+        setFormData(prev => ({ ...prev, total: total.toFixed(2) }));
+    }, [formData.amount, formData.rate]);
+
+    const handleOpenModal = (deduction?: Deduction) => {
+        if (deduction) {
+            setEditingDeduction(deduction);
             setFormData({
-                employee_id: salary.employee_id.toString(),
-                year: salary.year.toString(),
-                month: salary.month,
-                amount: salary.amount.toString(),
-                deductions: salary.deductions.toString(),
-                notes: salary.notes || "",
+                employee_id: deduction.employee_id.toString(),
+                currency: deduction.currency,
+                rate: deduction.rate.toString(),
+                amount: deduction.amount.toString(),
+                total: (deduction.amount * deduction.rate).toFixed(2),
             });
         } else {
-            setEditingSalary(null);
+            setEditingDeduction(null);
             setFormData({
                 employee_id: "",
-                year: getCurrentPersianYear().toString(),
-                month: "",
+                currency: "",
+                rate: "1",
                 amount: "",
-                deductions: "0",
-                notes: "",
+                total: "",
             });
         }
         setIsModalOpen(true);
@@ -144,35 +145,14 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
 
     const handleCloseModal = () => {
         setIsModalOpen(false);
-        setEditingSalary(null);
+        setEditingDeduction(null);
         setFormData({
             employee_id: "",
-            year: getCurrentPersianYear().toString(),
-            month: "",
+            currency: "",
+            rate: "1",
             amount: "",
-            deductions: "0",
-            notes: "",
+            total: "",
         });
-    };
-
-    // Auto-populate salary amount when employee is selected
-    useEffect(() => {
-        if (formData.employee_id && !editingSalary) {
-            const selectedEmployee = employees.find(e => e.id.toString() === formData.employee_id);
-            if (selectedEmployee && selectedEmployee.base_salary) {
-                setFormData(prev => ({
-                    ...prev,
-                    amount: selectedEmployee.base_salary.toString()
-                }));
-            }
-        }
-    }, [formData.employee_id, employees, editingSalary]);
-
-    // Calculate net salary
-    const calculateNetSalary = () => {
-        const amount = parseFloat(formData.amount) || 0;
-        const deductions = parseFloat(formData.deductions) || 0;
-        return Math.max(0, amount - deductions);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -183,13 +163,8 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
             return;
         }
 
-        if (!formData.year || parseInt(formData.year) <= 0) {
-            toast.error(translations.errors.yearRequired);
-            return;
-        }
-
-        if (!formData.month) {
-            toast.error(translations.errors.monthRequired);
+        if (!formData.currency) {
+            toast.error(translations.errors.currencyRequired);
             return;
         }
 
@@ -198,35 +173,34 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
             return;
         }
 
+        const amount = parseFloat(formData.amount);
+        const rate = parseFloat(formData.rate) || 1;
+
         try {
             setLoading(true);
-            if (editingSalary) {
-                await updateSalary(
-                    editingSalary.id,
+            if (editingDeduction) {
+                await updateDeduction(
+                    editingDeduction.id,
                     parseInt(formData.employee_id),
-                    parseInt(formData.year),
-                    formData.month,
-                    parseFloat(formData.amount),
-                    parseFloat(formData.deductions) || 0,
-                    formData.notes || null
+                    formData.currency,
+                    rate,
+                    amount
                 );
                 toast.success(translations.success.updated);
             } else {
-                await createSalary(
+                await createDeduction(
                     parseInt(formData.employee_id),
-                    parseInt(formData.year),
-                    formData.month,
-                    parseFloat(formData.amount),
-                    parseFloat(formData.deductions) || 0,
-                    formData.notes || null
+                    formData.currency,
+                    rate,
+                    amount
                 );
                 toast.success(translations.success.created);
             }
             handleCloseModal();
             await loadData();
         } catch (error: any) {
-            toast.error(editingSalary ? translations.errors.update : translations.errors.create);
-            console.error("Error saving salary:", error);
+            toast.error(editingDeduction ? translations.errors.update : translations.errors.create);
+            console.error("Error saving deduction:", error);
         } finally {
             setLoading(false);
         }
@@ -235,19 +209,22 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
     const handleDelete = async (id: number) => {
         try {
             setLoading(true);
-            await deleteSalary(id);
+            await deleteDeduction(id);
             toast.success(translations.success.deleted);
             setDeleteConfirm(null);
             await loadData();
         } catch (error: any) {
             toast.error(translations.errors.delete);
-            console.error("Error deleting salary:", error);
+            console.error("Error deleting deduction:", error);
         } finally {
             setLoading(false);
         }
     };
 
-
+    const getEmployeeName = (employeeId: number): string => {
+        const employee = employees.find(e => e.id === employeeId);
+        return employee ? employee.full_name : "نامشخص";
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6" dir="rtl">
@@ -306,7 +283,7 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                     </div>
                 </motion.div>
 
-                {loading && salaries.length === 0 ? (
+                {loading && deductions.length === 0 ? (
                     <div className="flex justify-center items-center h-64">
                         <motion.div
                             animate={{ rotate: 360 }}
@@ -314,97 +291,102 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                             className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full"
                         />
                     </div>
-                ) : salaries.length === 0 ? (
+                ) : deductions.length === 0 ? (
                     <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="text-center py-16 bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-lg"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="text-center py-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-red-100 dark:border-red-900/30"
                     >
-                        <svg className="w-24 h-24 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <p className="text-xl text-gray-600 dark:text-gray-400">{translations.noSalaries}</p>
+                        <div className="flex flex-col items-center gap-4">
+                            <motion.div
+                                animate={{
+                                    y: [0, -10, 0],
+                                }}
+                                transition={{
+                                    duration: 2,
+                                    repeat: Infinity,
+                                    ease: "easeInOut"
+                                }}
+                                className="w-24 h-24 bg-gradient-to-br from-red-100 to-pink-100 dark:from-red-900/30 dark:to-pink-900/30 rounded-full flex items-center justify-center"
+                            >
+                                <svg className="w-12 h-12 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </motion.div>
+                            <p className="text-gray-600 dark:text-gray-400 text-xl font-semibold">
+                                {translations.noDeductions}
+                            </p>
+                            <p className="text-gray-500 dark:text-gray-500 text-sm">
+                                برای شروع، یک کسر جدید اضافه کنید
+                            </p>
+                        </div>
                     </motion.div>
                 ) : (
                     <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                         <AnimatePresence>
-                            {salaries.map((salary, index) => {
-                                const employee = employees.find(e => e.id === salary.employee_id);
+                            {deductions.map((deduction, index) => {
+                                const employee = employees.find(e => e.id === deduction.employee_id);
+                                const total = deduction.amount * deduction.rate;
                                 return (
                                     <motion.div
-                                        key={salary.id}
+                                        key={deduction.id}
                                         initial={{ opacity: 0, y: 20 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, scale: 0.95 }}
                                         transition={{ delay: index * 0.05 }}
                                         whileHover={{ y: -5, transition: { duration: 0.2 } }}
-                                        className="group bg-gradient-to-br from-white to-purple-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-5 border border-purple-100/50 dark:border-purple-900/30 transition-all duration-300 flex flex-col justify-between"
+                                        className="group bg-gradient-to-br from-white to-red-50/30 dark:from-gray-800 dark:to-gray-800/50 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-5 border border-red-100/50 dark:border-red-900/30 transition-all duration-300 flex flex-col justify-between"
                                     >
                                         <div>
+                                            {/* Header */}
                                             <div className="flex items-center gap-4 mb-5">
-                                                {employee?.photo_path ? (
-                                                    <img
-                                                        src={employee.photo_path}
-                                                        alt={employee.full_name}
-                                                        className="w-14 h-14 rounded-2xl object-cover shadow-md border-2 border-white dark:border-gray-700"
-                                                    />
-                                                ) : (
-                                                    <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center shadow-md text-white text-xl font-bold">
-                                                        {employee?.full_name?.charAt(0) || "؟"}
-                                                    </div>
-                                                )}
-                                                <div>
-                                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
-                                                        {employee ? employee.full_name : "کارمند ناشناس"}
+                                                <div className="w-14 h-14 bg-gradient-to-br from-red-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-md">
+                                                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h3 className="text-xl font-bold text-gray-900 dark:text-white truncate">
+                                                        {getEmployeeName(deduction.employee_id)}
                                                     </h3>
-                                                    <div className="text-purple-600 dark:text-purple-400 text-sm font-medium mt-1">
-                                                        {salary.month} {salary.year}
+                                                    <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        <span>{deduction.currency}</span>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div className="space-y-3 mb-5">
-                                                <div className="p-3 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30 flex justify-between items-center px-4">
-                                                    <span className="text-sm text-blue-600/80 dark:text-blue-400/80">{translations.baseSalary}</span>
-                                                    <span className="text-lg font-bold text-blue-700 dark:text-blue-400">
-                                                        {salary.amount.toLocaleString()} <span className="text-xs opacity-70">افغانی</span>
+                                            {/* Info Grid */}
+                                            <div className="grid grid-cols-2 gap-3 mb-5">
+                                                <div className="p-3 bg-red-50/50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-800/30">
+                                                    <span className="text-xs text-red-600/80 dark:text-red-400/80 block mb-1">مقدار</span>
+                                                    <span className="text-sm font-bold text-red-700 dark:text-red-400">
+                                                        {deduction.amount.toLocaleString()} <span className="text-xs font-normal opacity-70">{deduction.currency}</span>
                                                     </span>
                                                 </div>
-                                                {salary.deductions > 0 && (
-                                                    <div className="p-3 bg-red-50/50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-800/30 flex justify-between items-center px-4">
-                                                        <span className="text-sm text-red-600/80 dark:text-red-400/80">{translations.deductions}</span>
-                                                        <span className="text-lg font-bold text-red-700 dark:text-red-400">
-                                                            {salary.deductions.toLocaleString()} <span className="text-xs opacity-70">افغانی</span>
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                <div className="p-3 bg-green-50/50 dark:bg-green-900/10 rounded-xl border border-green-100 dark:border-green-800/30 flex justify-between items-center px-4">
-                                                    <span className="text-sm text-green-600/80 dark:text-green-400/80">{translations.netSalary}</span>
-                                                    <span className="text-lg font-bold text-green-700 dark:text-green-400">
-                                                        {(salary.amount - salary.deductions).toLocaleString()} <span className="text-xs opacity-70">افغانی</span>
+                                                <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-600/50">
+                                                    <span className="text-xs text-gray-500 dark:text-gray-400 block mb-1">نرخ تبادله</span>
+                                                    <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                                                        {deduction.rate.toLocaleString()}
                                                     </span>
                                                 </div>
-
-                                                {salary.notes && (
-                                                    <div className="flex items-start gap-3 p-3 bg-gray-50/80 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-600/50">
-                                                        <div className="p-1 min-w-[24px] text-gray-400">
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                            </svg>
-                                                        </div>
-                                                        <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                                                            {salary.notes}
-                                                        </p>
-                                                    </div>
-                                                )}
+                                                <div className="col-span-2 p-3 bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 rounded-xl border border-red-100 dark:border-red-800/30 flex justify-between items-center">
+                                                    <span className="text-sm text-red-700 dark:text-red-300 font-medium">مجموع کل</span>
+                                                    <span className="text-lg font-bold text-red-800 dark:text-red-200">
+                                                        {total.toLocaleString()}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
 
-                                        <div className="flex gap-3 pt-4 border-t border-purple-100/50 dark:border-gray-700/50">
+                                        {/* Action Buttons */}
+                                        <div className="flex gap-3 pt-4 border-t border-red-100/50 dark:border-gray-700/50">
                                             <motion.button
                                                 whileHover={{ scale: 1.02 }}
                                                 whileTap={{ scale: 0.98 }}
-                                                onClick={() => handleOpenModal(salary)}
+                                                onClick={() => handleOpenModal(deduction)}
                                                 className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg transition-colors text-sm font-semibold"
                                             >
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -415,7 +397,7 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                                             <motion.button
                                                 whileHover={{ scale: 1.02 }}
                                                 whileTap={{ scale: 0.98 }}
-                                                onClick={() => setDeleteConfirm(salary.id)}
+                                                onClick={() => setDeleteConfirm(deduction.id)}
                                                 className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg transition-colors text-sm font-semibold"
                                             >
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -449,7 +431,7 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                                 className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
                             >
                                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                                    {editingSalary ? translations.edit : translations.addNew}
+                                    {editingDeduction ? translations.edit : translations.addNew}
                                 </h2>
                                 <form onSubmit={handleSubmit} className="space-y-4">
                                     <div>
@@ -474,38 +456,37 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                                {translations.year} <span className="text-red-500">*</span>
-                                            </label>
-                                            <input
-                                                type="number"
-                                                value={formData.year}
-                                                onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-                                                required
-                                                min="1300"
-                                                max="1500"
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                                                placeholder={translations.placeholders.year}
-                                                dir="ltr"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                                {translations.month} <span className="text-red-500">*</span>
+                                                {translations.currency} <span className="text-red-500">*</span>
                                             </label>
                                             <select
-                                                value={formData.month}
-                                                onChange={(e) => setFormData({ ...formData, month: e.target.value })}
+                                                value={formData.currency}
+                                                onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                                                 required
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
                                                 dir="rtl"
                                             >
-                                                <option value="">انتخاب ماه</option>
-                                                {dariMonths.map((month) => (
-                                                    <option key={month} value={month}>
-                                                        {month}
+                                                <option value="">انتخاب ارز</option>
+                                                {currencies.map((currency) => (
+                                                    <option key={currency.id} value={currency.name}>
+                                                        {currency.name}
                                                     </option>
                                                 ))}
                                             </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                                {translations.rate}
+                                            </label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                value={formData.rate}
+                                                onChange={(e) => setFormData({ ...formData, rate: e.target.value })}
+                                                required
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                                placeholder={translations.placeholders.rate}
+                                                dir="ltr"
+                                            />
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -526,44 +507,16 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                                         </div>
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                                {translations.deductions}
+                                                {translations.total}
                                             </label>
                                             <input
-                                                type="number"
-                                                step="0.01"
-                                                value={formData.deductions}
-                                                onChange={(e) => setFormData({ ...formData, deductions: e.target.value })}
-                                                min="0"
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                                                placeholder="مقدار کسر"
+                                                type="text"
+                                                value={formData.total}
+                                                readOnly
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white"
                                                 dir="ltr"
                                             />
                                         </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                            {translations.netSalary}
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={calculateNetSalary().toLocaleString()}
-                                            readOnly
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 font-bold"
-                                            dir="ltr"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                            {translations.notes}
-                                        </label>
-                                        <textarea
-                                            value={formData.notes}
-                                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                            rows={3}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                                            placeholder={translations.placeholders.notes}
-                                            dir="rtl"
-                                        />
                                     </div>
                                     <div className="flex gap-3 pt-4">
                                         <motion.button

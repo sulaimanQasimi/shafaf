@@ -2366,11 +2366,147 @@ fn delete_sale_payment(
     Ok("Sale payment deleted successfully".to_string())
 }
 
+// ExpenseType Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpenseType {
+    pub id: i64,
+    pub name: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Initialize expense_types table schema
+#[tauri::command]
+fn init_expense_types_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS expense_types (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create expense_types table: {}", e))?;
+
+    Ok("Expense types table initialized successfully".to_string())
+}
+
+/// Create a new expense type
+#[tauri::command]
+fn create_expense_type(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    name: String,
+) -> Result<ExpenseType, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Insert new expense type
+    let insert_sql = "INSERT INTO expense_types (name) VALUES (?)";
+    db.execute(insert_sql, &[&name as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to insert expense type: {}", e))?;
+
+    // Get the created expense type
+    let expense_type_sql = "SELECT id, name, created_at, updated_at FROM expense_types WHERE name = ?";
+    let expense_types = db
+        .query(expense_type_sql, &[&name as &dyn rusqlite::ToSql], |row| {
+            Ok(ExpenseType {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch expense type: {}", e))?;
+
+    if let Some(expense_type) = expense_types.first() {
+        Ok(expense_type.clone())
+    } else {
+        Err("Failed to retrieve created expense type".to_string())
+    }
+}
+
+/// Get all expense types
+#[tauri::command]
+fn get_expense_types(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<ExpenseType>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, name, created_at, updated_at FROM expense_types ORDER BY name ASC";
+    let expense_types = db
+        .query(sql, &[], |row| {
+            Ok(ExpenseType {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch expense types: {}", e))?;
+
+    Ok(expense_types)
+}
+
+/// Update an expense type
+#[tauri::command]
+fn update_expense_type(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    name: String,
+) -> Result<ExpenseType, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Update expense type
+    let update_sql = "UPDATE expense_types SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_sql, &[&name as &dyn rusqlite::ToSql, &id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to update expense type: {}", e))?;
+
+    // Get the updated expense type
+    let expense_type_sql = "SELECT id, name, created_at, updated_at FROM expense_types WHERE id = ?";
+    let expense_types = db
+        .query(expense_type_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(ExpenseType {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch expense type: {}", e))?;
+
+    if let Some(expense_type) = expense_types.first() {
+        Ok(expense_type.clone())
+    } else {
+        Err("Failed to retrieve updated expense type".to_string())
+    }
+}
+
+/// Delete an expense type
+#[tauri::command]
+fn delete_expense_type(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let delete_sql = "DELETE FROM expense_types WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete expense type: {}", e))?;
+
+    Ok("Expense type deleted successfully".to_string())
+}
+
 // Expense Model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Expense {
     pub id: i64,
-    pub name: String,
+    pub expense_type_id: i64,
     pub amount: f64,
     pub currency: String,
     pub rate: f64,
@@ -2386,22 +2522,54 @@ fn init_expenses_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
+    // First ensure expense_types table exists
+    let create_expense_types_sql = "
+        CREATE TABLE IF NOT EXISTS expense_types (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ";
+    db.execute(create_expense_types_sql, &[])
+        .map_err(|e| format!("Failed to create expense_types table: {}", e))?;
+
+    // Create expenses table with expense_type_id
+    // If table already exists with old schema, we'll handle migration
     let create_table_sql = "
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
+            expense_type_id INTEGER NOT NULL,
             amount REAL NOT NULL,
             currency TEXT NOT NULL,
             rate REAL NOT NULL DEFAULT 1.0,
             total REAL NOT NULL,
             date TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (expense_type_id) REFERENCES expense_types(id)
         )
     ";
-
-    db.execute(create_table_sql, &[])
-        .map_err(|e| format!("Failed to create expenses table: {}", e))?;
+    
+    // Try to create the table (will fail silently if it exists)
+    let _ = db.execute(create_table_sql, &[]);
+    
+    // Check if expense_type_id column exists, if not, try to add it
+    let check_column_sql = "PRAGMA table_info(expenses)";
+    if let Ok(columns) = db.query(check_column_sql, &[], |row| {
+        Ok(row.get::<_, String>(1)?)
+    }) {
+        let has_expense_type_id = columns.iter().any(|c| c == "expense_type_id");
+        let has_name = columns.iter().any(|c| c == "name");
+        
+        if !has_expense_type_id && has_name {
+            // Old schema detected - add expense_type_id column
+            // Note: SQLite doesn't support adding NOT NULL columns to existing tables easily
+            // So we'll add it as nullable first, then the app should handle migration
+            let add_column_sql = "ALTER TABLE expenses ADD COLUMN expense_type_id INTEGER";
+            let _ = db.execute(add_column_sql, &[]);
+        }
+    }
 
     Ok("Expenses table initialized successfully".to_string())
 }
@@ -2410,7 +2578,7 @@ fn init_expenses_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
 #[tauri::command]
 fn create_expense(
     db_state: State<'_, Mutex<Option<Database>>>,
-    name: String,
+    expense_type_id: i64,
     amount: f64,
     currency: String,
     rate: f64,
@@ -2421,9 +2589,9 @@ fn create_expense(
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Insert new expense
-    let insert_sql = "INSERT INTO expenses (name, amount, currency, rate, total, date) VALUES (?, ?, ?, ?, ?, ?)";
+    let insert_sql = "INSERT INTO expenses (expense_type_id, amount, currency, rate, total, date) VALUES (?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
-        &name as &dyn rusqlite::ToSql,
+        &expense_type_id as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
         &currency as &dyn rusqlite::ToSql,
         &rate as &dyn rusqlite::ToSql,
@@ -2433,12 +2601,12 @@ fn create_expense(
         .map_err(|e| format!("Failed to insert expense: {}", e))?;
 
     // Get the created expense
-    let expense_sql = "SELECT id, name, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE name = ? AND date = ? ORDER BY id DESC LIMIT 1";
+    let expense_sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE expense_type_id = ? AND date = ? ORDER BY id DESC LIMIT 1";
     let expenses = db
-        .query(expense_sql, &[&name as &dyn rusqlite::ToSql, &date as &dyn rusqlite::ToSql], |row| {
+        .query(expense_sql, &[&expense_type_id as &dyn rusqlite::ToSql, &date as &dyn rusqlite::ToSql], |row| {
             Ok(Expense {
                 id: row.get(0)?,
-                name: row.get(1)?,
+                expense_type_id: row.get(1)?,
                 amount: row.get(2)?,
                 currency: row.get(3)?,
                 rate: row.get(4)?,
@@ -2463,12 +2631,12 @@ fn get_expenses(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Expe
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, name, amount, currency, rate, total, date, created_at, updated_at FROM expenses ORDER BY date DESC, created_at DESC";
+    let sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, created_at, updated_at FROM expenses ORDER BY date DESC, created_at DESC";
     let expenses = db
         .query(sql, &[], |row| {
             Ok(Expense {
                 id: row.get(0)?,
-                name: row.get(1)?,
+                expense_type_id: row.get(1)?,
                 amount: row.get(2)?,
                 currency: row.get(3)?,
                 rate: row.get(4)?,
@@ -2489,12 +2657,12 @@ fn get_expense(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let expense_sql = "SELECT id, name, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE id = ?";
+    let expense_sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE id = ?";
     let expenses = db
         .query(expense_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Expense {
                 id: row.get(0)?,
-                name: row.get(1)?,
+                expense_type_id: row.get(1)?,
                 amount: row.get(2)?,
                 currency: row.get(3)?,
                 rate: row.get(4)?,
@@ -2515,7 +2683,7 @@ fn get_expense(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<
 fn update_expense(
     db_state: State<'_, Mutex<Option<Database>>>,
     id: i64,
-    name: String,
+    expense_type_id: i64,
     amount: f64,
     currency: String,
     rate: f64,
@@ -2526,9 +2694,9 @@ fn update_expense(
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Update expense
-    let update_sql = "UPDATE expenses SET name = ?, amount = ?, currency = ?, rate = ?, total = ?, date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let update_sql = "UPDATE expenses SET expense_type_id = ?, amount = ?, currency = ?, rate = ?, total = ?, date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     db.execute(update_sql, &[
-        &name as &dyn rusqlite::ToSql,
+        &expense_type_id as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
         &currency as &dyn rusqlite::ToSql,
         &rate as &dyn rusqlite::ToSql,
@@ -2539,12 +2707,12 @@ fn update_expense(
         .map_err(|e| format!("Failed to update expense: {}", e))?;
 
     // Get the updated expense
-    let expense_sql = "SELECT id, name, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE id = ?";
+    let expense_sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE id = ?";
     let expenses = db
         .query(expense_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Expense {
                 id: row.get(0)?,
-                name: row.get(1)?,
+                expense_type_id: row.get(1)?,
                 amount: row.get(2)?,
                 currency: row.get(3)?,
                 rate: row.get(4)?,
@@ -2848,6 +3016,7 @@ pub struct Salary {
     pub year: i32,
     pub month: String, // Dari month name like حمل, ثور
     pub amount: f64,
+    pub deductions: f64,
     pub notes: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -2859,6 +3028,7 @@ fn init_salaries_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
+    // Create table if it doesn't exist
     let create_table_sql = "
         CREATE TABLE IF NOT EXISTS salaries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2866,6 +3036,7 @@ fn init_salaries_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
             year INTEGER NOT NULL,
             month TEXT NOT NULL,
             amount REAL NOT NULL,
+            deductions REAL NOT NULL DEFAULT 0,
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2873,6 +3044,21 @@ fn init_salaries_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
             UNIQUE(employee_id, year, month)
         )
     ";
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create salaries table: {}", e))?;
+
+    // Check if deductions column exists, if not add it
+    let check_column_sql = "PRAGMA table_info(salaries)";
+    if let Ok(columns) = db.query(check_column_sql, &[], |row| {
+        Ok(row.get::<_, String>(1)?)
+    }) {
+        let has_deductions = columns.iter().any(|c| c == "deductions");
+        if !has_deductions {
+            // Add deductions column
+            let add_column_sql = "ALTER TABLE salaries ADD COLUMN deductions REAL NOT NULL DEFAULT 0";
+            let _ = db.execute(add_column_sql, &[]);
+        }
+    }
 
     db.execute(create_table_sql, &[])
         .map_err(|e| format!("Failed to create salaries table: {}", e))?;
@@ -2888,13 +3074,14 @@ fn create_salary(
     year: i32,
     month: String,
     amount: f64,
+    deductions: f64,
     notes: Option<String>,
 ) -> Result<Salary, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Insert new salary
-    let insert_sql = "INSERT INTO salaries (employee_id, year, month, amount, notes) VALUES (?, ?, ?, ?, ?)";
+    let insert_sql = "INSERT INTO salaries (employee_id, year, month, amount, deductions, notes) VALUES (?, ?, ?, ?, ?, ?)";
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
     
     db.execute(insert_sql, &[
@@ -2902,12 +3089,13 @@ fn create_salary(
         &year as &dyn rusqlite::ToSql,
         &month as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
+        &deductions as &dyn rusqlite::ToSql,
         &notes_str as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to insert salary: {}", e))?;
 
     // Get the created salary
-    let salary_sql = "SELECT id, employee_id, year, month, amount, notes, created_at, updated_at FROM salaries WHERE employee_id = ? AND year = ? AND month = ? ORDER BY id DESC LIMIT 1";
+    let salary_sql = "SELECT id, employee_id, year, month, amount, deductions, notes, created_at, updated_at FROM salaries WHERE employee_id = ? AND year = ? AND month = ? ORDER BY id DESC LIMIT 1";
     let salaries = db
         .query(salary_sql, &[&employee_id as &dyn rusqlite::ToSql, &year as &dyn rusqlite::ToSql, &month as &dyn rusqlite::ToSql], |row| {
             Ok(Salary {
@@ -2916,9 +3104,10 @@ fn create_salary(
                 year: row.get(2)?,
                 month: row.get(3)?,
                 amount: row.get(4)?,
-                notes: row.get::<_, Option<String>>(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                deductions: row.get(5)?,
+                notes: row.get::<_, Option<String>>(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })
         .map_err(|e| format!("Failed to fetch salary: {}", e))?;
@@ -2936,7 +3125,7 @@ fn get_salaries(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Sala
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, employee_id, year, month, amount, notes, created_at, updated_at FROM salaries ORDER BY year DESC, month DESC, created_at DESC";
+    let sql = "SELECT id, employee_id, year, month, amount, COALESCE(deductions, 0) as deductions, notes, created_at, updated_at FROM salaries ORDER BY year DESC, month DESC, created_at DESC";
     let salaries = db
         .query(sql, &[], |row| {
             Ok(Salary {
@@ -2945,9 +3134,10 @@ fn get_salaries(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Sala
                 year: row.get(2)?,
                 month: row.get(3)?,
                 amount: row.get(4)?,
-                notes: row.get::<_, Option<String>>(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                deductions: row.get(5)?,
+                notes: row.get::<_, Option<String>>(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })
         .map_err(|e| format!("Failed to fetch salaries: {}", e))?;
@@ -2964,7 +3154,7 @@ fn get_salaries_by_employee(
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, employee_id, year, month, amount, notes, created_at, updated_at FROM salaries WHERE employee_id = ? ORDER BY year DESC, month DESC";
+    let sql = "SELECT id, employee_id, year, month, amount, COALESCE(deductions, 0) as deductions, notes, created_at, updated_at FROM salaries WHERE employee_id = ? ORDER BY year DESC, month DESC";
     let salaries = db
         .query(sql, &[&employee_id as &dyn rusqlite::ToSql], |row| {
             Ok(Salary {
@@ -2973,9 +3163,10 @@ fn get_salaries_by_employee(
                 year: row.get(2)?,
                 month: row.get(3)?,
                 amount: row.get(4)?,
-                notes: row.get::<_, Option<String>>(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                deductions: row.get(5)?,
+                notes: row.get::<_, Option<String>>(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })
         .map_err(|e| format!("Failed to fetch salaries: {}", e))?;
@@ -2992,7 +3183,7 @@ fn get_salary(
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, employee_id, year, month, amount, notes, created_at, updated_at FROM salaries WHERE id = ?";
+    let sql = "SELECT id, employee_id, year, month, amount, COALESCE(deductions, 0) as deductions, notes, created_at, updated_at FROM salaries WHERE id = ?";
     let salaries = db
         .query(sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Salary {
@@ -3001,9 +3192,10 @@ fn get_salary(
                 year: row.get(2)?,
                 month: row.get(3)?,
                 amount: row.get(4)?,
-                notes: row.get::<_, Option<String>>(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                deductions: row.get(5)?,
+                notes: row.get::<_, Option<String>>(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })
         .map_err(|e| format!("Failed to fetch salary: {}", e))?;
@@ -3024,13 +3216,14 @@ fn update_salary(
     year: i32,
     month: String,
     amount: f64,
+    deductions: f64,
     notes: Option<String>,
 ) -> Result<Salary, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Update salary
-    let update_sql = "UPDATE salaries SET employee_id = ?, year = ?, month = ?, amount = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let update_sql = "UPDATE salaries SET employee_id = ?, year = ?, month = ?, amount = ?, deductions = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
     
     db.execute(update_sql, &[
@@ -3038,13 +3231,14 @@ fn update_salary(
         &year as &dyn rusqlite::ToSql,
         &month as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
+        &deductions as &dyn rusqlite::ToSql,
         &notes_str as &dyn rusqlite::ToSql,
         &id as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to update salary: {}", e))?;
 
     // Get the updated salary
-    let salary_sql = "SELECT id, employee_id, year, month, amount, notes, created_at, updated_at FROM salaries WHERE id = ?";
+    let salary_sql = "SELECT id, employee_id, year, month, amount, COALESCE(deductions, 0) as deductions, notes, created_at, updated_at FROM salaries WHERE id = ?";
     let salaries = db
         .query(salary_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Salary {
@@ -3053,9 +3247,10 @@ fn update_salary(
                 year: row.get(2)?,
                 month: row.get(3)?,
                 amount: row.get(4)?,
-                notes: row.get::<_, Option<String>>(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                deductions: row.get(5)?,
+                notes: row.get::<_, Option<String>>(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })
         .map_err(|e| format!("Failed to fetch salary: {}", e))?;
@@ -3081,6 +3276,235 @@ fn delete_salary(
         .map_err(|e| format!("Failed to delete salary: {}", e))?;
 
     Ok("Salary deleted successfully".to_string())
+}
+
+// Deduction Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Deduction {
+    pub id: i64,
+    pub employee_id: i64,
+    pub currency: String,
+    pub rate: f64,
+    pub amount: f64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Initialize deductions table schema
+#[tauri::command]
+fn init_deductions_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS deductions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            currency TEXT NOT NULL,
+            rate REAL NOT NULL DEFAULT 1.0,
+            amount REAL NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create deductions table: {}", e))?;
+
+    Ok("Deductions table initialized successfully".to_string())
+}
+
+/// Create a new deduction
+#[tauri::command]
+fn create_deduction(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    employee_id: i64,
+    currency: String,
+    rate: f64,
+    amount: f64,
+) -> Result<Deduction, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Insert new deduction
+    let insert_sql = "INSERT INTO deductions (employee_id, currency, rate, amount) VALUES (?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &employee_id as &dyn rusqlite::ToSql,
+        &currency as &dyn rusqlite::ToSql,
+        &rate as &dyn rusqlite::ToSql,
+        &amount as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert deduction: {}", e))?;
+
+    // Get the created deduction
+    let deduction_sql = "SELECT id, employee_id, currency, rate, amount, created_at, updated_at FROM deductions WHERE employee_id = ? AND currency = ? AND rate = ? AND amount = ? ORDER BY id DESC LIMIT 1";
+    let deductions = db
+        .query(deduction_sql, &[
+            &employee_id as &dyn rusqlite::ToSql,
+            &currency as &dyn rusqlite::ToSql,
+            &rate as &dyn rusqlite::ToSql,
+            &amount as &dyn rusqlite::ToSql,
+        ], |row| {
+            Ok(Deduction {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                currency: row.get(2)?,
+                rate: row.get(3)?,
+                amount: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch deduction: {}", e))?;
+
+    if let Some(deduction) = deductions.first() {
+        Ok(deduction.clone())
+    } else {
+        Err("Failed to retrieve created deduction".to_string())
+    }
+}
+
+/// Get all deductions
+#[tauri::command]
+fn get_deductions(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Deduction>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, employee_id, currency, rate, amount, created_at, updated_at FROM deductions ORDER BY created_at DESC";
+    let deductions = db
+        .query(sql, &[], |row| {
+            Ok(Deduction {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                currency: row.get(2)?,
+                rate: row.get(3)?,
+                amount: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch deductions: {}", e))?;
+
+    Ok(deductions)
+}
+
+/// Get deductions by employee ID
+#[tauri::command]
+fn get_deductions_by_employee(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    employee_id: i64,
+) -> Result<Vec<Deduction>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, employee_id, currency, rate, amount, created_at, updated_at FROM deductions WHERE employee_id = ? ORDER BY created_at DESC";
+    let deductions = db
+        .query(sql, &[&employee_id as &dyn rusqlite::ToSql], |row| {
+            Ok(Deduction {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                currency: row.get(2)?,
+                rate: row.get(3)?,
+                amount: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch deductions: {}", e))?;
+
+    Ok(deductions)
+}
+
+/// Get deduction by ID
+#[tauri::command]
+fn get_deduction(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<Deduction, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, employee_id, currency, rate, amount, created_at, updated_at FROM deductions WHERE id = ?";
+    let deductions = db
+        .query(sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Deduction {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                currency: row.get(2)?,
+                rate: row.get(3)?,
+                amount: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch deduction: {}", e))?;
+
+    let deduction = deductions.first().ok_or("Deduction not found")?;
+    Ok(deduction.clone())
+}
+
+/// Update a deduction
+#[tauri::command]
+fn update_deduction(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    employee_id: i64,
+    currency: String,
+    rate: f64,
+    amount: f64,
+) -> Result<Deduction, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Update deduction
+    let update_sql = "UPDATE deductions SET employee_id = ?, currency = ?, rate = ?, amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_sql, &[
+        &employee_id as &dyn rusqlite::ToSql,
+        &currency as &dyn rusqlite::ToSql,
+        &rate as &dyn rusqlite::ToSql,
+        &amount as &dyn rusqlite::ToSql,
+        &id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update deduction: {}", e))?;
+
+    // Get the updated deduction
+    let deduction_sql = "SELECT id, employee_id, currency, rate, amount, created_at, updated_at FROM deductions WHERE id = ?";
+    let deductions = db
+        .query(deduction_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Deduction {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                currency: row.get(2)?,
+                rate: row.get(3)?,
+                amount: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch deduction: {}", e))?;
+
+    if let Some(deduction) = deductions.first() {
+        Ok(deduction.clone())
+    } else {
+        Err("Failed to retrieve updated deduction".to_string())
+    }
+}
+
+/// Delete a deduction
+#[tauri::command]
+fn delete_deduction(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let delete_sql = "DELETE FROM deductions WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete deduction: {}", e))?;
+
+    Ok("Deduction deleted successfully".to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -3151,6 +3575,11 @@ pub fn run() {
             create_sale_payment,
             get_sale_payments,
             delete_sale_payment,
+            init_expense_types_table,
+            create_expense_type,
+            get_expense_types,
+            update_expense_type,
+            delete_expense_type,
             init_expenses_table,
             create_expense,
             get_expenses,
@@ -3169,7 +3598,14 @@ pub fn run() {
             get_salaries_by_employee,
             get_salary,
             update_salary,
-            delete_salary
+            delete_salary,
+            init_deductions_table,
+            create_deduction,
+            get_deductions,
+            get_deductions_by_employee,
+            get_deduction,
+            update_deduction,
+            delete_deduction
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

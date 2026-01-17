@@ -4,6 +4,7 @@ import {
   openDatabase,
   isDatabaseOpen,
 } from "./utils/db";
+import { getDashboardStats, formatPersianNumber, formatLargeNumber } from "./utils/dashboard";
 import Login from "./components/Login";
 import CurrencyManagement from "./components/Currency";
 import SupplierManagement from "./components/Supplier";
@@ -30,6 +31,13 @@ type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sa
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
+  const [dashboardStats, setDashboardStats] = useState({
+    productsCount: 0,
+    suppliersCount: 0,
+    purchasesCount: 0,
+    monthlyIncome: 0,
+  });
+  const [loadingStats, setLoadingStats] = useState(false);
 
   // Initialize database on mount
   useEffect(() => {
@@ -50,6 +58,24 @@ function App() {
     };
     initDb();
   }, []);
+
+  // Load dashboard stats when on dashboard page
+  useEffect(() => {
+    const loadStats = async () => {
+      if (currentPage === "dashboard" && user) {
+        try {
+          setLoadingStats(true);
+          const stats = await getDashboardStats();
+          setDashboardStats(stats);
+        } catch (error) {
+          console.error("Error loading dashboard stats:", error);
+        } finally {
+          setLoadingStats(false);
+        }
+      }
+    };
+    loadStats();
+  }, [currentPage, user]);
 
   // Show login screen if not logged in
   if (!user) {
@@ -249,10 +275,30 @@ function App() {
           className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10"
         >
           {[
-            { label: "اجناس", value: "۱۲۵", icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", color: "from-purple-500 to-indigo-500" },
-            { label: "تمویل کنندگان", value: "۴۸", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z", color: "from-green-500 to-emerald-500" },
-            { label: "خریداری ها", value: "۳۲۱", icon: "M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z", color: "from-blue-500 to-cyan-500" },
-            { label: "درآمد ماهانه", value: "۲.۵M", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", color: "from-amber-500 to-orange-500" },
+            { 
+              label: "اجناس", 
+              value: loadingStats ? "..." : formatPersianNumber(dashboardStats.productsCount), 
+              icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", 
+              color: "from-purple-500 to-indigo-500" 
+            },
+            { 
+              label: "تمویل کنندگان", 
+              value: loadingStats ? "..." : formatPersianNumber(dashboardStats.suppliersCount), 
+              icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z", 
+              color: "from-green-500 to-emerald-500" 
+            },
+            { 
+              label: "خریداری ها", 
+              value: loadingStats ? "..." : formatPersianNumber(dashboardStats.purchasesCount), 
+              icon: "M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z", 
+              color: "from-blue-500 to-cyan-500" 
+            },
+            { 
+              label: "درآمد ماهانه", 
+              value: loadingStats ? "..." : formatLargeNumber(dashboardStats.monthlyIncome), 
+              icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", 
+              color: "from-amber-500 to-orange-500" 
+            },
           ].map((stat, index) => (
             <motion.div
               key={stat.label}

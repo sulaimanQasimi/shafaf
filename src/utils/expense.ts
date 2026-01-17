@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface Expense {
     id: number;
-    name: string;
+    expense_type_id: number;
     amount: number;
     currency: string;
     rate: number;
@@ -68,7 +68,7 @@ export async function getExpense(id: number): Promise<Expense> {
 /**
  * Update an expense
  * @param id Expense ID
- * @param name Expense name
+ * @param expense_type_id Expense type ID
  * @param amount Expense amount
  * @param currency Currency name
  * @param rate Exchange rate
@@ -78,7 +78,7 @@ export async function getExpense(id: number): Promise<Expense> {
  */
 export async function updateExpense(
     id: number,
-    name: string,
+    expense_type_id: number,
     amount: number,
     currency: string,
     rate: number,
@@ -87,7 +87,7 @@ export async function updateExpense(
 ): Promise<Expense> {
     return await invoke<Expense>("update_expense", {
         id,
-        name,
+        expense_type_id,
         amount,
         currency,
         rate,

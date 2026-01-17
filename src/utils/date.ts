@@ -47,6 +47,13 @@ export function getCurrentPersianDate(): string {
 }
 
 /**
+ * Get current Persian year
+ */
+export function getCurrentPersianYear(): number {
+  return moment().jYear();
+}
+
+/**
  * Format Persian date for display (e.g., "1403/01/15")
  */
 export function formatPersianDate(date: string): string {

@@ -56,7 +56,6 @@ export default function CompanySettings({ onBack }: CompanySettingsProps) {
             
             const settingsData = await getCompanySettings();
             if (settingsData) {
-                setSettings(settingsData);
                 setFormData({
                     name: settingsData.name || "",
                     logo: settingsData.logo || "",
@@ -90,7 +89,6 @@ export default function CompanySettings({ onBack }: CompanySettingsProps) {
             });
 
             if (updatedSettings) {
-                setSettings(updatedSettings);
                 toast.success(translations.success.updated);
             }
         } catch (error: any) {

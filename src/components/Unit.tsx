@@ -10,6 +10,7 @@ import {
   type Unit,
 } from "../utils/unit";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import Footer from "./Footer";
 
 // Dari translations
 const translations = {
@@ -455,6 +456,7 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
             </motion.div>
           )}
         </AnimatePresence>
+        <Footer />
       </div>
     </div>
   );

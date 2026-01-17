@@ -11,7 +11,9 @@ import {
 } from "../utils/salary";
 import { getEmployees, type Employee } from "../utils/employee";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import Footer from "./Footer";
 import { getCurrentPersianYear } from "../utils/date";
+import { Deduction } from "../utils/deduction";
 
 // Dari month names
 const dariMonths = [
@@ -71,6 +73,7 @@ interface SalaryManagementProps {
 export default function SalaryManagement({ onBack }: SalaryManagementProps) {
     const [salaries, setSalaries] = useState<Salary[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
+    const [deductions, setDeductions] = useState<Deduction[]>([]);
     const [loading, setLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingSalary, setEditingSalary] = useState<Salary | null>(null);
@@ -508,37 +511,60 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                                             </select>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                            {translations.amount} <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.amount}
+                                            onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                                            required
+                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                            placeholder={translations.placeholders.amount}
+                                            dir="ltr"
+                                        />
+                                    </div>
+                                    {deductions.length > 0 && (
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                                {translations.amount} <span className="text-red-500">*</span>
+                                                کسرهای ثبت شده برای {formData.month} {formData.year}
                                             </label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={formData.amount}
-                                                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                                                required
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                                                placeholder={translations.placeholders.amount}
-                                                dir="ltr"
-                                            />
+                                            <div className="space-y-2 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-200 dark:border-gray-600">
+                                                {deductions.map((deduction) => {
+                                                    const total = deduction.amount * deduction.rate;
+                                                    return (
+                                                        <div key={deduction.id} className="flex justify-between items-center p-2 bg-white dark:bg-gray-800 rounded-lg">
+                                                            <div>
+                                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                                    {deduction.amount.toLocaleString()} {deduction.currency} × {deduction.rate}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                                                                {total.toLocaleString()} افغانی
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                                {translations.deductions}
-                                            </label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={formData.deductions}
-                                                onChange={(e) => setFormData({ ...formData, deductions: e.target.value })}
-                                                min="0"
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                                                placeholder="مقدار کسر"
-                                                dir="ltr"
-                                            />
-                                        </div>
+                                    )}
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                            {translations.deductions} {deductions.length > 0 && <span className="text-xs text-gray-500">(محاسبه شده از کسرهای ثبت شده)</span>}
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.deductions}
+                                            onChange={(e) => setFormData({ ...formData, deductions: e.target.value })}
+                                            min="0"
+                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                            placeholder="مقدار کسر"
+                                            dir="ltr"
+                                            readOnly={deductions.length > 0}
+                                        />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -682,6 +708,7 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                         </motion.div>
                     )}
                 </AnimatePresence>
+                <Footer />
             </div>
         </div>
     );

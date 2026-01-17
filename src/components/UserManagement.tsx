@@ -13,6 +13,7 @@ import {
     type UserFormData,
 } from "../utils/user";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import Footer from "./Footer";
 
 // Dari translations
 const translations = {
@@ -923,6 +924,7 @@ export default function UserManagement({ onBack, currentUser }: UserManagementPr
                         </motion.div>
                     )}
                 </AnimatePresence>
+                <Footer />
             </div>
         </div>
     );

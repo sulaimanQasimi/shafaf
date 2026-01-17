@@ -16,6 +16,7 @@ import { getSuppliers, type Supplier } from "../utils/supplier";
 import { getProducts, type Product } from "../utils/product";
 import { getUnits, type Unit } from "../utils/unit";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import Footer from "./Footer";
 import PurchaseInvoice from "./PurchaseInvoice";
 import PersianDatePicker from "./PersianDatePicker";
 import { formatPersianDate, getCurrentPersianDate, persianToGeorgian } from "../utils/date";
@@ -1043,6 +1044,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
             onClose={() => setShowInvoice(false)}
           />
         )}
+        <Footer />
       </div>
     </div>
   );

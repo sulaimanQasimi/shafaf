@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { getUserById, updateUserProfile, type User } from "../utils/user";
+import Footer from "./Footer";
 
 // Dari translations
 const translations = {
@@ -513,6 +514,7 @@ export default function ProfileEdit({ userId, onBack, onProfileUpdate }: Profile
                         </motion.button>
                     </motion.div>
                 </form>
+                <Footer />
             </div>
         </div>
     );

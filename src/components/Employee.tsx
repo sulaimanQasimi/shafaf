@@ -12,6 +12,7 @@ import {
     type Employee,
 } from "../utils/employee";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import Footer from "./Footer";
 import PersianDatePicker from "./PersianDatePicker";
 import { formatPersianDate } from "../utils/date";
 
@@ -716,6 +717,7 @@ export default function EmployeeManagement({ onBack }: EmployeeManagementProps) 
                         </motion.div>
                     )}
                 </AnimatePresence>
+                <Footer />
             </div>
         </div>
     );

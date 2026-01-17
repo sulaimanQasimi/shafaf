@@ -12,6 +12,7 @@ import {
 import { getCurrencies, type Currency } from "../utils/currency";
 import { getSuppliers, type Supplier } from "../utils/supplier";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import Footer from "./Footer";
 
 // Dari translations
 const translations = {
@@ -724,6 +725,7 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
             </motion.div>
           )}
         </AnimatePresence>
+        <Footer />
       </div>
     </div>
   );

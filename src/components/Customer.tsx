@@ -10,6 +10,7 @@ import {
   type Customer,
 } from "../utils/customer";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import Footer from "./Footer";
 
 // Dari translations
 const translations = {
@@ -626,6 +627,7 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
             </motion.div>
           )}
         </AnimatePresence>
+        <Footer />
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import {
   type Currency,
 } from "../utils/currency";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import Footer from "./Footer";
 
 // Dari translations
 const translations = {
@@ -480,6 +481,7 @@ export default function CurrencyManagement({ onBack }: CurrencyManagementProps) 
             </motion.div>
           )}
         </AnimatePresence>
+        <Footer />
       </div>
     </div>
   );

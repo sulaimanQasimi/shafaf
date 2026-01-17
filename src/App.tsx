@@ -16,8 +16,10 @@ import CustomerManagement from "./components/Customer";
 import ExpenseManagement from "./components/Expense";
 import EmployeeManagement from "./components/Employee";
 import SalaryManagement from "./components/Salary";
+import DeductionManagement from "./components/Deduction";
 import UserManagement from "./components/UserManagement";
 import ProfileEdit from "./components/ProfileEdit";
+import Footer from "./components/Footer";
 import "./App.css";
 
 interface User {
@@ -26,7 +28,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "users" | "profile";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -36,6 +38,8 @@ function App() {
     suppliersCount: 0,
     purchasesCount: 0,
     monthlyIncome: 0,
+    deductionsCount: 0,
+    totalDeductions: 0,
   });
   const [loadingStats, setLoadingStats] = useState(false);
 
@@ -156,6 +160,13 @@ function App() {
     );
   }
 
+  // Show deduction page if selected
+  if (currentPage === "deduction") {
+    return (
+      <DeductionManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
   // Show users management page if selected
   if (currentPage === "users") {
     return (
@@ -272,7 +283,7 @@ function App() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-10"
         >
           {[
             { 
@@ -298,6 +309,12 @@ function App() {
               value: loadingStats ? "..." : formatLargeNumber(dashboardStats.monthlyIncome), 
               icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", 
               color: "from-amber-500 to-orange-500" 
+            },
+            { 
+              label: "کسرها", 
+              value: loadingStats ? "..." : formatPersianNumber(dashboardStats.deductionsCount), 
+              icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", 
+              color: "from-red-500 to-pink-500" 
             },
           ].map((stat, index) => (
             <motion.div
@@ -409,6 +426,13 @@ function App() {
                 page: "salary" as Page,
               },
               {
+                title: "مدیریت کسرها",
+                description: "ثبت و مدیریت کسرهای کارمندان با ارز و نرخ تبادله",
+                icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+                color: "from-red-500 to-rose-500",
+                page: "deduction" as Page,
+              },
+              {
                 title: "مدیریت کاربران",
                 description: "ایجاد، ویرایش و مدیریت کاربران سیستم",
                 icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m9 5.197v-1a6 6 0 00-9-5.197",
@@ -458,16 +482,7 @@ function App() {
         </motion.div>
 
         {/* Footer */}
-        <motion.footer
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="mt-16 pt-8 border-t border-gray-200 dark:border-gray-700 text-center"
-        >
-          <p className="text-gray-500 dark:text-gray-400">
-            سیستم مدیریت داروخانه شفاف © ۲۰۲۶
-          </p>
-        </motion.footer>
+        <Footer className="mt-16" />
       </main>
     </div>
   );

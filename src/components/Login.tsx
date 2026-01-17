@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { loginUser, registerUser, initUsersTable, type LoginResult } from "../utils/auth";
 import { openDatabase, isDatabaseOpen } from "../utils/db";
+import Footer from "./Footer";
 
 interface LoginProps {
   onLoginSuccess: (user: { id: number; username: string; email: string }) => void;
@@ -417,17 +418,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           </motion.div>
         </motion.div>
 
-        {/* Footer Text */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-          className="mt-6 text-center"
-        >
-          <p className="text-sm text-gray-600 dark:text-gray-400" dir="rtl">
-            سیستم مدیریت داروخانه
-          </p>
-        </motion.div>
+        {/* Footer */}
+        <Footer className="mt-6" />
       </motion.div>
     </div>
   );

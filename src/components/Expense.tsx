@@ -19,6 +19,7 @@ import {
 } from "../utils/expense_type";
 import { getCurrencies, type Currency } from "../utils/currency";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import Footer from "./Footer";
 import PersianDatePicker from "./PersianDatePicker";
 import { formatPersianDate, getCurrentPersianDate, persianToGeorgian } from "../utils/date";
 
@@ -1025,6 +1026,7 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                         </motion.div>
                     )}
                 </AnimatePresence>
+                <Footer />
             </div>
         </div>
     );

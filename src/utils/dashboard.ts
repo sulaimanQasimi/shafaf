@@ -2,6 +2,7 @@ import { getProducts } from './product';
 import { getSuppliers } from './supplier';
 import { getPurchases } from './purchase';
 import { getSales } from './sales';
+import { getDeductions } from './deduction';
 import moment from 'moment-jalaali';
 
 export interface DashboardStats {
@@ -9,6 +10,8 @@ export interface DashboardStats {
   suppliersCount: number;
   purchasesCount: number;
   monthlyIncome: number;
+  deductionsCount: number;
+  totalDeductions: number;
 }
 
 /**
@@ -18,11 +21,12 @@ export interface DashboardStats {
 export async function getDashboardStats(): Promise<DashboardStats> {
   try {
     // Get all data in parallel
-    const [products, suppliers, purchases, sales] = await Promise.all([
+    const [products, suppliers, purchases, sales, deductions] = await Promise.all([
       getProducts(),
       getSuppliers(),
       getPurchases(),
       getSales(),
+      getDeductions(),
     ]);
 
     // Get current month in Georgian calendar (for database comparison)
@@ -39,11 +43,18 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       })
       .reduce((sum, sale) => sum + (sale.paid_amount || 0), 0);
 
+    // Calculate total deductions (amount * rate for each deduction)
+    const totalDeductions = deductions.reduce((sum, deduction) => {
+      return sum + (deduction.amount * deduction.rate);
+    }, 0);
+
     return {
       productsCount: products.length,
       suppliersCount: suppliers.length,
       purchasesCount: purchases.length,
       monthlyIncome,
+      deductionsCount: deductions.length,
+      totalDeductions,
     };
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
@@ -53,6 +64,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       suppliersCount: 0,
       purchasesCount: 0,
       monthlyIncome: 0,
+      deductionsCount: 0,
+      totalDeductions: 0,
     };
   }
 }

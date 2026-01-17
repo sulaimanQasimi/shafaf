@@ -3283,6 +3283,8 @@ fn delete_salary(
 pub struct Deduction {
     pub id: i64,
     pub employee_id: i64,
+    pub year: i32,
+    pub month: String, // Dari month name like حمل, ثور
     pub currency: String,
     pub rate: f64,
     pub amount: f64,
@@ -3320,6 +3322,8 @@ fn init_deductions_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result
 fn create_deduction(
     db_state: State<'_, Mutex<Option<Database>>>,
     employee_id: i64,
+    year: i32,
+    month: String,
     currency: String,
     rate: f64,
     amount: f64,
@@ -3328,9 +3332,11 @@ fn create_deduction(
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Insert new deduction
-    let insert_sql = "INSERT INTO deductions (employee_id, currency, rate, amount) VALUES (?, ?, ?, ?)";
+    let insert_sql = "INSERT INTO deductions (employee_id, year, month, currency, rate, amount) VALUES (?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
         &employee_id as &dyn rusqlite::ToSql,
+        &year as &dyn rusqlite::ToSql,
+        &month as &dyn rusqlite::ToSql,
         &currency as &dyn rusqlite::ToSql,
         &rate as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
@@ -3338,10 +3344,12 @@ fn create_deduction(
         .map_err(|e| format!("Failed to insert deduction: {}", e))?;
 
     // Get the created deduction
-    let deduction_sql = "SELECT id, employee_id, currency, rate, amount, created_at, updated_at FROM deductions WHERE employee_id = ? AND currency = ? AND rate = ? AND amount = ? ORDER BY id DESC LIMIT 1";
+    let deduction_sql = "SELECT id, employee_id, year, month, currency, rate, amount, created_at, updated_at FROM deductions WHERE employee_id = ? AND year = ? AND month = ? AND currency = ? AND rate = ? AND amount = ? ORDER BY id DESC LIMIT 1";
     let deductions = db
         .query(deduction_sql, &[
             &employee_id as &dyn rusqlite::ToSql,
+            &year as &dyn rusqlite::ToSql,
+            &month as &dyn rusqlite::ToSql,
             &currency as &dyn rusqlite::ToSql,
             &rate as &dyn rusqlite::ToSql,
             &amount as &dyn rusqlite::ToSql,
@@ -3349,11 +3357,13 @@ fn create_deduction(
             Ok(Deduction {
                 id: row.get(0)?,
                 employee_id: row.get(1)?,
-                currency: row.get(2)?,
-                rate: row.get(3)?,
-                amount: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                year: row.get(2)?,
+                month: row.get(3)?,
+                currency: row.get(4)?,
+                rate: row.get(5)?,
+                amount: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })
         .map_err(|e| format!("Failed to fetch deduction: {}", e))?;
@@ -3398,17 +3408,54 @@ fn get_deductions_by_employee(
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, employee_id, currency, rate, amount, created_at, updated_at FROM deductions WHERE employee_id = ? ORDER BY created_at DESC";
+    let sql = "SELECT id, employee_id, COALESCE(year, 1403) as year, COALESCE(month, 'حمل') as month, currency, rate, amount, created_at, updated_at FROM deductions WHERE employee_id = ? ORDER BY year DESC, month DESC, created_at DESC";
     let deductions = db
         .query(sql, &[&employee_id as &dyn rusqlite::ToSql], |row| {
             Ok(Deduction {
                 id: row.get(0)?,
                 employee_id: row.get(1)?,
-                currency: row.get(2)?,
-                rate: row.get(3)?,
-                amount: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                year: row.get(2)?,
+                month: row.get(3)?,
+                currency: row.get(4)?,
+                rate: row.get(5)?,
+                amount: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch deductions: {}", e))?;
+
+    Ok(deductions)
+}
+
+/// Get deductions by employee ID, year, and month
+#[tauri::command]
+fn get_deductions_by_employee_year_month(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    employee_id: i64,
+    year: i32,
+    month: String,
+) -> Result<Vec<Deduction>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, employee_id, COALESCE(year, 1403) as year, COALESCE(month, 'حمل') as month, currency, rate, amount, created_at, updated_at FROM deductions WHERE employee_id = ? AND year = ? AND month = ? ORDER BY created_at DESC";
+    let deductions = db
+        .query(sql, &[
+            &employee_id as &dyn rusqlite::ToSql,
+            &year as &dyn rusqlite::ToSql,
+            &month as &dyn rusqlite::ToSql,
+        ], |row| {
+            Ok(Deduction {
+                id: row.get(0)?,
+                employee_id: row.get(1)?,
+                year: row.get(2)?,
+                month: row.get(3)?,
+                currency: row.get(4)?,
+                rate: row.get(5)?,
+                amount: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })
         .map_err(|e| format!("Failed to fetch deductions: {}", e))?;
@@ -3603,6 +3650,7 @@ pub fn run() {
             create_deduction,
             get_deductions,
             get_deductions_by_employee,
+            get_deductions_by_employee_year_month,
             get_deduction,
             update_deduction,
             delete_deduction

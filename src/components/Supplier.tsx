@@ -10,6 +10,7 @@ import {
   type Supplier,
 } from "../utils/supplier";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import Footer from "./Footer";
 
 // Dari translations
 const translations = {
@@ -626,6 +627,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
             </motion.div>
           )}
         </AnimatePresence>
+        <Footer />
       </div>
     </div>
   );

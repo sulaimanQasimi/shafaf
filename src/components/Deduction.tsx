@@ -12,6 +12,8 @@ import {
 import { getEmployees, type Employee } from "../utils/employee";
 import { getCurrencies, type Currency } from "../utils/currency";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import { getCurrentPersianYear } from "../utils/date";
+import Footer from "./Footer";
 
 // Dari translations
 const translations = {
@@ -22,6 +24,8 @@ const translations = {
     cancel: "لغو",
     save: "ذخیره",
     employee: "کارمند",
+    year: "سال",
+    month: "ماه",
     currency: "ارز",
     rate: "نرخ",
     amount: "مقدار",
@@ -43,6 +47,8 @@ const translations = {
         delete: "خطا در حذف کسر",
         fetch: "خطا در دریافت لیست کسرها",
         employeeRequired: "انتخاب کارمند الزامی است",
+        yearRequired: "سال الزامی است",
+        monthRequired: "ماه الزامی است",
         currencyRequired: "انتخاب ارز الزامی است",
         amountRequired: "مقدار الزامی است",
     },
@@ -67,6 +73,8 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
     const [editingDeduction, setEditingDeduction] = useState<Deduction | null>(null);
     const [formData, setFormData] = useState({
         employee_id: "",
+        year: getCurrentPersianYear().toString(),
+        month: "",
         currency: "",
         rate: "1",
         amount: "",
@@ -125,6 +133,8 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
             setEditingDeduction(deduction);
             setFormData({
                 employee_id: deduction.employee_id.toString(),
+                year: deduction.year.toString(),
+                month: deduction.month,
                 currency: deduction.currency,
                 rate: deduction.rate.toString(),
                 amount: deduction.amount.toString(),
@@ -134,6 +144,8 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
             setEditingDeduction(null);
             setFormData({
                 employee_id: "",
+                year: getCurrentPersianYear().toString(),
+                month: "",
                 currency: "",
                 rate: "1",
                 amount: "",
@@ -148,6 +160,8 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
         setEditingDeduction(null);
         setFormData({
             employee_id: "",
+            year: getCurrentPersianYear().toString(),
+            month: "",
             currency: "",
             rate: "1",
             amount: "",
@@ -163,6 +177,16 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
             return;
         }
 
+        if (!formData.year || parseInt(formData.year) <= 0) {
+            toast.error(translations.errors.yearRequired);
+            return;
+        }
+
+        if (!formData.month) {
+            toast.error(translations.errors.monthRequired);
+            return;
+        }
+
         if (!formData.currency) {
             toast.error(translations.errors.currencyRequired);
             return;
@@ -175,6 +199,7 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
 
         const amount = parseFloat(formData.amount);
         const rate = parseFloat(formData.rate) || 1;
+        const year = parseInt(formData.year);
 
         try {
             setLoading(true);
@@ -182,6 +207,8 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
                 await updateDeduction(
                     editingDeduction.id,
                     parseInt(formData.employee_id),
+                    year,
+                    formData.month,
                     formData.currency,
                     rate,
                     amount
@@ -190,6 +217,8 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
             } else {
                 await createDeduction(
                     parseInt(formData.employee_id),
+                    year,
+                    formData.month,
                     formData.currency,
                     rate,
                     amount
@@ -325,7 +354,6 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
                     <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                         <AnimatePresence>
                             {deductions.map((deduction, index) => {
-                                const employee = employees.find(e => e.id === deduction.employee_id);
                                 const total = deduction.amount * deduction.rate;
                                 return (
                                     <motion.div
@@ -349,10 +377,9 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
                                                     <h3 className="text-xl font-bold text-gray-900 dark:text-white truncate">
                                                         {getEmployeeName(deduction.employee_id)}
                                                     </h3>
-                                                    <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mt-1">
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                        </svg>
+                                                    <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                                        <span>{deduction.month} {deduction.year}</span>
+                                                        <span>•</span>
                                                         <span>{deduction.currency}</span>
                                                     </div>
                                                 </div>
@@ -635,6 +662,7 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
                         </motion.div>
                     )}
                 </AnimatePresence>
+                <Footer />
             </div>
         </div>
     );

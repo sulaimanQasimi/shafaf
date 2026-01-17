@@ -21,7 +21,6 @@ import { getProducts, type Product } from "../utils/product";
 import { getUnits, type Unit } from "../utils/unit";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
-import SaleInvoice from "./SaleInvoice";
 import PersianDatePicker from "./PersianDatePicker";
 import { formatPersianDate, getCurrentPersianDate, persianToGeorgian } from "../utils/date";
 import Table from "./common/Table";
@@ -86,9 +85,16 @@ const translations = {
 
 interface SalesManagementProps {
     onBack?: () => void;
+    onOpenInvoice?: (data: {
+        saleData: SaleWithItems;
+        customer: Customer;
+        products: Product[];
+        units: Unit[];
+        payments: SalePayment[];
+    }) => void;
 }
 
-export default function SalesManagement({ onBack }: SalesManagementProps) {
+export default function SalesManagement({ onBack, onOpenInvoice }: SalesManagementProps) {
     const [sales, setSales] = useState<Sale[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
@@ -487,11 +493,28 @@ export default function SalesManagement({ onBack }: SalesManagementProps) {
     const handlePrintInvoice = async (saleData: SaleWithItems) => {
         try {
             const salePayments = await getSalePayments(saleData.sale.id);
-            setPayments(salePayments);
-            setShowInvoice(true);
+            const customer = customers.find(c => c.id === saleData.sale.customer_id);
+            if (customer && onOpenInvoice) {
+                onOpenInvoice({
+                    saleData,
+                    customer,
+                    products,
+                    units,
+                    payments: salePayments,
+                });
+            }
         } catch (error) {
             console.error("Error loading payments:", error);
-            setShowInvoice(true);
+            const customer = customers.find(c => c.id === saleData.sale.customer_id);
+            if (customer && onOpenInvoice) {
+                onOpenInvoice({
+                    saleData,
+                    customer,
+                    products,
+                    units,
+                    payments: [],
+                });
+            }
         }
     };
 

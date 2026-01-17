@@ -20,8 +20,13 @@ import SalaryManagement from "./components/Salary";
 import DeductionManagement from "./components/Deduction";
 import UserManagement from "./components/UserManagement";
 import ProfileEdit from "./components/ProfileEdit";
+import SaleInvoice from "./components/SaleInvoice";
 import Footer from "./components/Footer";
 import "./App.css";
+import { SaleWithItems, SalePayment } from "./utils/sales";
+import { Customer } from "./utils/customer";
+import { Product } from "./utils/product";
+import { Unit } from "./utils/unit";
 
 interface User {
   id: number;
@@ -29,7 +34,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -43,6 +48,13 @@ function App() {
     totalDeductions: 0,
   });
   const [loadingStats, setLoadingStats] = useState(false);
+  const [invoiceData, setInvoiceData] = useState<{
+    saleData: SaleWithItems;
+    customer: Customer;
+    products: Product[];
+    units: Unit[];
+    payments: SalePayment[];
+  } | null>(null);
 
   // Initialize database on mount
   useEffect(() => {
@@ -145,7 +157,13 @@ function App() {
   // Show sales page if selected
   if (currentPage === "sales") {
     return (
-      <SalesManagement onBack={() => setCurrentPage("dashboard")} />
+      <SalesManagement 
+        onBack={() => setCurrentPage("dashboard")}
+        onOpenInvoice={(data) => {
+          setInvoiceData(data);
+          setCurrentPage("invoice");
+        }}
+      />
     );
   }
 
@@ -214,6 +232,20 @@ function App() {
             email: updatedUser.email,
           });
         }}
+      />
+    );
+  }
+
+  // Show invoice page if selected
+  if (currentPage === "invoice" && invoiceData) {
+    return (
+      <SaleInvoice
+        saleData={invoiceData.saleData}
+        customer={invoiceData.customer}
+        products={invoiceData.products}
+        units={invoiceData.units}
+        payments={invoiceData.payments}
+        onClose={() => setCurrentPage("sales")}
       />
     );
   }

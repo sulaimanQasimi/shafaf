@@ -51,94 +51,103 @@ export default function SaleInvoice({
             }
             @page {
                 size: A4;
-                margin: 10mm;
+                margin: 8mm;
+            }
+            html, body {
+                height: 100%;
+                overflow: hidden;
             }
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 direction: rtl;
-                padding: 5mm;
+                padding: 0;
+                margin: 0;
                 background: white;
                 color: #1a1a1a;
-                font-size: 10pt;
+                font-size: 9pt;
+                overflow: hidden;
             }
             .invoice-container {
                 max-width: 100%;
-                margin: 0 auto;
+                margin: 0;
                 background: white;
-                padding: 5mm;
+                padding: 0;
+                box-shadow: none;
+                border: none;
             }
             .invoice-header {
-                border-bottom: 2px solid #2563eb;
-                padding-bottom: 5mm;
-                margin-bottom: 8mm;
+                border-bottom: 1px solid #2563eb;
+                padding-bottom: 3mm;
+                margin-bottom: 4mm;
             }
             .invoice-title {
-                font-size: 18pt;
+                font-size: 14pt;
                 font-weight: bold;
                 color: #2563eb;
-                margin-bottom: 3mm;
+                margin-bottom: 1mm;
             }
             .invoice-number {
-                font-size: 11pt;
+                font-size: 9pt;
                 color: #64748b;
             }
             .info-section {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                gap: 8mm;
-                margin-bottom: 8mm;
+                gap: 4mm;
+                margin-bottom: 4mm;
             }
             .info-box {
-                background: #f8fafc;
-                padding: 5mm;
-                border-radius: 4px;
-                border-right: 3px solid #2563eb;
+                background: transparent;
+                padding: 2mm;
+                border-radius: 0;
+                border: none;
+                border-right: 1px solid #e2e8f0;
             }
             .info-title {
-                font-size: 9pt;
+                font-size: 8pt;
                 color: #64748b;
-                margin-bottom: 2mm;
+                margin-bottom: 1mm;
                 font-weight: 600;
             }
             .info-value {
-                font-size: 10pt;
+                font-size: 9pt;
                 color: #1a1a1a;
                 font-weight: 500;
             }
             .items-table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 8mm;
-                font-size: 9pt;
+                margin-bottom: 4mm;
+                font-size: 8pt;
             }
             .items-table thead {
                 background: #2563eb;
                 color: white;
             }
             .items-table th {
-                padding: 4mm 3mm;
+                padding: 2mm 1.5mm;
                 text-align: right;
                 font-weight: 600;
-                font-size: 9pt;
+                font-size: 8pt;
             }
             .items-table td {
-                padding: 3mm;
+                padding: 1.5mm;
                 border-bottom: 1px solid #e2e8f0;
-                font-size: 9pt;
+                font-size: 8pt;
             }
             .items-table tbody tr:hover {
-                background: #f8fafc;
+                background: transparent;
             }
             .total-section {
-                margin-top: 5mm;
-                padding-top: 5mm;
-                border-top: 2px solid #e2e8f0;
+                margin-top: 3mm;
+                padding-top: 3mm;
+                border-top: 1px solid #e2e8f0;
             }
             .total-row {
                 display: flex;
                 justify-content: space-between;
-                padding: 2mm 0;
-                font-size: 10pt;
+                padding: 1mm 0;
+                font-size: 9pt;
             }
             .total-label {
                 color: #64748b;
@@ -147,79 +156,135 @@ export default function SaleInvoice({
             .total-value {
                 color: #1a1a1a;
                 font-weight: 700;
-                font-size: 11pt;
+                font-size: 10pt;
             }
             .grand-total {
                 background: #2563eb;
                 color: white;
-                padding: 5mm;
-                border-radius: 4px;
-                margin-top: 5mm;
+                padding: 3mm;
+                border-radius: 0;
+                margin-top: 3mm;
             }
             .grand-total .total-label,
             .grand-total .total-value {
                 color: white;
-                font-size: 12pt;
+                font-size: 11pt;
             }
             .payment-section {
-                margin-top: 5mm;
-                padding: 5mm;
-                background: #f0fdf4;
-                border-radius: 4px;
+                margin-top: 3mm;
+                padding: 3mm;
+                background: transparent;
+                border-radius: 0;
+                border: 1px solid #e2e8f0;
             }
             .payment-title {
-                font-size: 10pt;
+                font-size: 9pt;
                 font-weight: 600;
-                margin-bottom: 3mm;
+                margin-bottom: 2mm;
                 color: #166534;
             }
             .payment-item {
                 display: flex;
                 justify-content: space-between;
-                padding: 2mm 0;
-                border-bottom: 1px solid #bbf7d0;
-                font-size: 9pt;
+                padding: 1mm 0;
+                border-bottom: 1px solid #e2e8f0;
+                font-size: 8pt;
             }
             .notes-section {
-                margin-top: 5mm;
-                padding: 5mm;
-                background: #f8fafc;
-                border-radius: 4px;
-                border-right: 3px solid #2563eb;
+                margin-top: 3mm;
+                padding: 3mm;
+                background: transparent;
+                border-radius: 0;
+                border: 1px solid #e2e8f0;
             }
             .notes-title {
-                font-size: 10pt;
+                font-size: 9pt;
                 font-weight: 600;
                 color: #2563eb;
-                margin-bottom: 3mm;
+                margin-bottom: 2mm;
             }
             .notes-text {
                 color: #64748b;
-                line-height: 1.4;
-                font-size: 9pt;
+                line-height: 1.3;
+                font-size: 8pt;
+            }
+            .no-print {
+                display: none !important;
             }
             @media print {
-                body {
-                    padding: 0;
-                    margin: 0;
+                * {
+                    overflow: visible !important;
+                }
+                html, body {
+                    height: auto !important;
+                    overflow: visible !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                }
+                /* Remove all card styling */
+                .invoice-container,
+                .info-box,
+                .grand-total,
+                .payment-section,
+                .notes-section {
+                    box-shadow: none !important;
+                    border-radius: 0 !important;
+                    background: transparent !important;
                 }
                 .invoice-container {
-                    box-shadow: none;
-                    padding: 5mm;
-                    margin: 0;
+                    border: none !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
                 }
+                .info-box {
+                    border: none !important;
+                    border-right: 1px solid #e2e8f0 !important;
+                    padding: 2mm !important;
+                }
+                .grand-total {
+                    border: 1px solid #2563eb !important;
+                }
+                .payment-section {
+                    border: 1px solid #e2e8f0 !important;
+                }
+                .notes-section {
+                    border: 1px solid #e2e8f0 !important;
+                }
+                /* Hide buttons and non-printable elements */
                 .no-print {
                     display: none !important;
                 }
-                /* Ensure everything fits on one page */
-                .invoice-header {
+                /* Remove any wrapper card styling */
+                div[class*="rounded"],
+                div[class*="shadow"],
+                div[class*="bg-white"]:not(.invoice-container):not(.info-box):not(.grand-total) {
+                    box-shadow: none !important;
+                    border-radius: 0 !important;
+                    background: transparent !important;
+                }
+                /* Prevent page breaks and ensure single page */
+                .invoice-header,
+                .info-section,
+                .items-table,
+                .total-section,
+                .payment-section,
+                .notes-section {
+                    page-break-inside: avoid;
                     page-break-after: avoid;
                 }
-                .items-table {
-                    page-break-inside: avoid;
+                .items-table thead {
+                    display: table-header-group;
                 }
-                .total-section {
-                    page-break-inside: avoid;
+                .items-table tbody {
+                    display: table-row-group;
+                }
+                /* Ensure table fits */
+                .items-table {
+                    font-size: 7pt !important;
+                }
+                .items-table th,
+                .items-table td {
+                    padding: 1mm !important;
                 }
             }
         `;
@@ -418,8 +483,8 @@ export default function SaleInvoice({
                     line-height: 1.6;
                 }
             `}</style>
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-                <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6" dir="rtl">
+                <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-2xl p-6">
                     <div ref={printRef} className="invoice-container">
                     {/* Header */}
                     <div className="invoice-header">
@@ -517,38 +582,6 @@ export default function SaleInvoice({
                             </div>
                         </div>
                     </div>
-
-                    {/* Payments History */}
-                    {payments.length > 0 && (
-                        <div className="mt-8">
-                            <h3 className="text-lg font-semibold mb-4 text-gray-800">تاریخچه پرداخت‌ها</h3>
-                            <div className="space-y-2">
-                                {payments.map((payment) => (
-                                    <div
-                                        key={payment.id}
-                                        className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
-                                    >
-                                        <div>
-                                            <span className="text-sm text-gray-600">
-                                                {formatDate(payment.date)}
-                                            </span>
-                                        </div>
-                                        <div className="font-semibold text-green-600">
-                                            {formatNumber(payment.amount)}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Notes */}
-                    {saleData.sale.notes && (
-                        <div className="notes-section">
-                            <div className="notes-title">یادداشت‌ها:</div>
-                            <div className="notes-text">{saleData.sale.notes}</div>
-                        </div>
-                    )}
                     </div>
 
                     {/* Action Buttons */}

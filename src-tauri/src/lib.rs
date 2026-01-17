@@ -31,9 +31,15 @@ pub struct PaginatedResponse<T> {
     pub total_pages: i64,
 }
 /// Get database path using standard OS data directory
-fn get_db_path(_app: &AppHandle, _db_name: &str) -> Result<PathBuf, String> {
+fn get_db_path(app: &AppHandle, _db_name: &str) -> Result<PathBuf, String> {
     // Get standard data directory based on OS
-    let data_dir = if cfg!(windows) {
+    let data_dir = if cfg!(target_os = "android") {
+        // Android: Use app's private data directory
+        // Tauri provides the app data directory via app.path()
+        app.path()
+            .app_data_dir()
+            .map_err(|e| format!("Failed to get Android app data directory: {}", e))?
+    } else if cfg!(windows) {
         // Windows: Use AppData\Local\<app_name>
         std::env::var("LOCALAPPDATA")
             .map(PathBuf::from)

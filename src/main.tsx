@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { Toaster } from "react-hot-toast";
+import { playNotificationSound } from "./utils/sound";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
@@ -13,6 +14,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         style: {
           background: '#363636',
           color: '#fff',
+        },
+        // Play notification sound for all toast types
+        onOpen: () => {
+          playNotificationSound();
         },
         success: {
           duration: 3000,

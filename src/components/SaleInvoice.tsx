@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import { SaleWithItems, SalePayment } from "../utils/sales";
 import { Customer } from "../utils/customer";
 import { Product } from "../utils/product";
@@ -42,35 +42,6 @@ export default function SaleInvoice({
         return unit?.name || "نامشخص";
     };
 
-    const handlePrint = () => {
-        if (printRef.current) {
-            const printWindow = window.open("", "_blank");
-            if (printWindow) {
-                printWindow.document.write(`
-                    <!DOCTYPE html>
-                    <html dir="rtl" lang="fa">
-                    <head>
-                        <meta charset="UTF-8">
-                        <title>فاکتور فروش #${saleData.sale.id}</title>
-                        <style>
-                            ${getPrintStyles()}
-                        </style>
-                    </head>
-                    <body>
-                        ${printRef.current.innerHTML}
-                    </body>
-                    </html>
-                `);
-                printWindow.document.close();
-                printWindow.focus();
-                setTimeout(() => {
-                    printWindow.print();
-                    printWindow.close();
-                }, 250);
-            }
-        }
-    };
-
     const getPrintStyles = () => {
         return `
             * {
@@ -78,90 +49,96 @@ export default function SaleInvoice({
                 padding: 0;
                 box-sizing: border-box;
             }
+            @page {
+                size: A4;
+                margin: 10mm;
+            }
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 direction: rtl;
-                padding: 20px;
+                padding: 5mm;
                 background: white;
                 color: #1a1a1a;
+                font-size: 10pt;
             }
             .invoice-container {
-                max-width: 800px;
+                max-width: 100%;
                 margin: 0 auto;
                 background: white;
-                padding: 40px;
-                box-shadow: 0 0 20px rgba(0,0,0,0.1);
+                padding: 5mm;
             }
             .invoice-header {
-                border-bottom: 3px solid #2563eb;
-                padding-bottom: 20px;
-                margin-bottom: 30px;
+                border-bottom: 2px solid #2563eb;
+                padding-bottom: 5mm;
+                margin-bottom: 8mm;
             }
             .invoice-title {
-                font-size: 32px;
+                font-size: 18pt;
                 font-weight: bold;
                 color: #2563eb;
-                margin-bottom: 10px;
+                margin-bottom: 3mm;
             }
             .invoice-number {
-                font-size: 18px;
+                font-size: 11pt;
                 color: #64748b;
             }
             .info-section {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                gap: 30px;
-                margin-bottom: 30px;
+                gap: 8mm;
+                margin-bottom: 8mm;
             }
             .info-box {
                 background: #f8fafc;
-                padding: 20px;
-                border-radius: 8px;
-                border-right: 4px solid #2563eb;
+                padding: 5mm;
+                border-radius: 4px;
+                border-right: 3px solid #2563eb;
             }
             .info-title {
-                font-size: 14px;
+                font-size: 9pt;
                 color: #64748b;
-                margin-bottom: 8px;
+                margin-bottom: 2mm;
                 font-weight: 600;
             }
             .info-value {
-                font-size: 16px;
+                font-size: 10pt;
                 color: #1a1a1a;
                 font-weight: 500;
             }
             .items-table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 30px;
+                margin-bottom: 8mm;
+                font-size: 9pt;
             }
             .items-table thead {
                 background: #2563eb;
                 color: white;
             }
             .items-table th {
-                padding: 15px;
+                padding: 4mm 3mm;
                 text-align: right;
                 font-weight: 600;
-                font-size: 14px;
+                font-size: 9pt;
             }
             .items-table td {
-                padding: 15px;
+                padding: 3mm;
                 border-bottom: 1px solid #e2e8f0;
+                font-size: 9pt;
             }
             .items-table tbody tr:hover {
                 background: #f8fafc;
             }
             .total-section {
-                margin-top: 20px;
-                padding-top: 20px;
+                margin-top: 5mm;
+                padding-top: 5mm;
                 border-top: 2px solid #e2e8f0;
             }
             .total-row {
                 display: flex;
                 justify-content: space-between;
-                padding: 12px 0;
-                font-size: 16px;
+                padding: 2mm 0;
+                font-size: 10pt;
             }
             .total-label {
                 color: #64748b;
@@ -170,51 +147,154 @@ export default function SaleInvoice({
             .total-value {
                 color: #1a1a1a;
                 font-weight: 700;
-                font-size: 18px;
+                font-size: 11pt;
             }
             .grand-total {
                 background: #2563eb;
                 color: white;
-                padding: 20px;
-                border-radius: 8px;
-                margin-top: 20px;
+                padding: 5mm;
+                border-radius: 4px;
+                margin-top: 5mm;
             }
             .grand-total .total-label,
             .grand-total .total-value {
                 color: white;
-                font-size: 20px;
+                font-size: 12pt;
+            }
+            .payment-section {
+                margin-top: 5mm;
+                padding: 5mm;
+                background: #f0fdf4;
+                border-radius: 4px;
+            }
+            .payment-title {
+                font-size: 10pt;
+                font-weight: 600;
+                margin-bottom: 3mm;
+                color: #166534;
+            }
+            .payment-item {
+                display: flex;
+                justify-content: space-between;
+                padding: 2mm 0;
+                border-bottom: 1px solid #bbf7d0;
+                font-size: 9pt;
             }
             .notes-section {
-                margin-top: 30px;
-                padding: 20px;
+                margin-top: 5mm;
+                padding: 5mm;
                 background: #f8fafc;
-                border-radius: 8px;
-                border-right: 4px solid #2563eb;
+                border-radius: 4px;
+                border-right: 3px solid #2563eb;
             }
             .notes-title {
-                font-size: 16px;
+                font-size: 10pt;
                 font-weight: 600;
                 color: #2563eb;
-                margin-bottom: 10px;
+                margin-bottom: 3mm;
             }
             .notes-text {
                 color: #64748b;
-                line-height: 1.6;
+                line-height: 1.4;
+                font-size: 9pt;
             }
             @media print {
                 body {
                     padding: 0;
+                    margin: 0;
                 }
                 .invoice-container {
                     box-shadow: none;
-                    padding: 20px;
+                    padding: 5mm;
+                    margin: 0;
                 }
                 .no-print {
-                    display: none;
+                    display: none !important;
+                }
+                /* Ensure everything fits on one page */
+                .invoice-header {
+                    page-break-after: avoid;
+                }
+                .items-table {
+                    page-break-inside: avoid;
+                }
+                .total-section {
+                    page-break-inside: avoid;
                 }
             }
         `;
     };
+
+    const handlePrint = () => {
+        if (printRef.current) {
+            const printContent = printRef.current.innerHTML;
+            const styles = getPrintStyles();
+            
+            // Create a new window for printing
+            const printWindow = window.open("", "_blank", "width=800,height=600");
+            
+            if (!printWindow) {
+                // If popup is blocked, try printing current page
+                console.warn("Popup blocked, printing current page");
+                window.print();
+                return;
+            }
+            
+            // Write the content to the new window
+            printWindow.document.open();
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html dir="rtl" lang="fa">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>فاکتور فروش #${saleData.sale.id}</title>
+                    <style>
+                        ${styles}
+                    </style>
+                </head>
+                <body>
+                    ${printContent}
+                    <script>
+                        // Trigger print dialog when page loads
+                        (function() {
+                            function triggerPrint() {
+                                window.focus();
+                                window.print();
+                            }
+                            
+                            // Try multiple methods to ensure print dialog opens
+                            if (document.readyState === 'complete') {
+                                setTimeout(triggerPrint, 100);
+                            } else {
+                                window.addEventListener('load', function() {
+                                    setTimeout(triggerPrint, 100);
+                                });
+                            }
+                            
+                            // Fallback after a delay
+                            setTimeout(triggerPrint, 500);
+                        })();
+                    </script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            
+            // Additional fallback: trigger print after document is closed
+            setTimeout(() => {
+                if (printWindow && !printWindow.closed) {
+                    try {
+                        printWindow.focus();
+                        printWindow.print();
+                    } catch (e) {
+                        console.error("Print error:", e);
+                    }
+                }
+            }, 800);
+        }
+    };
+
 
     const remainingAmount = saleData.sale.total_amount - saleData.sale.paid_amount;
 

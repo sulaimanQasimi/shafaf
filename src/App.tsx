@@ -20,6 +20,7 @@ import SalaryManagement from "./components/Salary";
 import DeductionManagement from "./components/Deduction";
 import UserManagement from "./components/UserManagement";
 import ProfileEdit from "./components/ProfileEdit";
+import CompanySettings from "./components/CompanySettings";
 import SaleInvoice from "./components/SaleInvoice";
 import Footer from "./components/Footer";
 import "./App.css";
@@ -34,7 +35,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice" | "company";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -247,6 +248,13 @@ function App() {
         payments={invoiceData.payments}
         onClose={() => setCurrentPage("sales")}
       />
+    );
+  }
+
+  // Show company settings page if selected
+  if (currentPage === "company") {
+    return (
+      <CompanySettings onBack={() => setCurrentPage("dashboard")} />
     );
   }
 
@@ -494,6 +502,13 @@ function App() {
                 icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m9 5.197v-1a6 6 0 00-9-5.197",
                 color: "from-cyan-500 to-blue-500",
                 page: "users" as Page,
+              },
+              {
+                title: "تنظیمات شرکت",
+                description: "ویرایش اطلاعات و تنظیمات شرکت",
+                icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
+                color: "from-emerald-500 to-teal-500",
+                page: "company" as Page,
               },
             ].map((item, index) => (
               <motion.button

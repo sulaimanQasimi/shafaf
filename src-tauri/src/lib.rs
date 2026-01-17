@@ -4240,6 +4240,145 @@ fn delete_deduction(
     Ok("Deduction deleted successfully".to_string())
 }
 
+// ========== Company Settings ==========
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompanySettings {
+    pub id: i64,
+    pub name: String,
+    pub logo: Option<String>,
+    pub phone: Option<String>,
+    pub address: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Initialize company_settings table schema
+#[tauri::command]
+fn init_company_settings_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS company_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            logo TEXT,
+            phone TEXT,
+            address TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create company_settings table: {}", e))?;
+
+    // Insert default row if table is empty
+    let count_sql = "SELECT COUNT(*) FROM company_settings";
+    let counts = db.query(count_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .unwrap_or_else(|_| vec![]);
+    let count: i64 = counts.first().copied().unwrap_or(0);
+    
+    if count == 0 {
+        let insert_sql = "INSERT INTO company_settings (name, logo, phone, address) VALUES (?, ?, ?, ?)";
+        db.execute(insert_sql, &[
+            &"شرکت" as &dyn rusqlite::ToSql,
+            &None::<String> as &dyn rusqlite::ToSql,
+            &None::<String> as &dyn rusqlite::ToSql,
+            &None::<String> as &dyn rusqlite::ToSql,
+        ])
+        .map_err(|e| format!("Failed to insert default company settings: {}", e))?;
+    }
+
+    Ok("Company settings table initialized successfully".to_string())
+}
+
+/// Get company settings (only one row should exist)
+#[tauri::command]
+fn get_company_settings(db_state: State<'_, Mutex<Option<Database>>>) -> Result<CompanySettings, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, name, logo, phone, address, created_at, updated_at FROM company_settings ORDER BY id LIMIT 1";
+    let settings_list = db
+        .query(sql, &[], |row| {
+            Ok(CompanySettings {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                logo: row.get(2)?,
+                phone: row.get(3)?,
+                address: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch company settings: {}", e))?;
+
+    let settings = settings_list.first().ok_or("No company settings found")?;
+    Ok(settings.clone())
+}
+
+/// Update company settings
+#[tauri::command]
+fn update_company_settings(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    name: String,
+    logo: Option<String>,
+    phone: Option<String>,
+    address: Option<String>,
+) -> Result<CompanySettings, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Check if settings exist
+    let count_sql = "SELECT COUNT(*) FROM company_settings";
+    let counts = db.query(count_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .unwrap_or_else(|_| vec![]);
+    let count: i64 = counts.first().copied().unwrap_or(0);
+
+    if count == 0 {
+        // Insert new settings
+        let insert_sql = "INSERT INTO company_settings (name, logo, phone, address) VALUES (?, ?, ?, ?)";
+        db.execute(insert_sql, &[
+            &name as &dyn rusqlite::ToSql,
+            &logo as &dyn rusqlite::ToSql,
+            &phone as &dyn rusqlite::ToSql,
+            &address as &dyn rusqlite::ToSql,
+        ])
+        .map_err(|e| format!("Failed to insert company settings: {}", e))?;
+    } else {
+        // Update existing settings (update first row)
+        let update_sql = "UPDATE company_settings SET name = ?, logo = ?, phone = ?, address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT id FROM company_settings ORDER BY id LIMIT 1)";
+        db.execute(update_sql, &[
+            &name as &dyn rusqlite::ToSql,
+            &logo as &dyn rusqlite::ToSql,
+            &phone as &dyn rusqlite::ToSql,
+            &address as &dyn rusqlite::ToSql,
+        ])
+        .map_err(|e| format!("Failed to update company settings: {}", e))?;
+    }
+
+    // Get the updated settings (reuse the same db reference)
+    let get_sql = "SELECT id, name, logo, phone, address, created_at, updated_at FROM company_settings ORDER BY id LIMIT 1";
+    let settings_list = db
+        .query(get_sql, &[], |row| {
+            Ok(CompanySettings {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                logo: row.get(2)?,
+                phone: row.get(3)?,
+                address: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch updated company settings: {}", e))?;
+
+    let settings = settings_list.first().ok_or("No company settings found")?;
+    Ok(settings.clone())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Load environment variables at startup
@@ -4338,7 +4477,10 @@ pub fn run() {
             get_deductions_by_employee_year_month,
             get_deduction,
             update_deduction,
-            delete_deduction
+            delete_deduction,
+            init_company_settings_table,
+            get_company_settings,
+            update_company_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -5,6 +5,7 @@ import {
   isDatabaseOpen,
 } from "./utils/db";
 import { getDashboardStats, formatPersianNumber, formatLargeNumber } from "./utils/dashboard";
+import { playClickSound } from "./utils/sound";
 import Login from "./components/Login";
 import CurrencyManagement from "./components/Currency";
 import SupplierManagement from "./components/Supplier";
@@ -61,6 +62,29 @@ function App() {
       }
     };
     initDb();
+  }, []);
+
+  // Add global click sound handler
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      // Only play sound for interactive elements (buttons, links, etc.)
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'BUTTON' ||
+        target.tagName === 'A' ||
+        target.closest('button') ||
+        target.closest('a') ||
+        target.getAttribute('role') === 'button' ||
+        target.onclick !== null
+      ) {
+        playClickSound();
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => {
+      document.removeEventListener('click', handleClick);
+    };
   }, []);
 
   // Load dashboard stats when on dashboard page

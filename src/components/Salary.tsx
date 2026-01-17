@@ -13,7 +13,7 @@ import { getEmployees, type Employee } from "../utils/employee";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
 import { getCurrentPersianYear } from "../utils/date";
-import { Deduction } from "../utils/deduction";
+import { Deduction, getDeductionsByEmployeeYearMonth } from "../utils/deduction";
 
 // Dari month names
 const dariMonths = [
@@ -162,14 +162,66 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
     useEffect(() => {
         if (formData.employee_id && !editingSalary) {
             const selectedEmployee = employees.find(e => e.id.toString() === formData.employee_id);
-            if (selectedEmployee && selectedEmployee.base_salary) {
+            if (selectedEmployee && selectedEmployee.base_salary != null && selectedEmployee.base_salary !== undefined) {
                 setFormData(prev => ({
                     ...prev,
-                    amount: selectedEmployee.base_salary.toString()
+                    amount: String(selectedEmployee.base_salary)
                 }));
             }
         }
     }, [formData.employee_id, employees, editingSalary]);
+
+    // Fetch and calculate deductions when employee, year, or month changes
+    useEffect(() => {
+        const fetchDeductions = async () => {
+            if (formData.employee_id && formData.year && formData.month) {
+                try {
+                    const employeeId = parseInt(formData.employee_id);
+                    const year = parseInt(formData.year);
+                    const fetchedDeductions = await getDeductionsByEmployeeYearMonth(
+                        employeeId,
+                        year,
+                        formData.month
+                    );
+                    
+                    setDeductions(fetchedDeductions);
+                    
+                    // Calculate total deductions in AFN
+                    const totalDeductions = fetchedDeductions.reduce((sum, deduction) => {
+                        return sum + (deduction.amount * deduction.rate);
+                    }, 0);
+                    
+                    // Only auto-update deductions field when creating (not editing)
+                    // This allows manual edits when editing existing salaries
+                    if (!editingSalary) {
+                        setFormData(prev => ({
+                            ...prev,
+                            deductions: totalDeductions.toFixed(2)
+                        }));
+                    }
+                } catch (error) {
+                    console.error("Error fetching deductions:", error);
+                    setDeductions([]);
+                    if (!editingSalary) {
+                        setFormData(prev => ({
+                            ...prev,
+                            deductions: "0"
+                        }));
+                    }
+                }
+            } else {
+                setDeductions([]);
+                if (!editingSalary) {
+                    setFormData(prev => ({
+                        ...prev,
+                        deductions: "0"
+                    }));
+                }
+            }
+        };
+
+        fetchDeductions();
+    }, [formData.employee_id, formData.year, formData.month, editingSalary]);
 
     // Calculate net salary
     const calculateNetSalary = () => {

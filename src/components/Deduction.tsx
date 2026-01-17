@@ -15,6 +15,11 @@ import { isDatabaseOpen, openDatabase } from "../utils/db";
 import { getCurrentPersianYear } from "../utils/date";
 import Footer from "./Footer";
 
+const dariMonths = [
+    "حمل", "ثور", "جوزا", "سرطان", "اسد", "سنبله",
+    "میزان", "عقرب", "قوس", "جدی", "دلو", "حوت"
+];
+
 // Dari translations
 const translations = {
     title: "مدیریت کسرها",
@@ -479,6 +484,41 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
                                                 </option>
                                             ))}
                                         </select>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                                {translations.year} <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={formData.year}
+                                                onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+                                                required
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                                placeholder="سال"
+                                                dir="ltr"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                                {translations.month} <span className="text-red-500">*</span>
+                                            </label>
+                                            <select
+                                                value={formData.month}
+                                                onChange={(e) => setFormData({ ...formData, month: e.target.value })}
+                                                required
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                                dir="rtl"
+                                            >
+                                                <option value="">ماه را انتخاب کنید</option>
+                                                {dariMonths.map((month) => (
+                                                    <option key={month} value={month}>
+                                                        {month}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>

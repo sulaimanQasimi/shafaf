@@ -27,6 +27,7 @@ import UserManagement from "./components/UserManagement";
 import ProfileEdit from "./components/ProfileEdit";
 import CompanySettings from "./components/CompanySettings";
 import SaleInvoice from "./components/SaleInvoice";
+import AccountManagement from "./components/Account";
 import Footer from "./components/Footer";
 import "./App.css";
 import { SaleWithItems, SalePayment } from "./utils/sales";
@@ -40,7 +41,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice" | "company";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice" | "company" | "account";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -317,6 +318,13 @@ function App() {
     );
   }
 
+  // Show account page if selected
+  if (currentPage === "account") {
+    return (
+      <AccountManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900" dir="rtl">
       {/* Header */}
@@ -565,6 +573,13 @@ function App() {
                 icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
                 color: "from-emerald-500 to-teal-500",
                 page: "company" as Page,
+              },
+              {
+                title: "مدیریت حساب‌ها",
+                description: "مدیریت حساب‌ها، واریز و برداشت با نرخ ارز",
+                icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
+                color: "from-yellow-500 to-amber-500",
+                page: "account" as Page,
               },
             ].map((item, index) => (
               <motion.button

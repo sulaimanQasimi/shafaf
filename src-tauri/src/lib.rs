@@ -4542,6 +4542,505 @@ fn update_company_settings(
     Ok(settings.clone())
 }
 
+// Account Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Account {
+    pub id: i64,
+    pub name: String,
+    pub currency_id: Option<i64>,
+    pub initial_balance: f64,
+    pub current_balance: f64,
+    pub notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// Account Transaction Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountTransaction {
+    pub id: i64,
+    pub account_id: i64,
+    pub transaction_type: String, // 'deposit' or 'withdraw'
+    pub amount: f64,
+    pub currency: String,
+    pub rate: f64,
+    pub total: f64,
+    pub transaction_date: String,
+    pub is_full: bool,
+    pub notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Initialize accounts table schema
+#[tauri::command]
+fn init_accounts_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            currency_id INTEGER,
+            initial_balance REAL NOT NULL DEFAULT 0,
+            current_balance REAL NOT NULL DEFAULT 0,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (currency_id) REFERENCES currencies(id)
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create accounts table: {}", e))?;
+
+    Ok("Accounts table initialized successfully".to_string())
+}
+
+/// Initialize account transactions table schema
+#[tauri::command]
+fn init_account_transactions_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS account_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            transaction_type TEXT NOT NULL,
+            amount REAL NOT NULL,
+            currency TEXT NOT NULL,
+            rate REAL NOT NULL,
+            total REAL NOT NULL,
+            transaction_date TEXT NOT NULL,
+            is_full INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create account_transactions table: {}", e))?;
+
+    Ok("Account transactions table initialized successfully".to_string())
+}
+
+/// Create a new account
+#[tauri::command]
+fn create_account(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    name: String,
+    currency_id: Option<i64>,
+    initial_balance: f64,
+    notes: Option<String>,
+) -> Result<Account, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+    let insert_sql = "INSERT INTO accounts (name, currency_id, initial_balance, current_balance, notes) VALUES (?, ?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &name as &dyn rusqlite::ToSql,
+        &currency_id as &dyn rusqlite::ToSql,
+        &initial_balance as &dyn rusqlite::ToSql,
+        &initial_balance as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert account: {}", e))?;
+
+    // Get the created account
+    let account_sql = "SELECT id, name, currency_id, initial_balance, current_balance, notes, created_at, updated_at FROM accounts WHERE name = ? ORDER BY id DESC LIMIT 1";
+    let accounts = db
+        .query(account_sql, &[&name as &dyn rusqlite::ToSql], |row| {
+            Ok(Account {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                currency_id: row.get(2)?,
+                initial_balance: row.get(3)?,
+                current_balance: row.get(4)?,
+                notes: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch account: {}", e))?;
+
+    if let Some(account) = accounts.first() {
+        Ok(account.clone())
+    } else {
+        Err("Failed to retrieve created account".to_string())
+    }
+}
+
+/// Get all accounts
+#[tauri::command]
+fn get_accounts(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Account>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, name, currency_id, initial_balance, current_balance, notes, created_at, updated_at FROM accounts ORDER BY name";
+    let accounts = db
+        .query(sql, &[], |row| {
+            Ok(Account {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                currency_id: row.get(2)?,
+                initial_balance: row.get(3)?,
+                current_balance: row.get(4)?,
+                notes: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch accounts: {}", e))?;
+
+    Ok(accounts)
+}
+
+/// Get a single account
+#[tauri::command]
+fn get_account(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<Account, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, name, currency_id, initial_balance, current_balance, notes, created_at, updated_at FROM accounts WHERE id = ?";
+    let accounts = db
+        .query(sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Account {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                currency_id: row.get(2)?,
+                initial_balance: row.get(3)?,
+                current_balance: row.get(4)?,
+                notes: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch account: {}", e))?;
+
+    if let Some(account) = accounts.first() {
+        Ok(account.clone())
+    } else {
+        Err("Account not found".to_string())
+    }
+}
+
+/// Update an account
+#[tauri::command]
+fn update_account(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    name: String,
+    currency_id: Option<i64>,
+    initial_balance: f64,
+    notes: Option<String>,
+) -> Result<Account, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+    let update_sql = "UPDATE accounts SET name = ?, currency_id = ?, initial_balance = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_sql, &[
+        &name as &dyn rusqlite::ToSql,
+        &currency_id as &dyn rusqlite::ToSql,
+        &initial_balance as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+        &id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update account: {}", e))?;
+
+    // Recalculate current balance
+    let balance = calculate_account_balance_internal(db, id)?;
+    let update_balance_sql = "UPDATE accounts SET current_balance = ? WHERE id = ?";
+    db.execute(update_balance_sql, &[&balance as &dyn rusqlite::ToSql, &id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to update account balance: {}", e))?;
+
+    // Get the updated account directly
+    let account_sql = "SELECT id, name, currency_id, initial_balance, current_balance, notes, created_at, updated_at FROM accounts WHERE id = ?";
+    let accounts = db
+        .query(account_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(Account {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                currency_id: row.get(2)?,
+                initial_balance: row.get(3)?,
+                current_balance: row.get(4)?,
+                notes: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch account: {}", e))?;
+
+    if let Some(account) = accounts.first() {
+        Ok(account.clone())
+    } else {
+        Err("Account not found".to_string())
+    }
+}
+
+/// Delete an account
+#[tauri::command]
+fn delete_account(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let delete_sql = "DELETE FROM accounts WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete account: {}", e))?;
+
+    Ok("Account deleted successfully".to_string())
+}
+
+/// Calculate account balance (internal helper)
+fn calculate_account_balance_internal(db: &Database, account_id: i64) -> Result<f64, String> {
+    // Get initial balance
+    let initial_balance_sql = "SELECT initial_balance FROM accounts WHERE id = ?";
+    let initial_balances = db
+        .query(initial_balance_sql, &[&account_id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, f64>(0)?)
+        })
+        .map_err(|e| format!("Failed to fetch initial balance: {}", e))?;
+
+    let initial_balance = initial_balances.first().copied().unwrap_or(0.0);
+
+    // Calculate sum of deposits
+    let deposits_sql = "SELECT COALESCE(SUM(total), 0) FROM account_transactions WHERE account_id = ? AND transaction_type = 'deposit'";
+    let deposits = db
+        .query(deposits_sql, &[&account_id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, f64>(0)?)
+        })
+        .map_err(|e| format!("Failed to calculate deposits: {}", e))?;
+
+    let total_deposits = deposits.first().copied().unwrap_or(0.0);
+
+    // Calculate sum of withdrawals
+    let withdrawals_sql = "SELECT COALESCE(SUM(total), 0) FROM account_transactions WHERE account_id = ? AND transaction_type = 'withdraw'";
+    let withdrawals = db
+        .query(withdrawals_sql, &[&account_id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, f64>(0)?)
+        })
+        .map_err(|e| format!("Failed to calculate withdrawals: {}", e))?;
+
+    let total_withdrawals = withdrawals.first().copied().unwrap_or(0.0);
+
+    // Current balance = initial_balance + deposits - withdrawals
+    Ok(initial_balance + total_deposits - total_withdrawals)
+}
+
+/// Get account balance
+#[tauri::command]
+fn get_account_balance(db_state: State<'_, Mutex<Option<Database>>>, account_id: i64) -> Result<f64, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    calculate_account_balance_internal(db, account_id)
+}
+
+/// Deposit to account
+#[tauri::command]
+fn deposit_account(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    account_id: i64,
+    amount: f64,
+    currency: String,
+    rate: f64,
+    transaction_date: String,
+    is_full: bool,
+    notes: Option<String>,
+) -> Result<AccountTransaction, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let final_amount = if is_full {
+        // Get current balance and deposit all of it
+        let current_balance = calculate_account_balance_internal(db, account_id)?;
+        if current_balance <= 0.0 {
+            return Err("Account has no balance to deposit".to_string());
+        }
+        current_balance
+    } else {
+        if amount <= 0.0 {
+            return Err("Deposit amount must be greater than 0".to_string());
+        }
+        amount
+    };
+
+    let total = final_amount * rate;
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+    let is_full_int = if is_full { 1 } else { 0 };
+
+    // Insert transaction
+    let insert_sql = "INSERT INTO account_transactions (account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes) VALUES (?, 'deposit', ?, ?, ?, ?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &account_id as &dyn rusqlite::ToSql,
+        &final_amount as &dyn rusqlite::ToSql,
+        &currency as &dyn rusqlite::ToSql,
+        &rate as &dyn rusqlite::ToSql,
+        &total as &dyn rusqlite::ToSql,
+        &transaction_date as &dyn rusqlite::ToSql,
+        &is_full_int as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert deposit transaction: {}", e))?;
+
+    // Update account balance
+    let new_balance = calculate_account_balance_internal(db, account_id)?;
+    let update_balance_sql = "UPDATE accounts SET current_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_balance_sql, &[&new_balance as &dyn rusqlite::ToSql, &account_id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to update account balance: {}", e))?;
+
+    // Get the created transaction
+    let transaction_sql = "SELECT id, account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes, created_at, updated_at FROM account_transactions WHERE account_id = ? AND transaction_type = 'deposit' ORDER BY id DESC LIMIT 1";
+    let transactions = db
+        .query(transaction_sql, &[&account_id as &dyn rusqlite::ToSql], |row| {
+            Ok(AccountTransaction {
+                id: row.get(0)?,
+                account_id: row.get(1)?,
+                transaction_type: row.get(2)?,
+                amount: row.get(3)?,
+                currency: row.get(4)?,
+                rate: row.get(5)?,
+                total: row.get(6)?,
+                transaction_date: row.get(7)?,
+                is_full: row.get::<_, i64>(8)? != 0,
+                notes: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch transaction: {}", e))?;
+
+    if let Some(transaction) = transactions.first() {
+        Ok(transaction.clone())
+    } else {
+        Err("Failed to retrieve created transaction".to_string())
+    }
+}
+
+/// Withdraw from account
+#[tauri::command]
+fn withdraw_account(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    account_id: i64,
+    amount: f64,
+    currency: String,
+    rate: f64,
+    transaction_date: String,
+    is_full: bool,
+    notes: Option<String>,
+) -> Result<AccountTransaction, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let current_balance = calculate_account_balance_internal(db, account_id)?;
+
+    let final_amount = if is_full {
+        // Withdraw all available balance
+        if current_balance <= 0.0 {
+            return Err("Account has no balance to withdraw".to_string());
+        }
+        current_balance
+    } else {
+        if amount <= 0.0 {
+            return Err("Withdrawal amount must be greater than 0".to_string());
+        }
+        // Check if sufficient balance
+        let withdrawal_total = amount * rate;
+        if withdrawal_total > current_balance {
+            return Err("Insufficient balance for withdrawal".to_string());
+        }
+        amount
+    };
+
+    let total = final_amount * rate;
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+    let is_full_int = if is_full { 1 } else { 0 };
+
+    // Insert transaction
+    let insert_sql = "INSERT INTO account_transactions (account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes) VALUES (?, 'withdraw', ?, ?, ?, ?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &account_id as &dyn rusqlite::ToSql,
+        &final_amount as &dyn rusqlite::ToSql,
+        &currency as &dyn rusqlite::ToSql,
+        &rate as &dyn rusqlite::ToSql,
+        &total as &dyn rusqlite::ToSql,
+        &transaction_date as &dyn rusqlite::ToSql,
+        &is_full_int as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert withdrawal transaction: {}", e))?;
+
+    // Update account balance
+    let new_balance = calculate_account_balance_internal(db, account_id)?;
+    let update_balance_sql = "UPDATE accounts SET current_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_balance_sql, &[&new_balance as &dyn rusqlite::ToSql, &account_id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to update account balance: {}", e))?;
+
+    // Get the created transaction
+    let transaction_sql = "SELECT id, account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes, created_at, updated_at FROM account_transactions WHERE account_id = ? AND transaction_type = 'withdraw' ORDER BY id DESC LIMIT 1";
+    let transactions = db
+        .query(transaction_sql, &[&account_id as &dyn rusqlite::ToSql], |row| {
+            Ok(AccountTransaction {
+                id: row.get(0)?,
+                account_id: row.get(1)?,
+                transaction_type: row.get(2)?,
+                amount: row.get(3)?,
+                currency: row.get(4)?,
+                rate: row.get(5)?,
+                total: row.get(6)?,
+                transaction_date: row.get(7)?,
+                is_full: row.get::<_, i64>(8)? != 0,
+                notes: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch transaction: {}", e))?;
+
+    if let Some(transaction) = transactions.first() {
+        Ok(transaction.clone())
+    } else {
+        Err("Failed to retrieve created transaction".to_string())
+    }
+}
+
+/// Get account transactions
+#[tauri::command]
+fn get_account_transactions(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    account_id: i64,
+) -> Result<Vec<AccountTransaction>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes, created_at, updated_at FROM account_transactions WHERE account_id = ? ORDER BY transaction_date DESC, created_at DESC";
+    let transactions = db
+        .query(sql, &[&account_id as &dyn rusqlite::ToSql], |row| {
+            Ok(AccountTransaction {
+                id: row.get(0)?,
+                account_id: row.get(1)?,
+                transaction_type: row.get(2)?,
+                amount: row.get(3)?,
+                currency: row.get(4)?,
+                rate: row.get(5)?,
+                total: row.get(6)?,
+                transaction_date: row.get(7)?,
+                is_full: row.get::<_, i64>(8)? != 0,
+                notes: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch transactions: {}", e))?;
+
+    Ok(transactions)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Load environment variables at startup
@@ -4646,7 +5145,18 @@ pub fn run() {
             delete_deduction,
             init_company_settings_table,
             get_company_settings,
-            update_company_settings
+            update_company_settings,
+            init_accounts_table,
+            init_account_transactions_table,
+            create_account,
+            get_accounts,
+            get_account,
+            update_account,
+            delete_account,
+            deposit_account,
+            withdraw_account,
+            get_account_transactions,
+            get_account_balance
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

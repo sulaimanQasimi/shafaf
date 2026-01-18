@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import {
@@ -16,6 +16,8 @@ import Footer from "./Footer";
 import Table from "./common/Table";
 import PageHeader from "./common/PageHeader";
 import { Search } from "lucide-react";
+import JsBarcode from "jsbarcode";
+import * as QRCode from "qrcode";
 
 // Dari translations
 const translations = {
@@ -46,6 +48,12 @@ const translations = {
   backToDashboard: "بازگشت به داشبورد",
   selectImage: "انتخاب تصویر",
   removeImage: "حذف تصویر",
+  generateBarcode: "تولید بارکد",
+  generateQRCode: "تولید QR Code",
+  downloadBarcode: "دانلود بارکد",
+  downloadQRCode: "دانلود QR Code",
+  barcode: "بارکد",
+  qrCode: "QR Code",
   success: {
     created: "جنس با موفقیت ایجاد شد",
     updated: "جنس با موفقیت بروزرسانی شد",
@@ -92,6 +100,10 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [barcodeModalOpen, setBarcodeModalOpen] = useState<Product | null>(null);
+  const [qrCodeModalOpen, setQrCodeModalOpen] = useState<Product | null>(null);
+  const barcodeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const qrCodeCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Pagination & Search
   const [page, setPage] = useState(1);
@@ -104,6 +116,49 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
   useEffect(() => {
     loadData();
   }, [page, perPage, search, sortBy, sortOrder]);
+
+  // Generate barcode when modal opens
+  useEffect(() => {
+    if (barcodeModalOpen && barcodeCanvasRef.current && barcodeModalOpen.bar_code) {
+      try {
+        JsBarcode(barcodeCanvasRef.current, barcodeModalOpen.bar_code, {
+          format: "CODE128",
+          width: 2,
+          height: 100,
+          displayValue: true,
+          fontSize: 20,
+          margin: 10,
+        });
+      } catch (error) {
+        console.error("Error generating barcode:", error);
+        toast.error("خطا در تولید بارکد");
+      }
+    }
+  }, [barcodeModalOpen]);
+
+  // Generate QR code when modal opens
+  useEffect(() => {
+    if (qrCodeModalOpen && qrCodeCanvasRef.current) {
+      const qrData = JSON.stringify({
+        id: qrCodeModalOpen.id,
+        name: qrCodeModalOpen.name,
+        bar_code: qrCodeModalOpen.bar_code || null,
+        price: qrCodeModalOpen.price || null,
+      });
+      
+      QRCode.toCanvas(qrCodeCanvasRef.current, qrData, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF',
+        },
+      }).catch((error) => {
+        console.error("Error generating QR code:", error);
+        toast.error("خطا در تولید QR Code");
+      });
+    }
+  }, [qrCodeModalOpen]);
 
   const loadData = async () => {
     try {
@@ -426,6 +481,28 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
+                onClick={() => setBarcodeModalOpen(product)}
+                className="p-2 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                title={translations.generateBarcode}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setQrCodeModalOpen(product)}
+                className="p-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+                title={translations.generateQRCode}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                </svg>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={() => setDeleteConfirm(product.id)}
                 className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
                 title={translations.delete}
@@ -737,6 +814,126 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
                         {translations.delete}
                       </span>
                     )}
+                  </motion.button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Barcode Modal */}
+        <AnimatePresence>
+          {barcodeModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              onClick={() => setBarcodeModalOpen(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-md"
+              >
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+                  {translations.barcode} - {barcodeModalOpen.name}
+                </h2>
+                <div className="flex flex-col items-center gap-4 mb-6">
+                  <canvas
+                    ref={barcodeCanvasRef}
+                    className="bg-white p-4 rounded-lg border-2 border-gray-200 dark:border-gray-600"
+                  />
+                  {!barcodeModalOpen.bar_code && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+                      بارکد برای این جنس تنظیم نشده است. لطفاً ابتدا بارکد را در فرم ویرایش تنظیم کنید.
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setBarcodeModalOpen(null)}
+                    className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-colors"
+                  >
+                    {translations.cancel}
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      if (barcodeCanvasRef.current) {
+                        const link = document.createElement('a');
+                        link.download = `barcode-${barcodeModalOpen.name}-${barcodeModalOpen.bar_code || 'no-code'}.png`;
+                        link.href = barcodeCanvasRef.current.toDataURL();
+                        link.click();
+                        toast.success("بارکد با موفقیت دانلود شد");
+                      }
+                    }}
+                    disabled={!barcodeModalOpen.bar_code}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {translations.downloadBarcode}
+                  </motion.button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* QR Code Modal */}
+        <AnimatePresence>
+          {qrCodeModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              onClick={() => setQrCodeModalOpen(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-md"
+              >
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+                  {translations.qrCode} - {qrCodeModalOpen.name}
+                </h2>
+                <div className="flex flex-col items-center gap-4 mb-6">
+                  <canvas
+                    ref={qrCodeCanvasRef}
+                    className="bg-white p-4 rounded-lg border-2 border-gray-200 dark:border-gray-600"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setQrCodeModalOpen(null)}
+                    className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-colors"
+                  >
+                    {translations.cancel}
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      if (qrCodeCanvasRef.current) {
+                        const link = document.createElement('a');
+                        link.download = `qrcode-${qrCodeModalOpen.name}-${qrCodeModalOpen.id}.png`;
+                        link.href = qrCodeCanvasRef.current.toDataURL();
+                        link.click();
+                        toast.success("QR Code با موفقیت دانلود شد");
+                      }
+                    }}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-xl transition-all duration-200"
+                  >
+                    {translations.downloadQRCode}
                   </motion.button>
                 </div>
               </motion.div>

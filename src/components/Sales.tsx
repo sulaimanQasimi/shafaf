@@ -24,6 +24,7 @@ import Footer from "./Footer";
 import PersianDatePicker from "./PersianDatePicker";
 import { formatPersianDate, getCurrentPersianDate, persianToGeorgian } from "../utils/date";
 import Table from "./common/Table";
+import PageHeader from "./common/PageHeader";
 import { Search } from "lucide-react";
 
 // Dari translations
@@ -520,76 +521,35 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6" dir="rtl">
             <div className="max-w-7xl mx-auto">
-                {/* Beautiful Back Button */}
-                {onBack && (
-                    <motion.div
-                        initial={{ opacity: 0, x: -30 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.4 }}
-                        className="mb-6"
-                    >
-                        <motion.button
-                            whileHover={{ scale: 1.05, x: -5 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={onBack}
-                            className="group flex items-center gap-3 px-6 py-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl hover:bg-white dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-2xl shadow-lg hover:shadow-xl border-2 border-gray-200 dark:border-gray-700 hover:border-purple-400 dark:hover:border-purple-500 transition-all duration-300"
-                        >
-                            <motion.svg
-                                className="w-5 h-5 text-purple-600 dark:text-purple-400"
-                                fill="none"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2.5"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                animate={{ x: [0, -3, 0] }}
-                                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                            >
-                                <path d="M15 19l-7-7 7-7" />
-                            </motion.svg>
-                            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent group-hover:from-purple-700 group-hover:to-blue-700 transition-all duration-300">
-                                {translations.backToDashboard}
-                            </span>
-                        </motion.button>
-                    </motion.div>
-                )}
+                <PageHeader
+                    title={translations.title}
+                    onBack={onBack}
+                    backLabel={translations.backToDashboard}
+                    actions={[
+                        {
+                            label: translations.addNew,
+                            onClick: () => handleOpenModal(),
+                            variant: "primary" as const
+                        }
+                    ]}
+                />
 
-                <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mb-8 space-y-6"
-                >
-                    <div className="flex justify-between items-center mb-6">
-                        <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                            {translations.title}
-                        </h1>
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => handleOpenModal()}
-                            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
-                        >
-                            {translations.addNew}
-                        </motion.button>
+                {/* Search Bar */}
+                <div className="relative max-w-md w-full mb-6">
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                        <Search className="h-5 w-5 text-gray-400" />
                     </div>
-
-                    {/* Search Bar */}
-                    <div className="relative max-w-md w-full">
-                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                            <Search className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => {
-                                setSearch(e.target.value);
-                                setPage(1);
-                            }}
-                            className="block w-full pr-10 pl-3 py-3 border border-gray-200 dark:border-gray-700 rounded-xl leading-5 bg-white dark:bg-gray-800 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 sm:text-sm transition-all shadow-sm hover:shadow-md"
-                            placeholder="جستجو بر اساس تاریخ، مشتری، شماره تماس یا یادداشت..."
-                        />
-                    </div>
-                </motion.div>
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={(e) => {
+                            setSearch(e.target.value);
+                            setPage(1);
+                        }}
+                        className="block w-full pr-10 pl-3 py-3 border border-gray-200 dark:border-gray-700 rounded-xl leading-5 bg-white dark:bg-gray-800 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 sm:text-sm transition-all shadow-sm hover:shadow-md"
+                        placeholder="جستجو بر اساس تاریخ، مشتری، شماره تماس یا یادداشت..."
+                    />
+                </div>
 
                 <Table
                     data={sales}

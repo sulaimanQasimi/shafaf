@@ -29,6 +29,7 @@ import CompanySettings from "./components/CompanySettings";
 import SaleInvoice from "./components/SaleInvoice";
 import AccountManagement from "./components/Account";
 import PurchasePaymentManagement from "./components/PurchasePayment";
+import SalesPaymentManagement from "./components/SalesPayment";
 import Footer from "./components/Footer";
 import "./App.css";
 import { SaleWithItems, SalePayment } from "./utils/sales";
@@ -42,7 +43,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice" | "company" | "account" | "purchasePayment";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice" | "company" | "account" | "purchasePayment" | "salesPayment";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -333,6 +334,13 @@ function App() {
     );
   }
 
+  // Show sales payment page if selected
+  if (currentPage === "salesPayment") {
+    return (
+      <SalesPaymentManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900" dir="rtl">
       {/* Header */}
@@ -503,7 +511,7 @@ function App() {
             بخش های سیستم
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
               {
                 title: "مدیریت اجناس",
@@ -590,11 +598,18 @@ function App() {
                 page: "account" as Page,
               },
               {
-                title: "پرداخت‌های خریداری",
+                title: "بیلانس تمویل کننده ها",
                 description: "بیلانس تمویل کننده ها با نرخ ارز",
                 icon: "M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z",
                 color: "from-teal-500 to-cyan-500",
                 page: "purchasePayment" as Page,
+              },
+              {
+                title: "بیلانس مشتریان",
+                description: "بیلانس مشتری ها و بیلانس مشتریان",
+                icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+                color: "from-blue-500 to-indigo-500",
+                page: "salesPayment" as Page,
               },
             ].map((item, index) => (
               <motion.button
@@ -608,24 +623,21 @@ function App() {
                   transition: { duration: 0.2 }
                 }}
                 whileTap={{ scale: 0.98 }}
-                className="group bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-lg hover:shadow-2xl p-6 border border-purple-100/50 dark:border-purple-900/30 transition-all duration-300 text-right"
+                className="group bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-xl shadow-lg hover:shadow-2xl p-4 border border-purple-100/50 dark:border-purple-900/30 transition-all duration-300 text-right"
               >
-                <div className="flex items-start gap-4">
-                  <div className={`w-14 h-14 bg-gradient-to-br ${item.color} rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 bg-gradient-to-br ${item.color} rounded-lg flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                    <h4 className="text-base font-bold text-gray-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
                       {item.title}
                     </h4>
-                    <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
-                      {item.description}
-                    </p>
                   </div>
                   <svg
-                    className="w-6 h-6 text-gray-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-all duration-300 group-hover:-translate-x-2"
+                    className="w-5 h-5 text-gray-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-all duration-300 group-hover:-translate-x-2"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"

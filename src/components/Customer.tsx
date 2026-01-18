@@ -9,6 +9,15 @@ import {
   deleteCustomer,
   type Customer,
 } from "../utils/customer";
+import { getSales, type Sale } from "../utils/sales";
+import {
+  getSalePayments,
+  createSalePayment,
+  deleteSalePayment,
+  type SalePayment,
+} from "../utils/sales";
+import { formatPersianDate, getCurrentPersianDate, persianToGeorgian } from "../utils/date";
+import PersianDatePicker from "./PersianDatePicker";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
 import Table from "./common/Table";
@@ -31,6 +40,21 @@ const translations = {
   actions: "عملیات",
   createdAt: "تاریخ ایجاد",
   updatedAt: "آخرین بروزرسانی",
+  totalSales: "مجموع فروش‌ها",
+  totalPaid: "مجموع پرداخت شده",
+  totalRemaining: "مجموع باقیمانده",
+  viewBalance: "مشاهده بیلانس",
+  balance: "بیلانس",
+  sale: "فروش",
+  saleDate: "تاریخ فروش",
+  saleTotal: "مبلغ کل",
+  paidAmount: "پرداخت شده",
+  remainingAmount: "باقیمانده",
+  addPayment: "افزودن پرداخت",
+  paymentAmount: "مبلغ پرداخت",
+  paymentDate: "تاریخ پرداخت",
+  noPayments: "هیچ پرداختی ثبت نشده است",
+  noSales: "هیچ فروشی ثبت نشده است",
   noCustomers: "هیچ مشتری‌ای ثبت نشده است",
   confirmDelete: "آیا از حذف این مشتری اطمینان دارید؟",
   backToDashboard: "بازگشت به داشبورد",
@@ -64,8 +88,13 @@ interface CustomerManagementProps {
 
 export default function CustomerManagement({ onBack }: CustomerManagementProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerBalances, setCustomerBalances] = useState<Record<number, { totalSales: number; totalPaid: number; totalRemaining: number }>>({});
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerSales, setCustomerSales] = useState<Sale[]>([]);
+  const [salePaymentsMap, setSalePaymentsMap] = useState<Record<number, SalePayment[]>>({});
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState({
     full_name: "",
@@ -74,6 +103,12 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
     email: "",
     notes: "",
   });
+  const [paymentFormData, setPaymentFormData] = useState({
+    amount: "",
+    date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+  });
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [selectedSaleForPayment, setSelectedSaleForPayment] = useState<Sale | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   // Pagination & Search
@@ -105,6 +140,33 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
       const response = await getCustomers(page, perPage, search, sortBy, sortOrder);
       setCustomers(response.items);
       setTotalItems(response.total);
+
+      // Load all sales to calculate balances
+      const allSales = await getSales(1, 10000, "", "date", "desc");
+      
+      // Calculate balances for each customer
+      const balances: Record<number, { totalSales: number; totalPaid: number; totalRemaining: number }> = {};
+      
+      await Promise.all(
+        response.items.map(async (customer) => {
+          const customerSalesList = allSales.items.filter(s => s.customer_id === customer.id);
+          let totalSales = 0;
+          let totalPaid = 0;
+
+          for (const sale of customerSalesList) {
+            totalSales += sale.total_amount;
+            totalPaid += sale.paid_amount || 0;
+          }
+
+          balances[customer.id] = {
+            totalSales,
+            totalPaid,
+            totalRemaining: totalSales - totalPaid,
+          };
+        })
+      );
+
+      setCustomerBalances(balances);
     } catch (error: any) {
       toast.error(translations.errors.fetch);
       console.error("Error loading customers:", error);
@@ -213,6 +275,123 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
     }
   };
 
+  const handleOpenBalanceModal = async (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setIsBalanceModalOpen(true);
+    
+    try {
+      setLoading(true);
+      // Load all sales for this customer
+      const allSales = await getSales(1, 10000, "", "date", "desc");
+      const customerSalesList = allSales.items.filter(s => s.customer_id === customer.id);
+      setCustomerSales(customerSalesList);
+
+      // Load payments for each sale
+      const paymentsMap: Record<number, SalePayment[]> = {};
+      await Promise.all(
+        customerSalesList.map(async (sale) => {
+          try {
+            const payments = await getSalePayments(sale.id);
+            paymentsMap[sale.id] = payments;
+          } catch (error) {
+            paymentsMap[sale.id] = [];
+          }
+        })
+      );
+      setSalePaymentsMap(paymentsMap);
+    } catch (error: any) {
+      toast.error("خطا در بارگذاری اطلاعات بیلانس");
+      console.error("Error loading balance:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCloseBalanceModal = () => {
+    setIsBalanceModalOpen(false);
+    setSelectedCustomer(null);
+    setCustomerSales([]);
+    setSalePaymentsMap({});
+  };
+
+  const calculatePaidAmount = (saleId: number): number => {
+    const payments = salePaymentsMap[saleId] || [];
+    return payments.reduce((sum, payment) => sum + payment.amount, 0);
+  };
+
+  const calculateRemainingAmount = (sale: Sale): number => {
+    const paid = calculatePaidAmount(sale.id);
+    return sale.total_amount - paid;
+  };
+
+  const handleOpenPaymentModal = (sale: Sale) => {
+    setSelectedSaleForPayment(sale);
+    setPaymentFormData({
+      amount: "",
+      date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+    });
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleClosePaymentModal = () => {
+    setIsPaymentModalOpen(false);
+    setSelectedSaleForPayment(null);
+    setPaymentFormData({
+      amount: "",
+      date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+    });
+  };
+
+  const handleAddPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSaleForPayment) return;
+
+    if (!paymentFormData.amount || parseFloat(paymentFormData.amount) <= 0) {
+      toast.error("مبلغ پرداخت باید بیشتر از صفر باشد");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const amount = parseFloat(paymentFormData.amount);
+      await createSalePayment(
+        selectedSaleForPayment.id,
+        amount,
+        paymentFormData.date
+      );
+      toast.success("پرداخت با موفقیت ثبت شد");
+      handleClosePaymentModal();
+      // Reload balance data
+      if (selectedCustomer) {
+        await handleOpenBalanceModal(selectedCustomer);
+      }
+      await loadCustomers();
+    } catch (error: any) {
+      toast.error("خطا در ثبت پرداخت");
+      console.error("Error adding payment:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: number, saleId: number) => {
+    try {
+      setLoading(true);
+      await deleteSalePayment(paymentId);
+      toast.success("پرداخت با موفقیت حذف شد");
+      // Reload balance data
+      if (selectedCustomer) {
+        await handleOpenBalanceModal(selectedCustomer);
+      }
+      await loadCustomers();
+    } catch (error: any) {
+      toast.error("خطا در حذف پرداخت");
+      console.error("Error deleting payment:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const columns = [
     {
       key: "full_name", label: translations.fullName, sortable: true,
@@ -244,6 +423,40 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
       render: (c: Customer) => c.email ? (
         <span className="text-gray-600 dark:text-gray-400 text-sm" dir="ltr">{c.email}</span>
       ) : <span className="text-gray-400">-</span>
+    },
+    {
+      key: "totalSales", label: translations.totalSales, sortable: false,
+      render: (c: Customer) => {
+        const balance = customerBalances[c.id];
+        return (
+          <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+            {balance ? balance.totalSales.toLocaleString('fa-IR') : '0'} افغانی
+          </span>
+        );
+      }
+    },
+    {
+      key: "totalPaid", label: translations.totalPaid, sortable: false,
+      render: (c: Customer) => {
+        const balance = customerBalances[c.id];
+        return (
+          <span className="text-lg font-bold text-green-600 dark:text-green-400">
+            {balance ? balance.totalPaid.toLocaleString('fa-IR') : '0'} افغانی
+          </span>
+        );
+      }
+    },
+    {
+      key: "totalRemaining", label: translations.totalRemaining, sortable: false,
+      render: (c: Customer) => {
+        const balance = customerBalances[c.id];
+        const remaining = balance ? balance.totalRemaining : 0;
+        return (
+          <span className={`text-lg font-bold ${remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+            {remaining.toLocaleString('fa-IR')} افغانی
+          </span>
+        );
+      }
     },
     {
       key: "created_at", label: translations.createdAt, sortable: true,
@@ -305,6 +518,17 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
           loading={loading}
           actions={(customer) => (
             <div className="flex items-center gap-2">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => handleOpenBalanceModal(customer)}
+                className="p-2 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                title={translations.viewBalance}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </motion.button>
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
@@ -537,6 +761,289 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Balance Modal */}
+        <AnimatePresence>
+          {isBalanceModalOpen && selectedCustomer && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4"
+              onClick={handleCloseBalanceModal}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-6xl max-h-[90vh] overflow-y-auto border border-blue-100 dark:border-blue-900/30"
+              >
+                {/* Header */}
+                <div className="flex justify-between items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center shadow-lg">
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                        {translations.balance} - {selectedCustomer.full_name}
+                      </h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        مشاهده فروش‌ها و پرداخت‌های مشتری
+                      </p>
+                    </div>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleCloseBalanceModal}
+                    className="p-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  >
+                    <svg className="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </motion.button>
+                </div>
+
+                {/* Summary Cards */}
+                {customerBalances[selectedCustomer.id] && (
+                  <div className="grid grid-cols-3 gap-4 mb-8">
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      className="p-5 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-2xl border border-purple-200/50 dark:border-purple-700/30">
+                      <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                        {translations.totalSales}
+                      </div>
+                      <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                        {customerBalances[selectedCustomer.id].totalSales.toLocaleString('fa-IR')} افغانی
+                      </div>
+                    </motion.div>
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      className="p-5 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-2xl border border-green-200/50 dark:border-green-700/30">
+                      <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                        {translations.totalPaid}
+                      </div>
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {customerBalances[selectedCustomer.id].totalPaid.toLocaleString('fa-IR')} افغانی
+                      </div>
+                    </motion.div>
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      className="p-5 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 rounded-2xl border border-red-200/50 dark:border-red-700/30">
+                      <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                        {translations.totalRemaining}
+                      </div>
+                      <div className={`text-2xl font-bold ${customerBalances[selectedCustomer.id].totalRemaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                        {customerBalances[selectedCustomer.id].totalRemaining.toLocaleString('fa-IR')} افغانی
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+
+                {/* Sales List */}
+                <div className="space-y-4">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                    {translations.sale}
+                  </h3>
+                  {customerSales.length > 0 ? (
+                    customerSales.map((sale) => {
+                      const paid = calculatePaidAmount(sale.id);
+                      const remaining = calculateRemainingAmount(sale);
+                      const payments = salePaymentsMap[sale.id] || [];
+                      return (
+                        <motion.div
+                          key={sale.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="p-6 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-200 dark:border-gray-600"
+                        >
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <div className="font-bold text-lg text-gray-900 dark:text-white mb-2">
+                                فروش #{sale.id} - {formatPersianDate(sale.date)}
+                              </div>
+                              <div className="grid grid-cols-3 gap-4 text-sm">
+                                <div>
+                                  <span className="text-gray-500 dark:text-gray-400">مبلغ کل:</span>
+                                  <span className="font-bold text-purple-600 dark:text-purple-400 mr-2">
+                                    {sale.total_amount.toLocaleString('fa-IR')} افغانی
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500 dark:text-gray-400">پرداخت شده:</span>
+                                  <span className="font-bold text-green-600 dark:text-green-400 mr-2">
+                                    {paid.toLocaleString('fa-IR')} افغانی
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500 dark:text-gray-400">باقیمانده:</span>
+                                  <span className={`font-bold mr-2 ${remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                    {remaining.toLocaleString('fa-IR')} افغانی
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleOpenPaymentModal(sale)}
+                              className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg text-sm font-semibold hover:shadow-lg transition-all"
+                            >
+                              {translations.addPayment}
+                            </motion.button>
+                          </div>
+
+                          {/* Payments List */}
+                          {payments.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                              <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                                پرداخت‌ها:
+                              </div>
+                              <div className="space-y-2">
+                                {payments.map((payment) => (
+                                  <div
+                                    key={payment.id}
+                                    className="flex justify-between items-center p-3 bg-white dark:bg-gray-800 rounded-lg"
+                                  >
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-3">
+                                        <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                                          {payment.amount.toLocaleString('fa-IR')} افغانی
+                                        </span>
+                                      </div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        {formatPersianDate(payment.date)}
+                                      </div>
+                                    </div>
+                                    <motion.button
+                                      whileHover={{ scale: 1.1 }}
+                                      whileTap={{ scale: 0.9 }}
+                                      onClick={() => handleDeletePayment(payment.id, sale.id)}
+                                      className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </motion.button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      {translations.noSales}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Payment Modal */}
+        <AnimatePresence>
+          {isPaymentModalOpen && selectedSaleForPayment && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              onClick={handleClosePaymentModal}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+              >
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+                  {translations.addPayment} - فروش #{selectedSaleForPayment.id}
+                </h2>
+                <form onSubmit={handleAddPayment} className="space-y-4">
+                  <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl mb-4">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">مبلغ کل فروش</div>
+                    <div className="text-xl font-bold text-gray-900 dark:text-white">
+                      {selectedSaleForPayment.total_amount.toLocaleString('fa-IR')} افغانی
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                      پرداخت شده: {calculatePaidAmount(selectedSaleForPayment.id).toLocaleString('fa-IR')} افغانی
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      باقیمانده: {calculateRemainingAmount(selectedSaleForPayment).toLocaleString('fa-IR')} افغانی
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      {translations.paymentAmount}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={paymentFormData.amount}
+                      onChange={(e) => setPaymentFormData({ ...paymentFormData, amount: e.target.value })}
+                      required
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                      placeholder="مبلغ"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      {translations.paymentDate}
+                    </label>
+                    <PersianDatePicker
+                      value={paymentFormData.date}
+                      onChange={(date) => setPaymentFormData({ ...paymentFormData, date })}
+                      placeholder="تاریخ را انتخاب کنید"
+                      required
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleClosePaymentModal}
+                      className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-colors"
+                    >
+                      {translations.cancel}
+                    </motion.button>
+                    <motion.button
+                      type="submit"
+                      disabled={loading}
+                      whileHover={{ scale: loading ? 1 : 1.05 }}
+                      whileTap={{ scale: loading ? 1 : 0.95 }}
+                      className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                            className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+                          />
+                          {translations.save}
+                        </span>
+                      ) : (
+                        translations.addPayment
+                      )}
+                    </motion.button>
+                  </div>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <Footer />
       </div>
     </div>

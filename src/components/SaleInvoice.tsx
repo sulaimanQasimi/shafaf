@@ -1,12 +1,14 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { SaleWithItems, SalePayment } from "../utils/sales";
 import { Customer } from "../utils/customer";
 import { Product } from "../utils/product";
 import { Unit } from "../utils/unit";
+import { CompanySettings } from "../utils/company";
 import { formatPersianDateLong } from "../utils/date";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import toast from "react-hot-toast";
+import * as QRCode from "qrcode";
 
 interface SaleInvoiceProps {
     saleData: SaleWithItems;
@@ -14,6 +16,7 @@ interface SaleInvoiceProps {
     products: Product[];
     units: Unit[];
     payments?: SalePayment[];
+    companySettings?: CompanySettings | null;
     onClose?: () => void;
 }
 
@@ -22,10 +25,45 @@ export default function SaleInvoice({
     customer,
     products,
     units,
+    payments,
+    companySettings,
     onClose,
 }: SaleInvoiceProps) {
     const printRef = useRef<HTMLDivElement>(null);
+    const qrCodeCanvasRef = useRef<HTMLCanvasElement>(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
+
+    // Generate QR code on mount
+    useEffect(() => {
+        if (qrCodeCanvasRef.current) {
+            const qrData = JSON.stringify({
+                type: "sale_invoice",
+                id: saleData.sale.id,
+                date: saleData.sale.date,
+                customer: customer.full_name,
+                total: saleData.sale.total_amount,
+                paid: saleData.sale.paid_amount,
+            });
+            
+            QRCode.toCanvas(qrCodeCanvasRef.current, qrData, {
+                width: 200,
+                margin: 2,
+                color: {
+                    dark: '#2563eb',
+                    light: '#FFFFFF',
+                },
+            })
+            .then(() => {
+                if (qrCodeCanvasRef.current) {
+                    setQrCodeDataUrl(qrCodeCanvasRef.current.toDataURL());
+                }
+            })
+            .catch((error) => {
+                console.error("Error generating QR code:", error);
+            });
+        }
+    }, [saleData, customer]);
 
     const formatDate = (dateString: string) => {
         return formatPersianDateLong(dateString);
@@ -316,17 +354,62 @@ export default function SaleInvoice({
                     <div ref={printRef} className="invoice-container">
                     {/* Header */}
                     <div className="invoice-header">
-                        <div className="flex justify-between items-start mb-4">
-                            <div>
-                                <h1 className="invoice-title">فاکتور فروش</h1>
-                                <p className="invoice-number">
-                                    شماره فاکتور: #{saleData.sale.id}
-                                </p>
+                        <div className="flex justify-between items-start gap-6 mb-6">
+                            {/* Company Info */}
+                            <div className="flex items-start gap-4 flex-1">
+                                {companySettings?.logo && (
+                                    <img 
+                                        src={companySettings.logo} 
+                                        alt={companySettings.name || "Company Logo"}
+                                        className="company-logo"
+                                        onError={(e) => {
+                                            const target = e.target as HTMLImageElement;
+                                            target.style.display = 'none';
+                                        }}
+                                    />
+                                )}
+                                <div className="company-info">
+                                    <h2 className="company-name">
+                                        {companySettings?.name || "نام شرکت"}
+                                    </h2>
+                                    <div className="company-details">
+                                        {companySettings?.phone && (
+                                            <div>📞 تلفن: {companySettings.phone}</div>
+                                        )}
+                                        {companySettings?.address && (
+                                            <div>📍 آدرس: {companySettings.address}</div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                            <div className="text-left">
-                                <div className="text-sm text-gray-500 mb-1">تاریخ:</div>
-                                <div className="text-lg font-semibold">
-                                    {formatDate(saleData.sale.date)}
+                            
+                            {/* Invoice Info & QR Code */}
+                            <div className="flex flex-col items-end gap-4">
+                                <div className="text-left">
+                                    <h1 className="invoice-title">فاکتور فروش</h1>
+                                    <p className="invoice-number">
+                                        شماره فاکتور: #{saleData.sale.id}
+                                    </p>
+                                    <div className="text-sm text-gray-500 mt-2 mb-1">تاریخ:</div>
+                                    <div className="text-lg font-semibold text-gray-900">
+                                        {formatDate(saleData.sale.date)}
+                                    </div>
+                                </div>
+                                
+                                {/* QR Code */}
+                                <div className="qr-code-container">
+                                    <canvas 
+                                        ref={qrCodeCanvasRef} 
+                                        style={{ display: 'none' }}
+                                    />
+                                    {qrCodeDataUrl && (
+                                        <img 
+                                            src={qrCodeDataUrl} 
+                                            alt="QR Code" 
+                                            style={{ width: '120px', height: '120px' }}
+                                        />
+                                    )}
+                                    <div className="qr-code-label">QR Code</div>
                                 </div>
                             </div>
                         </div>

@@ -308,6 +308,7 @@ function App() {
         products={invoiceData.products}
         units={invoiceData.units}
         payments={invoiceData.payments}
+        companySettings={companySettings}
         onClose={() => setCurrentPage("sales")}
       />
     );

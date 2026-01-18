@@ -24,6 +24,7 @@ import {
   type PurchasePayment,
 } from "../utils/purchase_payment";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
+import { getCompanySettings, initCompanySettingsTable, type CompanySettings } from "../utils/company";
 import Footer from "./Footer";
 import PurchaseInvoice from "./PurchaseInvoice";
 import PersianDatePicker from "./PersianDatePicker";
@@ -85,6 +86,8 @@ const translations = {
     notes: "یادداشت‌ها را وارد کنید (اختیاری)",
     selectProduct: "محصول را انتخاب کنید",
     selectUnit: "واحد را انتخاب کنید",
+    amount: "مقدار را وارد کنید",
+    rate: "نرخ را وارد کنید",
   },
 };
 
@@ -99,6 +102,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
   const [units, setUnits] = useState<Unit[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [purchasePayments, setPurchasePayments] = useState<Record<number, PurchasePayment[]>>({});
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -132,7 +136,18 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
 
   useEffect(() => {
     loadData();
+    loadCompanySettings();
   }, [page, perPage, search, sortBy, sortOrder]);
+
+  const loadCompanySettings = async () => {
+    try {
+      await initCompanySettingsTable();
+      const settings = await getCompanySettings();
+      setCompanySettings(settings);
+    } catch (error) {
+      console.error("Error loading company settings:", error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -1437,6 +1452,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
             supplier={suppliers.find(s => s.id === viewingPurchase.purchase.supplier_id)!}
             products={products}
             units={units}
+            companySettings={companySettings}
             onClose={() => setShowInvoice(false)}
           />
         )}

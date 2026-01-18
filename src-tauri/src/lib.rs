@@ -2134,6 +2134,298 @@ fn delete_purchase_item(
     Ok("Purchase item deleted successfully".to_string())
 }
 
+// Purchase Payment Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchasePayment {
+    pub id: i64,
+    pub purchase_id: i64,
+    pub amount: f64,
+    pub currency: String,
+    pub rate: f64,
+    pub total: f64,
+    pub date: String,
+    pub notes: Option<String>,
+    pub created_at: String,
+}
+
+/// Initialize purchase payments table schema
+#[tauri::command]
+fn init_purchase_payments_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS purchase_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            purchase_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            currency TEXT NOT NULL,
+            rate REAL NOT NULL,
+            total REAL NOT NULL,
+            date TEXT NOT NULL,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create purchase_payments table: {}", e))?;
+
+    Ok("Purchase payments table initialized successfully".to_string())
+}
+
+/// Create a purchase payment
+#[tauri::command]
+fn create_purchase_payment(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    purchase_id: i64,
+    amount: f64,
+    currency: String,
+    rate: f64,
+    date: String,
+    notes: Option<String>,
+) -> Result<PurchasePayment, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let total = amount * rate;
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+
+    let insert_sql = "INSERT INTO purchase_payments (purchase_id, amount, currency, rate, total, date, notes) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &purchase_id as &dyn rusqlite::ToSql,
+        &amount as &dyn rusqlite::ToSql,
+        &currency as &dyn rusqlite::ToSql,
+        &rate as &dyn rusqlite::ToSql,
+        &total as &dyn rusqlite::ToSql,
+        &date as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert purchase payment: {}", e))?;
+
+    // Get the created payment
+    let payment_sql = "SELECT id, purchase_id, amount, currency, rate, total, date, notes, created_at FROM purchase_payments WHERE purchase_id = ? ORDER BY id DESC LIMIT 1";
+    let payments = db
+        .query(payment_sql, &[&purchase_id as &dyn rusqlite::ToSql], |row| {
+            Ok(PurchasePayment {
+                id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                amount: row.get(2)?,
+                currency: row.get(3)?,
+                rate: row.get(4)?,
+                total: row.get(5)?,
+                date: row.get(6)?,
+                notes: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase payment: {}", e))?;
+
+    if let Some(payment) = payments.first() {
+        Ok(payment.clone())
+    } else {
+        Err("Failed to retrieve created purchase payment".to_string())
+    }
+}
+
+/// Get all purchase payments with pagination
+#[tauri::command]
+fn get_purchase_payments(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<PurchasePayment>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let offset = (page - 1) * per_page;
+
+    // Build WHERE clause
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+            let search_term = format!("%{}%", s);
+            where_clause = "WHERE (currency LIKE ? OR notes LIKE ? OR CAST(amount AS TEXT) LIKE ?)".to_string();
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term));
+        }
+    }
+
+    // Get total count
+    let count_sql = format!("SELECT COUNT(*) FROM purchase_payments {}", where_clause);
+    let total: i64 = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+        let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        Ok(count)
+    }).map_err(|e| format!("Failed to count purchase payments: {}", e))?;
+
+    // Build Order By
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "ASC".to_string());
+        let allowed_cols = ["amount", "total", "rate", "currency", "date", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+            format!("ORDER BY {} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY date DESC, created_at DESC".to_string()
+        }
+    } else {
+        "ORDER BY date DESC, created_at DESC".to_string()
+    };
+
+    // Get paginated payments
+    let sql = format!("SELECT id, purchase_id, amount, currency, rate, total, date, notes, created_at FROM purchase_payments {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    let payments = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let mut rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+        rusqlite_params.push(rusqlite::types::Value::Integer(per_page));
+        rusqlite_params.push(rusqlite::types::Value::Integer(offset));
+        
+        let mut rows = stmt.query(rusqlite::params_from_iter(rusqlite_params.iter()))
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        
+        let mut payments = Vec::new();
+        while let Some(row) = rows.next().map_err(|e| anyhow::anyhow!("{}", e))? {
+            payments.push(PurchasePayment {
+                id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                amount: row.get(2)?,
+                currency: row.get(3)?,
+                rate: row.get(4)?,
+                total: row.get(5)?,
+                date: row.get(6)?,
+                notes: row.get(7)?,
+                created_at: row.get(8)?,
+            });
+        }
+        Ok(payments)
+    }).map_err(|e| format!("Failed to fetch purchase payments: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+
+    Ok(PaginatedResponse {
+        items: payments,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
+}
+
+/// Get payments for a purchase
+#[tauri::command]
+fn get_purchase_payments_by_purchase(db_state: State<'_, Mutex<Option<Database>>>, purchase_id: i64) -> Result<Vec<PurchasePayment>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, purchase_id, amount, currency, rate, total, date, notes, created_at FROM purchase_payments WHERE purchase_id = ? ORDER BY date DESC, created_at DESC";
+    let payments = db
+        .query(sql, &[&purchase_id as &dyn rusqlite::ToSql], |row| {
+            Ok(PurchasePayment {
+                id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                amount: row.get(2)?,
+                currency: row.get(3)?,
+                rate: row.get(4)?,
+                total: row.get(5)?,
+                date: row.get(6)?,
+                notes: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase payments: {}", e))?;
+
+    Ok(payments)
+}
+
+/// Update a purchase payment
+#[tauri::command]
+fn update_purchase_payment(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    amount: f64,
+    currency: String,
+    rate: f64,
+    date: String,
+    notes: Option<String>,
+) -> Result<PurchasePayment, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let total = amount * rate;
+    let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
+
+    let update_sql = "UPDATE purchase_payments SET amount = ?, currency = ?, rate = ?, total = ?, date = ?, notes = ? WHERE id = ?";
+    db.execute(update_sql, &[
+        &amount as &dyn rusqlite::ToSql,
+        &currency as &dyn rusqlite::ToSql,
+        &rate as &dyn rusqlite::ToSql,
+        &total as &dyn rusqlite::ToSql,
+        &date as &dyn rusqlite::ToSql,
+        &notes_str as &dyn rusqlite::ToSql,
+        &id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update purchase payment: {}", e))?;
+
+    // Get the updated payment
+    let payment_sql = "SELECT id, purchase_id, amount, currency, rate, total, date, notes, created_at FROM purchase_payments WHERE id = ?";
+    let payments = db
+        .query(payment_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(PurchasePayment {
+                id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                amount: row.get(2)?,
+                currency: row.get(3)?,
+                rate: row.get(4)?,
+                total: row.get(5)?,
+                date: row.get(6)?,
+                notes: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase payment: {}", e))?;
+
+    if let Some(payment) = payments.first() {
+        Ok(payment.clone())
+    } else {
+        Err("Failed to retrieve updated purchase payment".to_string())
+    }
+}
+
+/// Delete a purchase payment
+#[tauri::command]
+fn delete_purchase_payment(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let delete_sql = "DELETE FROM purchase_payments WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete purchase payment: {}", e))?;
+
+    Ok("Purchase payment deleted successfully".to_string())
+}
+
 // Sale Model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sale {
@@ -5156,7 +5448,13 @@ pub fn run() {
             deposit_account,
             withdraw_account,
             get_account_transactions,
-            get_account_balance
+            get_account_balance,
+            init_purchase_payments_table,
+            create_purchase_payment,
+            get_purchase_payments,
+            get_purchase_payments_by_purchase,
+            update_purchase_payment,
+            delete_purchase_payment
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

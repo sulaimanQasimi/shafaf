@@ -28,6 +28,7 @@ import ProfileEdit from "./components/ProfileEdit";
 import CompanySettings from "./components/CompanySettings";
 import SaleInvoice from "./components/SaleInvoice";
 import AccountManagement from "./components/Account";
+import PurchasePaymentManagement from "./components/PurchasePayment";
 import Footer from "./components/Footer";
 import "./App.css";
 import { SaleWithItems, SalePayment } from "./utils/sales";
@@ -41,7 +42,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice" | "company" | "account";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice" | "company" | "account" | "purchasePayment";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -325,6 +326,13 @@ function App() {
     );
   }
 
+  // Show purchase payment page if selected
+  if (currentPage === "purchasePayment") {
+    return (
+      <PurchasePaymentManagement onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900" dir="rtl">
       {/* Header */}
@@ -580,6 +588,13 @@ function App() {
                 icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
                 color: "from-yellow-500 to-amber-500",
                 page: "account" as Page,
+              },
+              {
+                title: "پرداخت‌های خریداری",
+                description: "بیلانس تمویل کننده ها با نرخ ارز",
+                icon: "M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z",
+                color: "from-teal-500 to-cyan-500",
+                page: "purchasePayment" as Page,
               },
             ].map((item, index) => (
               <motion.button

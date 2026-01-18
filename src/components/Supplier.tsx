@@ -9,6 +9,17 @@ import {
   deleteSupplier,
   type Supplier,
 } from "../utils/supplier";
+import { getPurchases, type Purchase } from "../utils/purchase";
+import {
+  initPurchasePaymentsTable,
+  getPurchasePaymentsByPurchase,
+  createPurchasePayment,
+  deletePurchasePayment,
+  type PurchasePayment,
+} from "../utils/purchase_payment";
+import { getCurrencies, type Currency } from "../utils/currency";
+import { formatPersianDate, getCurrentPersianDate, persianToGeorgian } from "../utils/date";
+import PersianDatePicker from "./PersianDatePicker";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
 import Table from "./common/Table";
@@ -31,6 +42,25 @@ const translations = {
   actions: "عملیات",
   createdAt: "تاریخ ایجاد",
   updatedAt: "آخرین بروزرسانی",
+  totalPurchases: "مجموع خریداری‌ها",
+  totalPaid: "مجموع پرداخت شده",
+  totalRemaining: "مجموع باقیمانده",
+  viewBalance: "مشاهده بیلانس",
+  balance: "بیلانس",
+  purchase: "خریداری",
+  purchaseDate: "تاریخ خریداری",
+  purchaseTotal: "مبلغ کل",
+  paidAmount: "پرداخت شده",
+  remainingAmount: "باقیمانده",
+  addPayment: "افزودن پرداخت",
+  paymentAmount: "مبلغ پرداخت",
+  paymentCurrency: "ارز",
+  paymentRate: "نرخ",
+  paymentTotal: "مجموع",
+  paymentDate: "تاریخ پرداخت",
+  paymentNotes: "یادداشت",
+  noPayments: "هیچ پرداختی ثبت نشده است",
+  noPurchases: "هیچ خریداری ثبت نشده است",
   noSuppliers: "هیچ تمویل کننده‌ای ثبت نشده است",
   confirmDelete: "آیا از حذف این تمویل کننده اطمینان دارید؟",
   backToDashboard: "بازگشت به داشبورد",
@@ -64,9 +94,26 @@ interface SupplierManagementProps {
 
 export default function SupplierManagement({ onBack }: SupplierManagementProps) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierBalances, setSupplierBalances] = useState<Record<number, { totalPurchases: number; totalPaid: number; totalRemaining: number }>>({});
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [supplierPurchases, setSupplierPurchases] = useState<Purchase[]>([]);
+  const [purchasePaymentsMap, setPurchasePaymentsMap] = useState<Record<number, PurchasePayment[]>>({});
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [paymentFormData, setPaymentFormData] = useState({
+    purchase_id: "",
+    amount: "",
+    currency: "",
+    rate: "1",
+    total: "",
+    date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+    notes: "",
+  });
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [selectedPurchaseForPayment, setSelectedPurchaseForPayment] = useState<Purchase | null>(null);
   const [formData, setFormData] = useState({
     full_name: "",
     phone: "",
@@ -98,6 +145,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
 
       try {
         await initSuppliersTable();
+        await initPurchasePaymentsTable();
       } catch (err) {
         console.log("Table initialization:", err);
       }
@@ -105,9 +153,195 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
       const response = await getSuppliers(page, perPage, search, sortBy, sortOrder);
       setSuppliers(response.items);
       setTotalItems(response.total);
+
+      // Load all purchases to calculate balances
+      const allPurchases = await getPurchases(1, 10000, "", "date", "desc");
+      
+      // Calculate balances for each supplier
+      const balances: Record<number, { totalPurchases: number; totalPaid: number; totalRemaining: number }> = {};
+      
+      await Promise.all(
+        response.items.map(async (supplier) => {
+          const supplierPurchases = allPurchases.items.filter(p => p.supplier_id === supplier.id);
+          let totalPurchases = 0;
+          let totalPaid = 0;
+
+          for (const purchase of supplierPurchases) {
+            totalPurchases += purchase.total_amount;
+            try {
+              const payments = await getPurchasePaymentsByPurchase(purchase.id);
+              const paid = payments.reduce((sum, payment) => sum + payment.total, 0);
+              totalPaid += paid;
+            } catch (error) {
+              console.error(`Error loading payments for purchase ${purchase.id}:`, error);
+            }
+          }
+
+          balances[supplier.id] = {
+            totalPurchases,
+            totalPaid,
+            totalRemaining: totalPurchases - totalPaid,
+          };
+        })
+      );
+
+      setSupplierBalances(balances);
     } catch (error: any) {
       toast.error(translations.errors.fetch);
       console.error("Error loading suppliers:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenBalanceModal = async (supplier: Supplier) => {
+    setSelectedSupplier(supplier);
+    setIsBalanceModalOpen(true);
+    
+    try {
+      setLoading(true);
+      // Load all purchases for this supplier
+      const allPurchases = await getPurchases(1, 10000, "", "date", "desc");
+      const supplierPurchasesList = allPurchases.items.filter(p => p.supplier_id === supplier.id);
+      setSupplierPurchases(supplierPurchasesList);
+
+      // Load currencies
+      const currenciesData = await getCurrencies();
+      setCurrencies(currenciesData);
+
+      // Load payments for each purchase
+      const paymentsMap: Record<number, PurchasePayment[]> = {};
+      await Promise.all(
+        supplierPurchasesList.map(async (purchase) => {
+          try {
+            const payments = await getPurchasePaymentsByPurchase(purchase.id);
+            paymentsMap[purchase.id] = payments;
+          } catch (error) {
+            paymentsMap[purchase.id] = [];
+          }
+        })
+      );
+      setPurchasePaymentsMap(paymentsMap);
+    } catch (error: any) {
+      toast.error("خطا در بارگذاری اطلاعات بیلانس");
+      console.error("Error loading balance:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCloseBalanceModal = () => {
+    setIsBalanceModalOpen(false);
+    setSelectedSupplier(null);
+    setSupplierPurchases([]);
+    setPurchasePaymentsMap({});
+  };
+
+  const calculatePaidAmount = (purchaseId: number): number => {
+    const payments = purchasePaymentsMap[purchaseId] || [];
+    return payments.reduce((sum, payment) => sum + payment.total, 0);
+  };
+
+  const calculateRemainingAmount = (purchase: Purchase): number => {
+    const paid = calculatePaidAmount(purchase.id);
+    return purchase.total_amount - paid;
+  };
+
+  const handleOpenPaymentModal = (purchase: Purchase) => {
+    setSelectedPurchaseForPayment(purchase);
+    setPaymentFormData({
+      purchase_id: purchase.id.toString(),
+      amount: "",
+      currency: currencies[0]?.name || "",
+      rate: "1",
+      total: "",
+      date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+      notes: "",
+    });
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleClosePaymentModal = () => {
+    setIsPaymentModalOpen(false);
+    setSelectedPurchaseForPayment(null);
+    setPaymentFormData({
+      purchase_id: "",
+      amount: "",
+      currency: "",
+      rate: "1",
+      total: "",
+      date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+      notes: "",
+    });
+  };
+
+  const calculatePaymentTotal = () => {
+    const amount = parseFloat(paymentFormData.amount) || 0;
+    const rate = parseFloat(paymentFormData.rate) || 1;
+    return amount * rate;
+  };
+
+  useEffect(() => {
+    if (isPaymentModalOpen) {
+      const total = calculatePaymentTotal();
+      setPaymentFormData(prev => ({ ...prev, total: total.toFixed(2) }));
+    }
+  }, [paymentFormData.amount, paymentFormData.rate, isPaymentModalOpen]);
+
+  const handleAddPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPurchaseForPayment) return;
+
+    if (!paymentFormData.amount || parseFloat(paymentFormData.amount) <= 0) {
+      toast.error("مبلغ پرداخت باید بیشتر از صفر باشد");
+      return;
+    }
+
+    if (!paymentFormData.currency) {
+      toast.error("انتخاب ارز الزامی است");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const amount = parseFloat(paymentFormData.amount);
+      const rate = parseFloat(paymentFormData.rate) || 1;
+      await createPurchasePayment(
+        selectedPurchaseForPayment.id,
+        amount,
+        paymentFormData.currency,
+        rate,
+        paymentFormData.date,
+        paymentFormData.notes || null
+      );
+      toast.success("پرداخت با موفقیت ثبت شد");
+      handleClosePaymentModal();
+      // Reload balance data
+      if (selectedSupplier) {
+        await handleOpenBalanceModal(selectedSupplier);
+      }
+      await loadSuppliers();
+    } catch (error: any) {
+      toast.error("خطا در ثبت پرداخت");
+      console.error("Error adding payment:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: number, purchaseId: number) => {
+    try {
+      setLoading(true);
+      await deletePurchasePayment(paymentId);
+      toast.success("پرداخت با موفقیت حذف شد");
+      // Reload balance data
+      if (selectedSupplier) {
+        await handleOpenBalanceModal(selectedSupplier);
+      }
+      await loadSuppliers();
+    } catch (error: any) {
+      toast.error("خطا در حذف پرداخت");
+      console.error("Error deleting payment:", error);
     } finally {
       setLoading(false);
     }
@@ -246,6 +480,40 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
       ) : <span className="text-gray-400">-</span>
     },
     {
+      key: "totalPurchases", label: translations.totalPurchases, sortable: false,
+      render: (s: Supplier) => {
+        const balance = supplierBalances[s.id];
+        return (
+          <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+            {balance ? balance.totalPurchases.toLocaleString('fa-IR') : '0'} افغانی
+          </span>
+        );
+      }
+    },
+    {
+      key: "totalPaid", label: translations.totalPaid, sortable: false,
+      render: (s: Supplier) => {
+        const balance = supplierBalances[s.id];
+        return (
+          <span className="text-lg font-bold text-green-600 dark:text-green-400">
+            {balance ? balance.totalPaid.toLocaleString('fa-IR') : '0'} افغانی
+          </span>
+        );
+      }
+    },
+    {
+      key: "totalRemaining", label: translations.totalRemaining, sortable: false,
+      render: (s: Supplier) => {
+        const balance = supplierBalances[s.id];
+        const remaining = balance ? balance.totalRemaining : 0;
+        return (
+          <span className={`text-lg font-bold ${remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+            {remaining.toLocaleString('fa-IR')} افغانی
+          </span>
+        );
+      }
+    },
+    {
       key: "created_at", label: translations.createdAt, sortable: true,
       render: (s: Supplier) => (
         <span className="text-gray-600 dark:text-gray-400 text-sm">
@@ -305,6 +573,17 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
           loading={loading}
           actions={(supplier) => (
             <div className="flex items-center gap-2">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => handleOpenBalanceModal(supplier)}
+                className="p-2 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                title={translations.viewBalance}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </motion.button>
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
@@ -537,6 +816,357 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Balance Modal */}
+        <AnimatePresence>
+          {isBalanceModalOpen && selectedSupplier && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4"
+              onClick={handleCloseBalanceModal}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-6xl max-h-[90vh] overflow-y-auto border border-purple-100 dark:border-purple-900/30"
+              >
+                {/* Header */}
+                <div className="flex justify-between items-center mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-teal-500 rounded-2xl flex items-center justify-center shadow-lg">
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-3xl font-bold bg-gradient-to-r from-green-600 to-teal-600 bg-clip-text text-transparent">
+                        {translations.balance} - {selectedSupplier.full_name}
+                      </h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        مشاهده خریداری‌ها و پرداخت‌های تمویل کننده
+                      </p>
+                    </div>
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleCloseBalanceModal}
+                    className="p-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  >
+                    <svg className="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </motion.button>
+                </div>
+
+                {/* Summary Cards */}
+                {supplierBalances[selectedSupplier.id] && (
+                  <div className="grid grid-cols-3 gap-4 mb-8">
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      className="p-5 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-2xl border border-purple-200/50 dark:border-purple-700/30">
+                      <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                        {translations.totalPurchases}
+                      </div>
+                      <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                        {supplierBalances[selectedSupplier.id].totalPurchases.toLocaleString('fa-IR')} افغانی
+                      </div>
+                    </motion.div>
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      className="p-5 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-2xl border border-green-200/50 dark:border-green-700/30">
+                      <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                        {translations.totalPaid}
+                      </div>
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {supplierBalances[selectedSupplier.id].totalPaid.toLocaleString('fa-IR')} افغانی
+                      </div>
+                    </motion.div>
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      className="p-5 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 rounded-2xl border border-red-200/50 dark:border-red-700/30">
+                      <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                        {translations.totalRemaining}
+                      </div>
+                      <div className={`text-2xl font-bold ${supplierBalances[selectedSupplier.id].totalRemaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                        {supplierBalances[selectedSupplier.id].totalRemaining.toLocaleString('fa-IR')} افغانی
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+
+                {/* Purchases List */}
+                <div className="space-y-4">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                    {translations.purchase}
+                  </h3>
+                  {supplierPurchases.length > 0 ? (
+                    supplierPurchases.map((purchase) => {
+                      const paid = calculatePaidAmount(purchase.id);
+                      const remaining = calculateRemainingAmount(purchase);
+                      const payments = purchasePaymentsMap[purchase.id] || [];
+                      return (
+                        <motion.div
+                          key={purchase.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="p-6 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-200 dark:border-gray-600"
+                        >
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <div className="font-bold text-lg text-gray-900 dark:text-white mb-2">
+                                خریداری #{purchase.id} - {formatPersianDate(purchase.date)}
+                              </div>
+                              <div className="grid grid-cols-3 gap-4 text-sm">
+                                <div>
+                                  <span className="text-gray-500 dark:text-gray-400">مبلغ کل:</span>
+                                  <span className="font-bold text-purple-600 dark:text-purple-400 mr-2">
+                                    {purchase.total_amount.toLocaleString('fa-IR')} افغانی
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500 dark:text-gray-400">پرداخت شده:</span>
+                                  <span className="font-bold text-green-600 dark:text-green-400 mr-2">
+                                    {paid.toLocaleString('fa-IR')} افغانی
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500 dark:text-gray-400">باقیمانده:</span>
+                                  <span className={`font-bold mr-2 ${remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                    {remaining.toLocaleString('fa-IR')} افغانی
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleOpenPaymentModal(purchase)}
+                              className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg text-sm font-semibold hover:shadow-lg transition-all"
+                            >
+                              {translations.addPayment}
+                            </motion.button>
+                          </div>
+
+                          {/* Payments List */}
+                          {payments.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                              <div className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                                پرداخت‌ها:
+                              </div>
+                              <div className="space-y-2">
+                                {payments.map((payment) => (
+                                  <div
+                                    key={payment.id}
+                                    className="flex justify-between items-center p-3 bg-white dark:bg-gray-800 rounded-lg"
+                                  >
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-3">
+                                        <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                                          {payment.amount.toLocaleString('fa-IR')} {payment.currency}
+                                        </span>
+                                        <span className="text-xs text-gray-500">× {payment.rate}</span>
+                                        <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                                          = {payment.total.toLocaleString('fa-IR')} افغانی
+                                        </span>
+                                      </div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        {formatPersianDate(payment.date)}
+                                        {payment.notes && ` • ${payment.notes}`}
+                                      </div>
+                                    </div>
+                                    <motion.button
+                                      whileHover={{ scale: 1.1 }}
+                                      whileTap={{ scale: 0.9 }}
+                                      onClick={() => handleDeletePayment(payment.id, purchase.id)}
+                                      className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </motion.button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      {translations.noPurchases}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Payment Modal */}
+        <AnimatePresence>
+          {isPaymentModalOpen && selectedPurchaseForPayment && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              onClick={handleClosePaymentModal}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+              >
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+                  {translations.addPayment} - خریداری #{selectedPurchaseForPayment.id}
+                </h2>
+                <form onSubmit={handleAddPayment} className="space-y-4">
+                  <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl mb-4">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">مبلغ کل خریداری</div>
+                    <div className="text-xl font-bold text-gray-900 dark:text-white">
+                      {selectedPurchaseForPayment.total_amount.toLocaleString('fa-IR')} افغانی
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                      پرداخت شده: {calculatePaidAmount(selectedPurchaseForPayment.id).toLocaleString('fa-IR')} افغانی
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      باقیمانده: {calculateRemainingAmount(selectedPurchaseForPayment).toLocaleString('fa-IR')} افغانی
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        {translations.paymentAmount}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={paymentFormData.amount}
+                        onChange={(e) => setPaymentFormData({ ...paymentFormData, amount: e.target.value })}
+                        required
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                        placeholder="مبلغ"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        {translations.paymentCurrency}
+                      </label>
+                      <select
+                        value={paymentFormData.currency}
+                        onChange={(e) => setPaymentFormData({ ...paymentFormData, currency: e.target.value })}
+                        required
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                        dir="rtl"
+                      >
+                        <option value="">انتخاب ارز</option>
+                        {currencies.map((currency) => (
+                          <option key={currency.id} value={currency.name}>
+                            {currency.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        {translations.paymentRate}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={paymentFormData.rate}
+                        onChange={(e) => setPaymentFormData({ ...paymentFormData, rate: e.target.value })}
+                        required
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                        placeholder="نرخ"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        {translations.paymentTotal}
+                      </label>
+                      <input
+                        type="text"
+                        value={paymentFormData.total}
+                        readOnly
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white"
+                        dir="ltr"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      {translations.paymentDate}
+                    </label>
+                    <PersianDatePicker
+                      value={paymentFormData.date}
+                      onChange={(date) => setPaymentFormData({ ...paymentFormData, date })}
+                      placeholder="تاریخ را انتخاب کنید"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      {translations.paymentNotes}
+                    </label>
+                    <textarea
+                      value={paymentFormData.notes}
+                      onChange={(e) => setPaymentFormData({ ...paymentFormData, notes: e.target.value })}
+                      rows={3}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200 resize-none"
+                      placeholder="یادداشت (اختیاری)"
+                      dir="rtl"
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleClosePaymentModal}
+                      className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-colors"
+                    >
+                      {translations.cancel}
+                    </motion.button>
+                    <motion.button
+                      type="submit"
+                      disabled={loading}
+                      whileHover={{ scale: loading ? 1 : 1.05 }}
+                      whileTap={{ scale: loading ? 1 : 0.95 }}
+                      className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                            className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+                          />
+                          {translations.save}
+                        </span>
+                      ) : (
+                        translations.addPayment
+                      )}
+                    </motion.button>
+                  </div>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <Footer />
       </div>
     </div>

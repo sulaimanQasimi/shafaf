@@ -1,9 +1,12 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { SaleWithItems, SalePayment } from "../utils/sales";
 import { Customer } from "../utils/customer";
 import { Product } from "../utils/product";
 import { Unit } from "../utils/unit";
 import { formatPersianDateLong } from "../utils/date";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+import toast from "react-hot-toast";
 
 interface SaleInvoiceProps {
     saleData: SaleWithItems;

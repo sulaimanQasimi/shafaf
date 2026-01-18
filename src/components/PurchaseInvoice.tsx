@@ -1,9 +1,12 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { PurchaseWithItems } from "../utils/purchase";
 import { Supplier } from "../utils/supplier";
 import { Product } from "../utils/product";
 import { Unit } from "../utils/unit";
 import { formatPersianDateLong } from "../utils/date";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+import toast from "react-hot-toast";
 
 interface PurchaseInvoiceProps {
     purchaseData: PurchaseWithItems;
@@ -21,6 +24,7 @@ export default function PurchaseInvoice({
     onClose,
 }: PurchaseInvoiceProps) {
     const printRef = useRef<HTMLDivElement>(null);
+    const [isExporting, setIsExporting] = useState(false);
 
     const formatDate = (dateString: string) => {
         return formatPersianDateLong(dateString);
@@ -40,178 +44,144 @@ export default function PurchaseInvoice({
         return unit?.name || "نامشخص";
     };
 
-    const handlePrint = () => {
-        if (printRef.current) {
-            const printWindow = window.open("", "_blank");
-            if (printWindow) {
-                printWindow.document.write(`
-                    <!DOCTYPE html>
-                    <html dir="rtl" lang="fa">
-                    <head>
-                        <meta charset="UTF-8">
-                        <title>فاکتور خرید #${purchaseData.purchase.id}</title>
-                        <style>
-                            ${getPrintStyles()}
-                        </style>
-                    </head>
-                    <body>
-                        ${printRef.current.innerHTML}
-                    </body>
-                    </html>
-                `);
-                printWindow.document.close();
-                printWindow.focus();
-                setTimeout(() => {
-                    printWindow.print();
-                    printWindow.close();
-                }, 250);
-            }
+    const handleExportPDF = async () => {
+        if (!printRef.current) {
+            toast.error("خطا در تولید PDF");
+            return;
         }
-    };
 
-    const getPrintStyles = () => {
-        return `
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
+        try {
+            setIsExporting(true);
+            
+            // Hide the action buttons before capturing
+            const actionButtons = document.querySelector('.no-print');
+            if (actionButtons) {
+                (actionButtons as HTMLElement).style.display = 'none';
             }
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                direction: rtl;
-                padding: 20px;
-                background: white;
-                color: #1a1a1a;
-            }
-            .invoice-container {
-                max-width: 800px;
-                margin: 0 auto;
-                background: white;
-                padding: 40px;
-                box-shadow: 0 0 20px rgba(0,0,0,0.1);
-            }
-            .invoice-header {
-                border-bottom: 3px solid #059669;
-                padding-bottom: 20px;
-                margin-bottom: 30px;
-            }
-            .invoice-title {
-                font-size: 32px;
-                font-weight: bold;
-                color: #059669;
-                margin-bottom: 10px;
-            }
-            .invoice-number {
-                font-size: 18px;
-                color: #64748b;
-            }
-            .info-section {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 30px;
-                margin-bottom: 30px;
-            }
-            .info-box {
-                background: #f0fdf4;
-                padding: 20px;
-                border-radius: 8px;
-                border-right: 4px solid #059669;
-            }
-            .info-title {
-                font-size: 14px;
-                color: #64748b;
-                margin-bottom: 8px;
-                font-weight: 600;
-            }
-            .info-value {
-                font-size: 16px;
-                color: #1a1a1a;
-                font-weight: 500;
-            }
-            .items-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 30px;
-            }
-            .items-table thead {
-                background: #059669;
-                color: white;
-            }
-            .items-table th {
-                padding: 15px;
-                text-align: right;
-                font-weight: 600;
-                font-size: 14px;
-            }
-            .items-table td {
-                padding: 15px;
-                border-bottom: 1px solid #e2e8f0;
-            }
-            .items-table tbody tr:hover {
-                background: #f0fdf4;
-            }
-            .total-section {
-                margin-top: 20px;
-                padding-top: 20px;
-                border-top: 2px solid #e2e8f0;
-            }
-            .total-row {
-                display: flex;
-                justify-content: space-between;
-                padding: 12px 0;
-                font-size: 16px;
-            }
-            .total-label {
-                color: #64748b;
-                font-weight: 600;
-            }
-            .total-value {
-                color: #1a1a1a;
-                font-weight: 700;
-                font-size: 18px;
-            }
-            .grand-total {
-                background: #059669;
-                color: white;
-                padding: 20px;
-                border-radius: 8px;
-                margin-top: 20px;
-            }
-            .grand-total .total-label,
-            .grand-total .total-value {
-                color: white;
-                font-size: 20px;
-            }
-            .notes-section {
-                margin-top: 30px;
-                padding: 20px;
-                background: #f0fdf4;
-                border-radius: 8px;
-                border-right: 4px solid #059669;
-            }
-            .notes-title {
-                font-size: 16px;
-                font-weight: 600;
-                color: #059669;
-                margin-bottom: 10px;
-            }
-            .notes-text {
-                color: #64748b;
-                line-height: 1.6;
-            }
-            @media print {
-                body {
-                    padding: 0;
-                }
+
+            // Create a clone of the element to avoid modifying the original
+            const clone = printRef.current.cloneNode(true) as HTMLElement;
+            
+            // Add inline styles to override oklch colors with standard colors
+            const styleOverrides = document.createElement('style');
+            styleOverrides.textContent = `
                 .invoice-container {
-                    box-shadow: none;
-                    padding: 20px;
+                    background: #ffffff !important;
+                    color: #1a1a1a !important;
                 }
-                .no-print {
-                    display: none;
+                .invoice-title {
+                    color: #059669 !important;
                 }
+                .invoice-number {
+                    color: #64748b !important;
+                }
+                .info-box {
+                    background: #f0fdf4 !important;
+                }
+                .info-title {
+                    color: #64748b !important;
+                }
+                .info-value {
+                    color: #1a1a1a !important;
+                }
+                .items-table thead {
+                    background: #059669 !important;
+                    color: #ffffff !important;
+                }
+                .items-table td {
+                    color: #1a1a1a !important;
+                }
+                .total-label {
+                    color: #64748b !important;
+                }
+                .total-value {
+                    color: #1a1a1a !important;
+                }
+                .grand-total {
+                    background: #059669 !important;
+                    color: #ffffff !important;
+                }
+                .grand-total .total-label,
+                .grand-total .total-value {
+                    color: #ffffff !important;
+                }
+                .notes-title {
+                    color: #059669 !important;
+                }
+                .notes-text {
+                    color: #64748b !important;
+                }
+                .text-gray-500 {
+                    color: #64748b !important;
+                }
+                .text-gray-600 {
+                    color: #475569 !important;
+                }
+                .text-green-600 {
+                    color: #059669 !important;
+                }
+            `;
+            clone.appendChild(styleOverrides);
+            
+            // Temporarily append clone to body for rendering
+            clone.style.position = 'absolute';
+            clone.style.left = '-9999px';
+            clone.style.top = '0';
+            document.body.appendChild(clone);
+
+            // Capture the invoice as canvas
+            const canvas = await html2canvas(clone, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                ignoreElements: (element) => {
+                    // Ignore any elements that might cause issues
+                    return element.classList.contains('no-print');
+                },
+            });
+
+            // Remove clone from DOM
+            document.body.removeChild(clone);
+
+            // Show action buttons again
+            if (actionButtons) {
+                (actionButtons as HTMLElement).style.display = '';
             }
-        `;
+
+            // Calculate PDF dimensions
+            const imgWidth = 210; // A4 width in mm
+            const pageHeight = 297; // A4 height in mm
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            let heightLeft = imgHeight;
+
+            // Create PDF
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            let position = 0;
+
+            // Add first page
+            pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+
+            // Add additional pages if content is longer than one page
+            while (heightLeft >= 0) {
+                position = heightLeft - imgHeight;
+                pdf.addPage();
+                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+            }
+
+            // Save the PDF
+            const fileName = `فاکتور-خرید-${purchaseData.purchase.id}-${formatDate(purchaseData.purchase.date).replace(/\//g, '-')}.pdf`;
+            pdf.save(fileName);
+            
+            toast.success("PDF با موفقیت دانلود شد");
+        } catch (error) {
+            console.error("Error exporting PDF:", error);
+            toast.error("خطا در تولید PDF");
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     return (
@@ -426,15 +396,32 @@ export default function PurchaseInvoice({
                     {/* Action Buttons */}
                     <div className="no-print flex justify-end gap-4 p-6 border-t bg-gray-50">
                         <button
-                            onClick={handlePrint}
-                            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                            onClick={handleExportPDF}
+                            disabled={isExporting}
+                            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
-                            چاپ فاکتور
+                            {isExporting ? (
+                                <>
+                                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    در حال تولید...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    دانلود PDF
+                                </>
+                            )}
                         </button>
                         {onClose && (
                             <button
                                 onClick={onClose}
-                                className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors font-semibold"
+                                disabled={isExporting}
+                                className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 بستن
                             </button>

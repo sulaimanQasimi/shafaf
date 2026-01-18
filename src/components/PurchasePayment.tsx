@@ -225,7 +225,6 @@ export default function PurchasePaymentManagement({ onBack }: PurchasePaymentMan
 
         const amount = parseFloat(formData.amount);
         const rate = parseFloat(formData.rate) || 1;
-        const total = amount * rate;
         const purchase_id = parseInt(formData.purchase_id);
 
         try {

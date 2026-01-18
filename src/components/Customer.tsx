@@ -374,7 +374,7 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
     }
   };
 
-  const handleDeletePayment = async (paymentId: number, saleId: number) => {
+  const handleDeletePayment = async (paymentId: number, _saleId: number) => {
     try {
       setLoading(true);
       await deleteSalePayment(paymentId);

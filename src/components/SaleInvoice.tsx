@@ -25,7 +25,7 @@ export default function SaleInvoice({
     customer,
     products,
     units,
-    payments,
+    payments: _payments,
     companySettings,
     onClose,
 }: SaleInvoiceProps) {

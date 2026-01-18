@@ -329,7 +329,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
     }
   };
 
-  const handleDeletePayment = async (paymentId: number, purchaseId: number) => {
+  const handleDeletePayment = async (paymentId: number, _purchaseId: number) => {
     try {
       setLoading(true);
       await deletePurchasePayment(paymentId);

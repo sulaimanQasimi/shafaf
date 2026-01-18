@@ -9,6 +9,8 @@ export interface Product {
   supplier_id?: number | null;
   stock_quantity?: number | null;
   unit?: string | null;
+  image_path?: string | null;
+  bar_code?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -30,6 +32,8 @@ export async function initProductsTable(): Promise<string> {
  * @param supplier_id Optional supplier ID
  * @param stock_quantity Optional stock quantity
  * @param unit Optional unit (e.g., kg, piece)
+ * @param image_path Optional image path
+ * @param bar_code Optional bar code
  * @returns Promise with Product
  */
 export async function createProduct(
@@ -39,7 +43,9 @@ export async function createProduct(
   currency_id?: number | null,
   supplier_id?: number | null,
   stock_quantity?: number | null,
-  unit?: string | null
+  unit?: string | null,
+  image_path?: string | null,
+  bar_code?: string | null
 ): Promise<Product> {
   return await invoke<Product>("create_product", {
     name,
@@ -49,6 +55,8 @@ export async function createProduct(
     supplierId: supplier_id || null,
     stockQuantity: stock_quantity || null,
     unit: unit || null,
+    imagePath: image_path || null,
+    barCode: bar_code || null,
   });
 }
 
@@ -95,6 +103,8 @@ export async function getProducts(
  * @param supplier_id Optional supplier ID
  * @param stock_quantity Optional stock quantity
  * @param unit Optional unit
+ * @param image_path Optional image path
+ * @param bar_code Optional bar code
  * @returns Promise with Product
  */
 export async function updateProduct(
@@ -105,7 +115,9 @@ export async function updateProduct(
   currency_id?: number | null,
   supplier_id?: number | null,
   stock_quantity?: number | null,
-  unit?: string | null
+  unit?: string | null,
+  image_path?: string | null,
+  bar_code?: string | null
 ): Promise<Product> {
   return await invoke<Product>("update_product", {
     id,
@@ -116,6 +128,8 @@ export async function updateProduct(
     supplierId: supplier_id || null,
     stockQuantity: stock_quantity || null,
     unit: unit || null,
+    imagePath: image_path || null,
+    barCode: bar_code || null,
   });
 }
 

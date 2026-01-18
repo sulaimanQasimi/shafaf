@@ -1242,6 +1242,8 @@ pub struct Product {
     pub supplier_id: Option<i64>,
     pub stock_quantity: Option<f64>,
     pub unit: Option<String>,
+    pub image_path: Option<String>,
+    pub bar_code: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -1262,6 +1264,8 @@ fn init_products_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
             supplier_id INTEGER,
             stock_quantity REAL,
             unit TEXT,
+            image_path TEXT,
+            bar_code TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (currency_id) REFERENCES currencies(id),
@@ -1271,6 +1275,16 @@ fn init_products_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
 
     db.execute(create_table_sql, &[])
         .map_err(|e| format!("Failed to create products table: {}", e))?;
+
+    // Add new columns if they don't exist (for existing databases)
+    let alter_sqls = vec![
+        "ALTER TABLE products ADD COLUMN image_path TEXT",
+        "ALTER TABLE products ADD COLUMN bar_code TEXT",
+    ];
+    
+    for alter_sql in alter_sqls {
+        let _ = db.execute(alter_sql, &[]);
+    }
 
     Ok("Products table initialized successfully".to_string())
 }
@@ -1286,14 +1300,18 @@ fn create_product(
     supplier_id: Option<i64>,
     stock_quantity: Option<f64>,
     unit: Option<String>,
+    image_path: Option<String>,
+    bar_code: Option<String>,
 ) -> Result<Product, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Insert new product
-    let insert_sql = "INSERT INTO products (name, description, price, currency_id, supplier_id, stock_quantity, unit) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    let insert_sql = "INSERT INTO products (name, description, price, currency_id, supplier_id, stock_quantity, unit, image_path, bar_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
     let description_str: Option<&str> = description.as_ref().map(|s| s.as_str());
     let unit_str: Option<&str> = unit.as_ref().map(|s| s.as_str());
+    let image_path_str: Option<&str> = image_path.as_ref().map(|s| s.as_str());
+    let bar_code_str: Option<&str> = bar_code.as_ref().map(|s| s.as_str());
     db.execute(insert_sql, &[
         &name as &dyn rusqlite::ToSql,
         &description_str as &dyn rusqlite::ToSql,
@@ -1302,11 +1320,13 @@ fn create_product(
         &supplier_id as &dyn rusqlite::ToSql,
         &stock_quantity as &dyn rusqlite::ToSql,
         &unit_str as &dyn rusqlite::ToSql,
+        &image_path_str as &dyn rusqlite::ToSql,
+        &bar_code_str as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to insert product: {}", e))?;
 
     // Get the created product
-    let product_sql = "SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, created_at, updated_at FROM products WHERE name = ? ORDER BY id DESC LIMIT 1";
+    let product_sql = "SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, image_path, bar_code, created_at, updated_at FROM products WHERE name = ? ORDER BY id DESC LIMIT 1";
     let products = db
         .query(product_sql, &[&name as &dyn rusqlite::ToSql], |row| {
             Ok(Product {
@@ -1318,8 +1338,10 @@ fn create_product(
                 supplier_id: row.get::<_, Option<i64>>(5)?,
                 stock_quantity: row.get::<_, Option<f64>>(6)?,
                 unit: row.get::<_, Option<String>>(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
+                image_path: row.get::<_, Option<String>>(8)?,
+                bar_code: row.get::<_, Option<String>>(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })
         .map_err(|e| format!("Failed to fetch product: {}", e))?;
@@ -1382,7 +1404,7 @@ fn get_products(
         "ORDER BY created_at DESC".to_string()
     };
 
-    let sql = format!("SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, created_at, updated_at FROM products {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    let sql = format!("SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, image_path, bar_code, created_at, updated_at FROM products {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
     
     params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
     params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
@@ -1407,8 +1429,10 @@ fn get_products(
                 supplier_id: row.get::<_, Option<i64>>(5)?,
                 stock_quantity: row.get::<_, Option<f64>>(6)?,
                 unit: row.get::<_, Option<String>>(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
+                image_path: row.get::<_, Option<String>>(8)?,
+                bar_code: row.get::<_, Option<String>>(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
@@ -1442,14 +1466,18 @@ fn update_product(
     supplier_id: Option<i64>,
     stock_quantity: Option<f64>,
     unit: Option<String>,
+    image_path: Option<String>,
+    bar_code: Option<String>,
 ) -> Result<Product, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Update product
-    let update_sql = "UPDATE products SET name = ?, description = ?, price = ?, currency_id = ?, supplier_id = ?, stock_quantity = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let update_sql = "UPDATE products SET name = ?, description = ?, price = ?, currency_id = ?, supplier_id = ?, stock_quantity = ?, unit = ?, image_path = ?, bar_code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     let description_str: Option<&str> = description.as_ref().map(|s| s.as_str());
     let unit_str: Option<&str> = unit.as_ref().map(|s| s.as_str());
+    let image_path_str: Option<&str> = image_path.as_ref().map(|s| s.as_str());
+    let bar_code_str: Option<&str> = bar_code.as_ref().map(|s| s.as_str());
     db.execute(update_sql, &[
         &name as &dyn rusqlite::ToSql,
         &description_str as &dyn rusqlite::ToSql,
@@ -1458,12 +1486,14 @@ fn update_product(
         &supplier_id as &dyn rusqlite::ToSql,
         &stock_quantity as &dyn rusqlite::ToSql,
         &unit_str as &dyn rusqlite::ToSql,
+        &image_path_str as &dyn rusqlite::ToSql,
+        &bar_code_str as &dyn rusqlite::ToSql,
         &id as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to update product: {}", e))?;
 
     // Get the updated product
-    let product_sql = "SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, created_at, updated_at FROM products WHERE id = ?";
+    let product_sql = "SELECT id, name, description, price, currency_id, supplier_id, stock_quantity, unit, image_path, bar_code, created_at, updated_at FROM products WHERE id = ?";
     let products = db
         .query(product_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Product {
@@ -1475,8 +1505,10 @@ fn update_product(
                 supplier_id: row.get::<_, Option<i64>>(5)?,
                 stock_quantity: row.get::<_, Option<f64>>(6)?,
                 unit: row.get::<_, Option<String>>(7)?,
-                created_at: row.get(8)?,
-                updated_at: row.get(9)?,
+                image_path: row.get::<_, Option<String>>(8)?,
+                bar_code: row.get::<_, Option<String>>(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })
         .map_err(|e| format!("Failed to fetch product: {}", e))?;

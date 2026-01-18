@@ -287,7 +287,6 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
               placeholder="جستجو بر اساس نام، شماره تماس یا ایمیل..."
             />
           </div>
-        </motion.div>
 
         <Table
           data={customers}

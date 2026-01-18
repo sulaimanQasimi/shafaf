@@ -287,7 +287,6 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
               placeholder="جستجو بر اساس نام، شماره تماس یا ایمیل..."
             />
           </div>
-        </motion.div>
 
         <Table
           data={suppliers}

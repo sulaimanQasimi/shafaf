@@ -32,6 +32,8 @@ const translations = {
   supplier: "تمویل کننده",
   stockQuantity: "مقدار موجودی",
   unit: "واحد",
+  image: "تصویر",
+  barCode: "بارکد",
   selectCurrency: "انتخاب ارز",
   selectSupplier: "انتخاب تمویل کننده",
   noCurrency: "بدون ارز",
@@ -42,6 +44,8 @@ const translations = {
   noProducts: "هیچ جنسی ثبت نشده است",
   confirmDelete: "آیا از حذف این جنس اطمینان دارید؟",
   backToDashboard: "بازگشت به داشبورد",
+  selectImage: "انتخاب تصویر",
+  removeImage: "حذف تصویر",
   success: {
     created: "جنس با موفقیت ایجاد شد",
     updated: "جنس با موفقیت بروزرسانی شد",
@@ -83,7 +87,10 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
     supplier_id: "",
     stock_quantity: "",
     unit: "",
+    image_path: "",
+    bar_code: "",
   });
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   // Pagination & Search
@@ -131,6 +138,27 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
     }
   };
 
+  const handleSelectImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Create a local URL for preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        setImagePreview(result);
+        // Store the file path or convert to base64 if needed
+        // For now, storing as data URL for preview
+        setFormData({ ...formData, image_path: result });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImagePreview(null);
+    setFormData({ ...formData, image_path: "" });
+  };
+
   const handleOpenModal = (product?: Product) => {
     if (product) {
       setEditingProduct(product);
@@ -142,7 +170,10 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
         supplier_id: product.supplier_id?.toString() || "",
         stock_quantity: product.stock_quantity?.toString() || "",
         unit: product.unit || "",
+        image_path: product.image_path || "",
+        bar_code: product.bar_code || "",
       });
+      setImagePreview(product.image_path || null);
     } else {
       setEditingProduct(null);
       setFormData({
@@ -153,7 +184,10 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
         supplier_id: "",
         stock_quantity: "",
         unit: "",
+        image_path: "",
+        bar_code: "",
       });
+      setImagePreview(null);
     }
     setIsModalOpen(true);
   };
@@ -169,7 +203,10 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
       supplier_id: "",
       stock_quantity: "",
       unit: "",
+      image_path: "",
+      bar_code: "",
     });
+    setImagePreview(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -190,6 +227,8 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
         supplier_id: formData.supplier_id ? parseInt(formData.supplier_id) : null,
         stock_quantity: formData.stock_quantity ? parseFloat(formData.stock_quantity) : null,
         unit: formData.unit || null,
+        image_path: formData.image_path || null,
+        bar_code: formData.bar_code || null,
       };
 
       if (editingProduct) {
@@ -201,7 +240,9 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
           productData.currency_id,
           productData.supplier_id,
           productData.stock_quantity,
-          productData.unit
+          productData.unit,
+          productData.image_path,
+          productData.bar_code
         );
         toast.success(translations.success.updated);
       } else {
@@ -212,7 +253,9 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
           productData.currency_id,
           productData.supplier_id,
           productData.stock_quantity,
-          productData.unit
+          productData.unit,
+          productData.image_path,
+          productData.bar_code
         );
         toast.success(translations.success.created);
       }
@@ -258,12 +301,31 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
       key: "name", label: translations.name, sortable: true,
       render: (p: Product) => (
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm">
-            {p.name.charAt(0)}
-          </div>
+          {p.image_path ? (
+            <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+              <img
+                src={p.image_path}
+                alt={p.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = "none";
+                  const parent = target.parentElement;
+                  if (parent) {
+                    parent.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm">${p.name.charAt(0)}</div>`;
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm">
+              {p.name.charAt(0)}
+            </div>
+          )}
           <div>
             <div className="font-medium text-gray-900 dark:text-white">{p.name}</div>
             {p.description && <div className="text-xs text-gray-500 truncate max-w-[150px]">{p.description}</div>}
+            {p.bar_code && <div className="text-xs text-gray-400 truncate max-w-[150px]">بارکد: {p.bar_code}</div>}
           </div>
         </div>
       )
@@ -504,6 +566,58 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
                         </option>
                       ))}
                     </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      {translations.barCode}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.bar_code}
+                      onChange={(e) => setFormData({ ...formData, bar_code: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                      placeholder="بارکد را وارد کنید (اختیاری)"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      {translations.image}
+                    </label>
+                    <div className="space-y-3">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleSelectImage}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                      />
+                      {imagePreview && (
+                        <div className="relative">
+                          <div className="w-32 h-32 border-2 border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-700 flex items-center justify-center">
+                            <img
+                              src={imagePreview}
+                              alt="Preview"
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                const parent = target.parentElement;
+                                if (parent) {
+                                  parent.innerHTML = '<p class="text-gray-400 text-sm">خطا در بارگذاری تصویر</p>';
+                                }
+                              }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleRemoveImage}
+                            className="mt-2 px-3 py-1 text-sm bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/30 transition-colors"
+                          >
+                            {translations.removeImage}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-3 pt-4">
                     <motion.button

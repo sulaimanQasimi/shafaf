@@ -11,7 +11,9 @@ import toast from "react-hot-toast";
 import { getDashboardStats, formatPersianNumber, formatLargeNumber } from "./utils/dashboard";
 import { playClickSound } from "./utils/sound";
 import { getCompanySettings, initCompanySettingsTable, type CompanySettings as CompanySettingsType } from "./utils/company";
+import { isLicenseValid } from "./utils/license";
 import Login from "./components/Login";
+import License from "./components/License";
 import CurrencyManagement from "./components/Currency";
 import SupplierManagement from "./components/Supplier";
 import ProductManagement from "./components/Product";
@@ -47,6 +49,7 @@ type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sa
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [licenseValid, setLicenseValid] = useState<boolean | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [dashboardStats, setDashboardStats] = useState({
     productsCount: 0,
@@ -65,6 +68,20 @@ function App() {
     units: Unit[];
     payments: SalePayment[];
   } | null>(null);
+
+  // Check license validity on mount
+  useEffect(() => {
+    const checkLicense = async () => {
+      try {
+        const valid = await isLicenseValid();
+        setLicenseValid(valid);
+      } catch (error) {
+        console.error("Error checking license:", error);
+        setLicenseValid(false);
+      }
+    };
+    checkLicense();
+  }, []);
 
   // Initialize database on mount
   useEffect(() => {
@@ -142,6 +159,24 @@ function App() {
     };
     loadStats();
   }, [currentPage, user]);
+
+  // Show license screen if license is not valid
+  if (licenseValid === null) {
+    // Still checking license, show loading or nothing
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full"
+        />
+      </div>
+    );
+  }
+
+  if (!licenseValid) {
+    return <License onLicenseValid={() => setLicenseValid(true)} />;
+  }
 
   // Show login screen if not logged in
   if (!user) {

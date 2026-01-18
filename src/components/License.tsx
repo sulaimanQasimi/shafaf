@@ -1,0 +1,309 @@
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import toast from "react-hot-toast";
+import { getMachineId, validateLicenseKey, storeLicenseKey } from "../utils/license";
+import Footer from "./Footer";
+
+interface LicenseProps {
+  onLicenseValid: () => void;
+}
+
+// Persian/Dari translations
+const translations = {
+  title: "فعال‌سازی نرم‌افزار",
+  subtitle: "برای استفاده از نرم‌افزار، لطفاً کلید فعال‌سازی را وارد کنید",
+  machineIdLabel: "شناسه دستگاه",
+  machineIdDescription: "این شناسه را برای دریافت کلید فعال‌سازی ارسال کنید",
+  copyButton: "کپی",
+  copied: "کپی شد!",
+  licenseKeyLabel: "کلید فعال‌سازی",
+  licenseKeyPlaceholder: "کلید فعال‌سازی دریافتی را وارد کنید",
+  activateButton: "فعال‌سازی",
+  processing: "در حال پردازش...",
+  instructions: {
+    title: "راهنمای فعال‌سازی",
+    step1: "شناسه دستگاه بالا را کپی کنید",
+    step2: "شناسه را برای توسعه‌دهنده ارسال کنید",
+    step3: "کلید فعال‌سازی دریافتی را در فیلد زیر وارد کنید",
+    step4: "دکمه فعال‌سازی را کلیک کنید",
+  },
+  errors: {
+    invalidKey: "کلید فعال‌سازی نامعتبر است",
+    generalError: "خطایی در فعال‌سازی رخ داد",
+    machineIdError: "خطا در دریافت شناسه دستگاه",
+  },
+  success: {
+    activated: "نرم‌افزار با موفقیت فعال شد",
+  },
+};
+
+export default function License({ onLicenseValid }: LicenseProps) {
+  const [machineId, setMachineId] = useState<string>("");
+  const [licenseKey, setLicenseKey] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadingMachineId, setLoadingMachineId] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  // Load machine ID on mount
+  useEffect(() => {
+    const loadMachineId = async () => {
+      try {
+        const id = await getMachineId();
+        setMachineId(id);
+      } catch (error) {
+        console.error("Error loading machine ID:", error);
+        toast.error(translations.errors.machineIdError);
+      } finally {
+        setLoadingMachineId(false);
+      }
+    };
+    loadMachineId();
+  }, []);
+
+  const handleCopyMachineId = async () => {
+    try {
+      await navigator.clipboard.writeText(machineId);
+      setCopied(true);
+      toast.success(translations.copied);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error("Error copying to clipboard:", error);
+      toast.error("خطا در کپی کردن شناسه");
+    }
+  };
+
+  const handleActivate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!licenseKey.trim()) {
+      toast.error("لطفاً کلید فعال‌سازی را وارد کنید");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Validate the license key
+      const isValid = await validateLicenseKey(licenseKey.trim());
+      
+      if (isValid) {
+        // Store the license key
+        await storeLicenseKey(licenseKey.trim());
+        toast.success(translations.success.activated);
+        setTimeout(() => {
+          onLicenseValid();
+        }, 500);
+      } else {
+        toast.error(translations.errors.invalidKey);
+      }
+    } catch (error: any) {
+      console.error("Error validating license:", error);
+      toast.error(error.toString() || translations.errors.generalError);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Decorative Background Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <motion.div
+          animate={{
+            scale: [1, 1.2, 1],
+            rotate: [0, 90, 0],
+          }}
+          transition={{
+            duration: 20,
+            repeat: Infinity,
+            ease: "linear"
+          }}
+          className="absolute -top-1/4 -right-1/4 w-96 h-96 bg-purple-300/20 dark:bg-purple-600/10 rounded-full blur-3xl"
+        />
+        <motion.div
+          animate={{
+            scale: [1, 1.3, 1],
+            rotate: [0, -90, 0],
+          }}
+          transition={{
+            duration: 25,
+            repeat: Infinity,
+            ease: "linear"
+          }}
+          className="absolute -bottom-1/4 -left-1/4 w-96 h-96 bg-blue-300/20 dark:bg-blue-600/10 rounded-full blur-3xl"
+        />
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-2xl relative z-10"
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-purple-100/50 dark:border-purple-900/30"
+        >
+          {/* Logo/Icon Section */}
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+            className="flex justify-center mb-6"
+          >
+            <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+            </div>
+          </motion.div>
+
+          {/* Title */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="text-center mb-8"
+          >
+            <h1
+              className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2"
+              dir="rtl"
+            >
+              {translations.title}
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 text-base" dir="rtl">
+              {translations.subtitle}
+            </p>
+          </motion.div>
+
+          <form onSubmit={handleActivate} className="space-y-6" dir="rtl">
+            {/* Machine ID Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                {translations.machineIdLabel}
+              </label>
+              <div className="relative">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={loadingMachineId ? "در حال بارگذاری..." : machineId}
+                    readOnly
+                    className="flex-1 pr-4 pl-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm"
+                    dir="ltr"
+                  />
+                  <motion.button
+                    type="button"
+                    onClick={handleCopyMachineId}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    disabled={loadingMachineId || !machineId}
+                    className="px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {copied ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    )}
+                  </motion.button>
+                </div>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400" dir="rtl">
+                  {translations.machineIdDescription}
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Instructions */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800"
+            >
+              <h3 className="text-sm font-semibold text-purple-900 dark:text-purple-300 mb-2" dir="rtl">
+                {translations.instructions.title}
+              </h3>
+              <ul className="space-y-1 text-xs text-purple-700 dark:text-purple-400" dir="rtl">
+                <li>• {translations.instructions.step1}</li>
+                <li>• {translations.instructions.step2}</li>
+                <li>• {translations.instructions.step3}</li>
+                <li>• {translations.instructions.step4}</li>
+              </ul>
+            </motion.div>
+
+            {/* License Key Input */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+            >
+              <label
+                htmlFor="licenseKey"
+                className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2"
+              >
+                {translations.licenseKeyLabel}
+              </label>
+              <div className="relative">
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                </div>
+                <motion.input
+                  whileFocus={{ scale: 1.01 }}
+                  id="licenseKey"
+                  type="text"
+                  value={licenseKey}
+                  onChange={(e) => setLicenseKey(e.target.value)}
+                  required
+                  className="w-full pr-11 pl-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-900/30 transition-all duration-200 font-mono text-sm"
+                  placeholder={translations.licenseKeyPlaceholder}
+                  dir="ltr"
+                />
+              </div>
+            </motion.div>
+
+            {/* Activate Button */}
+            <motion.button
+              type="submit"
+              disabled={loading || loadingMachineId}
+              whileHover={{ scale: loading ? 1 : 1.02 }}
+              whileTap={{ scale: loading ? 1 : 0.98 }}
+              className="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-bold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
+            >
+              {loading ? (
+                <>
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+                  />
+                  <span>{translations.processing}</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{translations.activateButton}</span>
+                </>
+              )}
+            </motion.button>
+          </form>
+        </motion.div>
+
+        {/* Footer */}
+        <Footer className="mt-6" />
+      </motion.div>
+    </div>
+  );
+}

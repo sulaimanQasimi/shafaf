@@ -1,4 +1,5 @@
 mod db;
+mod license;
 
 use db::Database;
 use serde::{Deserialize, Serialize};
@@ -437,6 +438,47 @@ fn login_user(
         }),
         message: "Login successful".to_string(),
     })
+}
+
+/// Get machine ID for license generation
+#[tauri::command]
+fn get_machine_id() -> Result<String, String> {
+    Ok(license::generate_machine_id())
+}
+
+/// Store license key in secure storage
+#[tauri::command]
+fn store_license_key(key: String) -> Result<(), String> {
+    use keyring::Entry;
+    
+    let entry = Entry::new("finance_app", "license_key")
+        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+    
+    entry.set_password(&key)
+        .map_err(|e| format!("Failed to store license key: {}", e))?;
+    
+    Ok(())
+}
+
+/// Get license key from secure storage
+#[tauri::command]
+fn get_license_key() -> Result<Option<String>, String> {
+    use keyring::Entry;
+    
+    let entry = Entry::new("finance_app", "license_key")
+        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+    
+    match entry.get_password() {
+        Ok(key) => Ok(Some(key)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("Failed to get license key: {}", e)),
+    }
+}
+
+/// Validate license key
+#[tauri::command]
+fn validate_license_key(entered_key: String) -> Result<bool, String> {
+    license::validate_license_key(&entered_key)
 }
 
 // Currency Model
@@ -5342,6 +5384,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_keychain::init())
         .manage(Mutex::new(None::<Database>))
         .invoke_handler(tauri::generate_handler![
             db_create,
@@ -5454,7 +5497,11 @@ pub fn run() {
             get_purchase_payments,
             get_purchase_payments_by_purchase,
             update_purchase_payment,
-            delete_purchase_payment
+            delete_purchase_payment,
+            get_machine_id,
+            store_license_key,
+            get_license_key,
+            validate_license_key
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

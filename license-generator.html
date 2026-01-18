@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>License Key Generator - Finance App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            direction: rtl;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result {
+            margin-top: 25px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+            display: none;
+        }
+
+        .result.show {
+            display: block;
+        }
+
+        .result-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .result-value {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #333;
+            word-break: break-all;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+
+        .copy-btn {
+            margin-top: 10px;
+            padding: 8px 15px;
+            background: #4caf50;
+            font-size: 14px;
+        }
+
+        .copy-btn:hover {
+            background: #45a049;
+        }
+
+        .error {
+            margin-top: 15px;
+            padding: 12px;
+            background: #ffebee;
+            color: #c62828;
+            border-radius: 8px;
+            border: 1px solid #ef5350;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 10px;
+            border-right: 4px solid #2196f3;
+            font-size: 13px;
+            color: #1565c0;
+        }
+
+        .info-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 License Key Generator</h1>
+        <p class="subtitle">Encrypt Machine ID to generate license key</p>
+
+        <form id="encryptForm">
+            <div class="form-group">
+                <label for="machineId">Machine ID:</label>
+                <input 
+                    type="text" 
+                    id="machineId" 
+                    placeholder="Enter machine ID from the app"
+                    required
+                    autocomplete="off"
+                />
+            </div>
+
+            <button type="submit" id="encryptBtn">
+                Generate License Key
+            </button>
+        </form>
+
+        <div class="error" id="error"></div>
+
+        <div class="result" id="result">
+            <div class="result-label">Encrypted License Key:</div>
+            <div class="result-value" id="encryptedKey"></div>
+            <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()">
+                📋 Copy License Key
+            </button>
+        </div>
+
+        <div class="info">
+            <div class="info-title">ℹ️ Instructions:</div>
+            <ol style="margin-right: 20px; margin-top: 8px;">
+                <li>User sends you their Machine ID from the app</li>
+                <li>Paste the Machine ID in the field above</li>
+                <li>Click "Generate License Key"</li>
+                <li>Copy the generated license key and send it back to the user</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // Constants matching the Rust code
+        const SECRET_KEY_BASE = "com.sulaiman.financeapp.license.secret.2024";
+        const SALT = "finance-app-salt-2024";
+
+        // Derive encryption key from secret base (same as Rust)
+        async function deriveKey() {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(SECRET_KEY_BASE + SALT);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return new Uint8Array(hashBuffer);
+        }
+
+        // Derive nonce from machine ID (same as Rust)
+        async function deriveNonce(machineId) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(machineId + SALT);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = new Uint8Array(hashBuffer);
+            // Use first 12 bytes as nonce (AES-GCM requires 12-byte nonce)
+            return hashArray.slice(0, 12);
+        }
+
+        // Encrypt machine ID using AES-256-GCM
+        async function encryptMachineId(machineId) {
+            try {
+                // Derive key
+                const keyMaterial = await deriveKey();
+                
+                // Import key for AES-GCM
+                const key = await crypto.subtle.importKey(
+                    'raw',
+                    keyMaterial,
+                    { name: 'AES-GCM' },
+                    false,
+                    ['encrypt']
+                );
+
+                // Derive nonce
+                const nonce = await deriveNonce(machineId);
+
+                // Encrypt
+                const encoder = new TextEncoder();
+                const data = encoder.encode(machineId);
+                const encrypted = await crypto.subtle.encrypt(
+                    {
+                        name: 'AES-GCM',
+                        iv: nonce
+                    },
+                    key,
+                    data
+                );
+
+                // Combine nonce and ciphertext, then encode as hex
+                const combined = new Uint8Array(nonce.length + encrypted.byteLength);
+                combined.set(nonce, 0);
+                combined.set(new Uint8Array(encrypted), nonce.length);
+
+                // Convert to hex string
+                return Array.from(combined)
+                    .map(b => b.toString(16).padStart(2, '0'))
+                    .join('');
+            } catch (error) {
+                throw new Error('Encryption failed: ' + error.message);
+            }
+        }
+
+        // Handle form submission
+        document.getElementById('encryptForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const machineId = document.getElementById('machineId').value.trim();
+            const encryptBtn = document.getElementById('encryptBtn');
+            const result = document.getElementById('result');
+            const error = document.getElementById('error');
+            const encryptedKeyEl = document.getElementById('encryptedKey');
+
+            // Hide previous results
+            result.classList.remove('show');
+            error.classList.remove('show');
+
+            if (!machineId) {
+                error.textContent = 'Please enter a machine ID';
+                error.classList.add('show');
+                return;
+            }
+
+            // Show loading
+            encryptBtn.disabled = true;
+            encryptBtn.innerHTML = 'Generating... <span class="loading"></span>';
+
+            try {
+                const encrypted = await encryptMachineId(machineId);
+                encryptedKeyEl.textContent = encrypted;
+                result.classList.add('show');
+            } catch (err) {
+                error.textContent = err.message || 'An error occurred during encryption';
+                error.classList.add('show');
+            } finally {
+                encryptBtn.disabled = false;
+                encryptBtn.textContent = 'Generate License Key';
+            }
+        });
+
+        // Copy to clipboard
+        function copyToClipboard() {
+            const encryptedKey = document.getElementById('encryptedKey').textContent;
+            navigator.clipboard.writeText(encryptedKey).then(() => {
+                const copyBtn = document.getElementById('copyBtn');
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = '✓ Copied!';
+                copyBtn.style.background = '#4caf50';
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                    copyBtn.style.background = '#4caf50';
+                }, 2000);
+            }).catch(err => {
+                alert('Failed to copy: ' + err);
+            });
+        }
+
+        // Auto-focus on machine ID input
+        document.getElementById('machineId').focus();
+    </script>
+</body>
+</html>

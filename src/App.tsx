@@ -6,6 +6,7 @@ import {
 } from "./utils/db";
 import { getDashboardStats, formatPersianNumber, formatLargeNumber } from "./utils/dashboard";
 import { playClickSound } from "./utils/sound";
+import { getCompanySettings, initCompanySettingsTable, type CompanySettings as CompanySettingsType } from "./utils/company";
 import Login from "./components/Login";
 import CurrencyManagement from "./components/Currency";
 import SupplierManagement from "./components/Supplier";
@@ -49,6 +50,7 @@ function App() {
     totalDeductions: 0,
   });
   const [loadingStats, setLoadingStats] = useState(false);
+  const [companySettings, setCompanySettings] = useState<CompanySettingsType | null>(null);
   const [invoiceData, setInvoiceData] = useState<{
     saleData: SaleWithItems;
     customer: Customer;
@@ -99,6 +101,22 @@ function App() {
       document.removeEventListener('click', handleClick);
     };
   }, []);
+
+  // Load company settings
+  useEffect(() => {
+    const loadCompanySettings = async () => {
+      try {
+        await initCompanySettingsTable();
+        const settings = await getCompanySettings();
+        setCompanySettings(settings);
+      } catch (error) {
+        console.error("Error loading company settings:", error);
+      }
+    };
+    if (user) {
+      loadCompanySettings();
+    }
+  }, [user]);
 
   // Load dashboard stats when on dashboard page
   useEffect(() => {
@@ -192,14 +210,20 @@ function App() {
   // Show employee page if selected
   if (currentPage === "employee") {
     return (
-      <EmployeeManagement onBack={() => setCurrentPage("dashboard")} />
+      <EmployeeManagement 
+        onBack={() => setCurrentPage("dashboard")}
+        onNavigateToSalary={() => setCurrentPage("salary")}
+      />
     );
   }
 
   // Show salary page if selected
   if (currentPage === "salary") {
     return (
-      <SalaryManagement onBack={() => setCurrentPage("dashboard")} />
+      <SalaryManagement 
+        onBack={() => setCurrentPage("dashboard")}
+        onNavigateToDeduction={() => setCurrentPage("deduction")}
+      />
     );
   }
 
@@ -282,7 +306,7 @@ function App() {
               </motion.div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                  سیستم مدیریت داروخانه
+                  {companySettings?.name || "سیستم مدیریت داروخانه"}
                 </h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">شفاف</p>
               </div>
@@ -481,20 +505,6 @@ function App() {
                 icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
                 color: "from-violet-500 to-purple-500",
                 page: "employee" as Page,
-              },
-              {
-                title: "مدیریت معاشات",
-                description: "ثبت و مدیریت معاشات کارمندان با تاریخ شمسی",
-                icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-                color: "from-yellow-500 to-orange-500",
-                page: "salary" as Page,
-              },
-              {
-                title: "مدیریت کسرها",
-                description: "ثبت و مدیریت کسرهای کارمندان با ارز و نرخ تبادله",
-                icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-                color: "from-red-500 to-rose-500",
-                page: "deduction" as Page,
               },
               {
                 title: "مدیریت کاربران",

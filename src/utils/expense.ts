@@ -8,6 +8,8 @@ export interface Expense {
     rate: number;
     total: number;
     date: string;
+    bill_no?: string | null;
+    description?: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -28,6 +30,8 @@ export async function initExpensesTable(): Promise<string> {
  * @param rate Exchange rate
  * @param total Total amount
  * @param date Expense date
+ * @param bill_no Bill number (optional)
+ * @param description Description (optional)
  * @returns Promise with Expense
  */
 export async function createExpense(
@@ -36,15 +40,19 @@ export async function createExpense(
     currency: string,
     rate: number,
     total: number,
-    date: string
+    date: string,
+    bill_no?: string | null,
+    description?: string | null
 ): Promise<Expense> {
     return await invoke<Expense>("create_expense", {
-        expense_type_id,
+        expenseTypeId: expense_type_id,
         amount,
         currency,
         rate,
         total,
         date,
+        billNo: bill_no || null,
+        description: description || null,
     });
 }
 
@@ -99,6 +107,8 @@ export async function getExpense(id: number): Promise<Expense> {
  * @param rate Exchange rate
  * @param total Total amount
  * @param date Expense date
+ * @param bill_no Bill number (optional)
+ * @param description Description (optional)
  * @returns Promise with Expense
  */
 export async function updateExpense(
@@ -108,16 +118,20 @@ export async function updateExpense(
     currency: string,
     rate: number,
     total: number,
-    date: string
+    date: string,
+    bill_no?: string | null,
+    description?: string | null
 ): Promise<Expense> {
     return await invoke<Expense>("update_expense", {
         id,
-        expense_type_id,
+        expenseTypeId: expense_type_id,
         amount,
         currency,
         rate,
         total,
         date,
+        billNo: bill_no || null,
+        description: description || null,
     });
 }
 

@@ -2930,6 +2930,8 @@ pub struct Expense {
     pub rate: f64,
     pub total: f64,
     pub date: String,
+    pub bill_no: Option<String>,
+    pub description: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -2963,6 +2965,8 @@ fn init_expenses_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
             rate REAL NOT NULL DEFAULT 1.0,
             total REAL NOT NULL,
             date TEXT NOT NULL,
+            bill_no TEXT,
+            description TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (expense_type_id) REFERENCES expense_types(id)
@@ -2972,12 +2976,14 @@ fn init_expenses_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
     // Try to create the table (will fail silently if it exists)
     let _ = db.execute(create_table_sql, &[]);
     
-    // Check if expense_type_id column exists, if not, try to add it
+    // Check if columns exist, if not, try to add them
     let check_column_sql = "PRAGMA table_info(expenses)";
     if let Ok(columns) = db.query(check_column_sql, &[], |row| {
         Ok(row.get::<_, String>(1)?)
     }) {
         let has_expense_type_id = columns.iter().any(|c| c == "expense_type_id");
+        let has_bill_no = columns.iter().any(|c| c == "bill_no");
+        let has_description = columns.iter().any(|c| c == "description");
         let has_name = columns.iter().any(|c| c == "name");
         
         if !has_expense_type_id && has_name {
@@ -2985,6 +2991,16 @@ fn init_expenses_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
             // Note: SQLite doesn't support adding NOT NULL columns to existing tables easily
             // So we'll add it as nullable first, then the app should handle migration
             let add_column_sql = "ALTER TABLE expenses ADD COLUMN expense_type_id INTEGER";
+            let _ = db.execute(add_column_sql, &[]);
+        }
+        
+        if !has_bill_no {
+            let add_column_sql = "ALTER TABLE expenses ADD COLUMN bill_no TEXT";
+            let _ = db.execute(add_column_sql, &[]);
+        }
+        
+        if !has_description {
+            let add_column_sql = "ALTER TABLE expenses ADD COLUMN description TEXT";
             let _ = db.execute(add_column_sql, &[]);
         }
     }
@@ -3002,12 +3018,14 @@ fn create_expense(
     rate: f64,
     total: f64,
     date: String,
+    bill_no: Option<String>,
+    description: Option<String>,
 ) -> Result<Expense, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Insert new expense
-    let insert_sql = "INSERT INTO expenses (expense_type_id, amount, currency, rate, total, date) VALUES (?, ?, ?, ?, ?, ?)";
+    let insert_sql = "INSERT INTO expenses (expense_type_id, amount, currency, rate, total, date, bill_no, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
         &expense_type_id as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
@@ -3015,11 +3033,13 @@ fn create_expense(
         &rate as &dyn rusqlite::ToSql,
         &total as &dyn rusqlite::ToSql,
         &date as &dyn rusqlite::ToSql,
+        &bill_no as &dyn rusqlite::ToSql,
+        &description as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to insert expense: {}", e))?;
 
     // Get the created expense
-    let expense_sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE expense_type_id = ? AND date = ? ORDER BY id DESC LIMIT 1";
+    let expense_sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, bill_no, description, created_at, updated_at FROM expenses WHERE expense_type_id = ? AND date = ? ORDER BY id DESC LIMIT 1";
     let expenses = db
         .query(expense_sql, &[&expense_type_id as &dyn rusqlite::ToSql, &date as &dyn rusqlite::ToSql], |row| {
             Ok(Expense {
@@ -3030,8 +3050,10 @@ fn create_expense(
                 rate: row.get(4)?,
                 total: row.get(5)?,
                 date: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                bill_no: row.get(7)?,
+                description: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
             })
         })
         .map_err(|e| format!("Failed to fetch expense: {}", e))?;
@@ -3064,7 +3086,9 @@ fn get_expenses(
     if let Some(s) = search {
         if !s.trim().is_empty() {
              let search_term = format!("%{}%", s);
-             where_clause = "WHERE (currency LIKE ? OR date LIKE ?)".to_string();
+             where_clause = "WHERE (currency LIKE ? OR date LIKE ? OR bill_no LIKE ? OR description LIKE ?)".to_string();
+             params.push(serde_json::Value::String(search_term.clone()));
+             params.push(serde_json::Value::String(search_term.clone()));
              params.push(serde_json::Value::String(search_term.clone()));
              params.push(serde_json::Value::String(search_term));
         }
@@ -3098,7 +3122,7 @@ fn get_expenses(
         "ORDER BY date DESC, created_at DESC".to_string()
     };
 
-    let sql = format!("SELECT id, expense_type_id, amount, currency, rate, total, date, created_at, updated_at FROM expenses {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    let sql = format!("SELECT id, expense_type_id, amount, currency, rate, total, date, bill_no, description, created_at, updated_at FROM expenses {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
     
     params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
     params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
@@ -3122,8 +3146,10 @@ fn get_expenses(
                 rate: row.get(4)?,
                 total: row.get(5)?,
                 date: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                bill_no: row.get(7)?,
+                description: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
             })
         }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
@@ -3151,7 +3177,7 @@ fn get_expense(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let expense_sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE id = ?";
+    let expense_sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, bill_no, description, created_at, updated_at FROM expenses WHERE id = ?";
     let expenses = db
         .query(expense_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Expense {
@@ -3162,8 +3188,10 @@ fn get_expense(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<
                 rate: row.get(4)?,
                 total: row.get(5)?,
                 date: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                bill_no: row.get(7)?,
+                description: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
             })
         })
         .map_err(|e| format!("Failed to fetch expense: {}", e))?;
@@ -3183,12 +3211,14 @@ fn update_expense(
     rate: f64,
     total: f64,
     date: String,
+    bill_no: Option<String>,
+    description: Option<String>,
 ) -> Result<Expense, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Update expense
-    let update_sql = "UPDATE expenses SET expense_type_id = ?, amount = ?, currency = ?, rate = ?, total = ?, date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let update_sql = "UPDATE expenses SET expense_type_id = ?, amount = ?, currency = ?, rate = ?, total = ?, date = ?, bill_no = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     db.execute(update_sql, &[
         &expense_type_id as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
@@ -3196,12 +3226,14 @@ fn update_expense(
         &rate as &dyn rusqlite::ToSql,
         &total as &dyn rusqlite::ToSql,
         &date as &dyn rusqlite::ToSql,
+        &bill_no as &dyn rusqlite::ToSql,
+        &description as &dyn rusqlite::ToSql,
         &id as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to update expense: {}", e))?;
 
     // Get the updated expense
-    let expense_sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, created_at, updated_at FROM expenses WHERE id = ?";
+    let expense_sql = "SELECT id, expense_type_id, amount, currency, rate, total, date, bill_no, description, created_at, updated_at FROM expenses WHERE id = ?";
     let expenses = db
         .query(expense_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Expense {
@@ -3212,8 +3244,10 @@ fn update_expense(
                 rate: row.get(4)?,
                 total: row.get(5)?,
                 date: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                bill_no: row.get(7)?,
+                description: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
             })
         })
         .map_err(|e| format!("Failed to fetch expense: {}", e))?;
@@ -4061,16 +4095,80 @@ fn create_deduction(
     }
 }
 
-/// Get all deductions
+/// Get all deductions with pagination
 #[tauri::command]
-fn get_deductions(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Deduction>, String> {
+fn get_deductions(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<Deduction>, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, employee_id, COALESCE(year, 1403) as year, COALESCE(month, 'حمل') as month, currency, rate, amount, created_at, updated_at FROM deductions ORDER BY year DESC, month DESC, created_at DESC";
-    let deductions = db
-        .query(sql, &[], |row| {
-            Ok(Deduction {
+    let offset = (page - 1) * per_page;
+
+    // Build WHERE clause
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+             let search_term = format!("%{}%", s);
+             where_clause = "WHERE (currency LIKE ? OR month LIKE ? OR CAST(year AS TEXT) LIKE ?)".to_string();
+             params.push(serde_json::Value::String(search_term.clone()));
+             params.push(serde_json::Value::String(search_term.clone()));
+             params.push(serde_json::Value::String(search_term));
+        }
+    }
+
+    // Get total count
+    let count_sql = format!("SELECT COUNT(*) FROM deductions {}", where_clause);
+    let total: i64 = db.with_connection(|conn| {
+         let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+         let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+         let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+             .map_err(|e| anyhow::anyhow!("{}", e))?;
+         Ok(count)
+    }).map_err(|e| format!("Failed to count deductions: {}", e))?;
+
+    // Build Order By
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "ASC".to_string());
+        let allowed_cols = ["amount", "year", "month", "currency", "rate", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+             format!("ORDER BY {} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY year DESC, month DESC, created_at DESC".to_string()
+        }
+    } else {
+        "ORDER BY year DESC, month DESC, created_at DESC".to_string()
+    };
+
+    let sql = format!("SELECT id, employee_id, COALESCE(year, 1403) as year, COALESCE(month, 'حمل') as month, currency, rate, amount, created_at, updated_at FROM deductions {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    
+    params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
+    params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
+
+    let deductions = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+             match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                serde_json::Value::Number(n) => rusqlite::types::Value::Integer(n.as_i64().unwrap_or(0)),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let rows = stmt.query_map(rusqlite::params_from_iter(rusqlite_params.iter()), |row| {
+             Ok(Deduction {
                 id: row.get(0)?,
                 employee_id: row.get(1)?,
                 year: row.get(2)?,
@@ -4081,10 +4179,24 @@ fn get_deductions(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<De
                 created_at: row.get(7)?,
                 updated_at: row.get(8)?,
             })
-        })
-        .map_err(|e| format!("Failed to fetch deductions: {}", e))?;
+        }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    Ok(deductions)
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| anyhow::anyhow!("{}", e))?);
+        }
+        Ok(result)
+    }).map_err(|e| format!("Failed to fetch deductions: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+    
+    Ok(PaginatedResponse {
+        items: deductions,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
 }
 
 /// Get deductions by employee ID

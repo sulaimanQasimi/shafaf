@@ -70,9 +70,10 @@ const translations = {
 
 interface SalaryManagementProps {
     onBack?: () => void;
+    onNavigateToDeduction?: () => void;
 }
 
-export default function SalaryManagement({ onBack }: SalaryManagementProps) {
+export default function SalaryManagement({ onBack, onNavigateToDeduction }: SalaryManagementProps) {
     const [salaries, setSalaries] = useState<Salary[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [deductions, setDeductions] = useState<Deduction[]>([]);
@@ -428,14 +429,29 @@ export default function SalaryManagement({ onBack }: SalaryManagementProps) {
                         <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
                             {translations.title}
                         </h1>
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => handleOpenModal()}
-                            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
-                        >
-                            {translations.addNew}
-                        </motion.button>
+                        <div className="flex gap-3">
+                            {onNavigateToDeduction && (
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={onNavigateToDeduction}
+                                    className="px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    مدیریت کسرها
+                                </motion.button>
+                            )}
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleOpenModal()}
+                                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+                            >
+                                {translations.addNew}
+                            </motion.button>
+                        </div>
                     </div>
 
                     {/* Search Bar */}

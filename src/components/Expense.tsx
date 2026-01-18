@@ -104,6 +104,8 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
         rate: "1",
         total: "",
         date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+        bill_no: "",
+        description: "",
     });
     const [expenseTypeFormData, setExpenseTypeFormData] = useState({
         name: "",
@@ -178,6 +180,8 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                 rate: expense.rate.toString(),
                 total: expense.total.toString(),
                 date: expense.date,
+                bill_no: expense.bill_no || "",
+                description: expense.description || "",
             });
         } else {
             setEditingExpense(null);
@@ -188,6 +192,8 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                 rate: "1",
                 total: "",
                 date: new Date().toISOString().split('T')[0],
+                bill_no: "",
+                description: "",
             });
         }
         setIsModalOpen(true);
@@ -203,6 +209,8 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
             rate: "1",
             total: "",
             date: new Date().toISOString().split('T')[0],
+            bill_no: "",
+            description: "",
         });
     };
 
@@ -315,7 +323,9 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                     formData.currency,
                     rate,
                     total,
-                    formData.date
+                    formData.date,
+                    formData.bill_no || null,
+                    formData.description || null
                 );
                 toast.success(translations.success.updated);
             } else {
@@ -325,7 +335,9 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                     formData.currency,
                     rate,
                     total,
-                    formData.date
+                    formData.date,
+                    formData.bill_no || null,
+                    formData.description || null
                 );
                 toast.success(translations.success.created);
             }
@@ -396,6 +408,18 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
             label: translations.date,
             sortable: true,
             render: (exp: Expense) => formatPersianDate(exp.date)
+        },
+        {
+            key: "bill_no",
+            label: "شماره بل",
+            sortable: false,
+            render: (exp: Expense) => exp.bill_no || "-"
+        },
+        {
+            key: "description",
+            label: "توضیحات",
+            sortable: false,
+            render: (exp: Expense) => exp.description || "-"
         },
     ];
 
@@ -652,6 +676,32 @@ export default function ExpenseManagement({ onBack }: ExpenseManagementProps) {
                                             onChange={(date) => setFormData({ ...formData, date })}
                                             placeholder={translations.placeholders.date}
                                             required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                            شماره بل
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.bill_no}
+                                            onChange={(e) => setFormData({ ...formData, bill_no: e.target.value })}
+                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                            placeholder="شماره بل را وارد کنید"
+                                            dir="ltr"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                            توضیحات
+                                        </label>
+                                        <textarea
+                                            value={formData.description}
+                                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                            rows={3}
+                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200 resize-none"
+                                            placeholder="توضیحات را وارد کنید"
+                                            dir="rtl"
                                         />
                                     </div>
                                     <div className="flex gap-3 pt-4">

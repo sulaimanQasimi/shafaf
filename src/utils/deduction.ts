@@ -48,12 +48,37 @@ export async function createDeduction(
     });
 }
 
+export interface PaginatedResponse<T> {
+    items: T[];
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+}
+
 /**
- * Get all deductions
- * @returns Promise with array of Deduction
+ * Get all deductions with pagination
+ * @param page Page number
+ * @param perPage Items per page
+ * @param search Search query
+ * @param sortBy Sort column
+ * @param sortOrder Sort order
+ * @returns Promise with paginated deductions
  */
-export async function getDeductions(): Promise<Deduction[]> {
-    return await invoke<Deduction[]>("get_deductions");
+export async function getDeductions(
+    page: number = 1,
+    perPage: number = 10,
+    search: string = "",
+    sortBy: string = "year",
+    sortOrder: "asc" | "desc" = "desc"
+): Promise<PaginatedResponse<Deduction>> {
+    return await invoke<PaginatedResponse<Deduction>>("get_deductions", {
+        page,
+        perPage,
+        search: search || null,
+        sortBy: sortBy || null,
+        sortOrder: sortOrder || null,
+    });
 }
 
 /**

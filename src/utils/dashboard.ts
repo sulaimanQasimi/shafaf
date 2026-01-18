@@ -21,12 +21,12 @@ export interface DashboardStats {
 export async function getDashboardStats(): Promise<DashboardStats> {
   try {
     // Get all data in parallel with large page sizes to get all items
-    const [productsResponse, suppliersResponse, purchasesResponse, salesResponse, deductions] = await Promise.all([
+    const [productsResponse, suppliersResponse, purchasesResponse, salesResponse, deductionsResponse] = await Promise.all([
       getProducts(1, 10000), // Get all products
       getSuppliers(1, 10000), // Get all suppliers
       getPurchases(1, 10000), // Get all purchases
       getSales(1, 10000), // Get all sales
-      getDeductions(),
+      getDeductions(1, 10000), // Get all deductions
     ]);
 
     // Extract items from paginated responses
@@ -34,6 +34,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     const suppliers = suppliersResponse.items;
     const purchases = purchasesResponse.items;
     const sales = salesResponse.items;
+    const deductions = deductionsResponse.items;
 
     // Get current month in Georgian calendar (for database comparison)
     const now = moment();

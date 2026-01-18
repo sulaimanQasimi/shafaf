@@ -305,7 +305,7 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
                     />
                 </div>
 
-                <Table
+                <Table<Deduction>
                     data={deductions}
                     columns={[
                         {
@@ -357,7 +357,7 @@ export default function DeductionManagement({ onBack }: DeductionManagementProps
                     ]}
                     page={page}
                     perPage={perPage}
-                    totalItems={totalItems}
+                    total={totalItems}
                     onPageChange={setPage}
                     onPerPageChange={setPerPage}
                     sortBy={sortBy}

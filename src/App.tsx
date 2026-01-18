@@ -3,7 +3,11 @@ import { motion } from "framer-motion";
 import {
   openDatabase,
   isDatabaseOpen,
+  backupDatabase,
 } from "./utils/db";
+import { save } from "@tauri-apps/plugin-dialog";
+import { readFile, writeFile } from "@tauri-apps/plugin-fs";
+import toast from "react-hot-toast";
 import { getDashboardStats, formatPersianNumber, formatLargeNumber } from "./utils/dashboard";
 import { playClickSound } from "./utils/sound";
 import { getCompanySettings, initCompanySettingsTable, type CompanySettings as CompanySettingsType } from "./utils/company";
@@ -144,6 +148,37 @@ function App() {
   const handleLogout = () => {
     setUser(null);
     setCurrentPage("dashboard");
+  };
+
+  const handleBackupDatabase = async () => {
+    try {
+      // Get database path
+      const dbPath = await backupDatabase();
+      
+      // Open save dialog
+      const filePath = await save({
+        defaultPath: `db-backup-${new Date().toISOString().split('T')[0]}.sqlite`,
+        filters: [{
+          name: 'SQLite Database',
+          extensions: ['sqlite', 'db']
+        }]
+      });
+
+      if (filePath) {
+        // Read the database file
+        const fileData = await readFile(dbPath);
+        
+        // Write to selected location
+        await writeFile(filePath, fileData);
+        
+        toast.success("پشتیبان‌گیری با موفقیت انجام شد");
+      }
+    } catch (error: any) {
+      console.error("Error backing up database:", error);
+      if (error.message && !error.message.includes("cancelled")) {
+        toast.error("خطا در پشتیبان‌گیری از پایگاه داده");
+      }
+    }
   };
 
   // Show currency page if selected
@@ -318,6 +353,17 @@ function App() {
                 <p className="font-semibold text-gray-900 dark:text-white">{user.username}</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
               </div>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleBackupDatabase}
+                className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:shadow-xl transition-all duration-200 group relative"
+                title="پشتیبان‌گیری از پایگاه داده"
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4 4m4-4V12" />
+                </svg>
+              </motion.button>
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}

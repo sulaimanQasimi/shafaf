@@ -82,6 +82,19 @@ fn get_database_path(app: AppHandle) -> Result<String, String> {
     Ok(db_path.to_string_lossy().to_string())
 }
 
+/// Backup database - returns the database path for frontend to handle download
+#[tauri::command]
+fn backup_database(app: AppHandle) -> Result<String, String> {
+    let db_path = get_db_path(&app, "")?;
+    
+    if !db_path.exists() {
+        return Err("Database file does not exist".to_string());
+    }
+    
+    // Return the database path - frontend will use dialog plugin to save
+    Ok(db_path.to_string_lossy().to_string())
+}
+
 /// Create a new SQLite database file (creates database automatically on open)
 #[tauri::command]
 fn db_create(app: AppHandle, _db_name: String) -> Result<String, String> {
@@ -4536,6 +4549,8 @@ pub fn run() {
     
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(Mutex::new(None::<Database>))
         .invoke_handler(tauri::generate_handler![
             db_create,
@@ -4545,6 +4560,7 @@ pub fn run() {
             db_execute,
             db_query,
             get_database_path,
+            backup_database,
             init_users_table,
             register_user,
             login_user,

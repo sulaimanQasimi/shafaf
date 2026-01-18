@@ -41,6 +41,14 @@ export async function getDatabasePath(): Promise<string> {
 }
 
 /**
+ * Backup database - returns the database path
+ * @returns Promise with the database path string
+ */
+export async function backupDatabase(): Promise<string> {
+  return await invoke<string>("backup_database");
+}
+
+/**
  * Close the current database connection
  * @returns Promise with success message
  */

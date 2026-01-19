@@ -209,9 +209,6 @@ export default function SaleInvoice({
             `;
             clone.appendChild(styleOverrides);
             
-            // Process all elements to convert computed styles
-            processElementStyles(clone);
-            
             // Temporarily append clone to body for rendering
             clone.style.position = 'absolute';
             clone.style.left = '-9999px';

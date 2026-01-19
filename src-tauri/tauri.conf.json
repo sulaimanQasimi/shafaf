@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Finance app",
+  "productName": "Shafaf",
   "version": "2.0.0",
-  "identifier": "com.sulaiman.financeapp",
+  "identifier": "com.sulaiman.shafaf",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Finance app",
+        "title": "Shafaf",
         "width": 800,
         "height": 600,
         "fullscreen": false

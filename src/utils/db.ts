@@ -22,9 +22,9 @@ export async function createDatabase(dbName: string): Promise<string> {
 /**
  * Open database (creates it automatically if it doesn't exist)
  * Database path is automatically determined based on OS:
- * - Windows: %LOCALAPPDATA%\finance-app\db.sqlite
- * - macOS: ~/Library/Application Support/finance-app/db.sqlite
- * - Linux: ~/.local/share/finance-app/db.sqlite or $XDG_DATA_HOME/finance-app/db.sqlite
+ * - Windows: %LOCALAPPDATA%\shafaf\db.sqlite
+ * - macOS: ~/Library/Application Support/shafaf/db.sqlite
+ * - Linux: ~/.local/share/shafaf/db.sqlite or $XDG_DATA_HOME/shafaf/db.sqlite
  * @param dbName Name of the database (without .db extension) - currently not used
  * @returns Promise with the database path
  */

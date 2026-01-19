@@ -919,7 +919,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
                           <div className="flex justify-between items-start mb-4">
                             <div>
                               <div className="font-bold text-lg text-gray-900 dark:text-white mb-2">
-                                خریداری #{purchase.id} - {formatPersianDate(purchase.date)}
+                                {selectedSupplier.full_name} - {formatPersianDate(purchase.date)}
                               </div>
                               <div className="grid grid-cols-3 gap-4 text-sm">
                                 <div>
@@ -1026,7 +1026,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
                 className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
               >
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                  {translations.addPayment} - خریداری #{selectedPurchaseForPayment.id}
+                  {translations.addPayment} - {selectedSupplier?.full_name || ''}
                 </h2>
                 <form onSubmit={handleAddPayment} className="space-y-4">
                   <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl mb-4">

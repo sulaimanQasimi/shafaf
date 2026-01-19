@@ -12,6 +12,7 @@ import {
 } from "../utils/purchase_payment";
 import { getPurchases, type Purchase } from "../utils/purchase";
 import { getCurrencies, type Currency } from "../utils/currency";
+import { getSuppliers, type Supplier } from "../utils/supplier";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
 import PersianDatePicker from "./PersianDatePicker";
@@ -73,6 +74,7 @@ interface PurchasePaymentManagementProps {
 export default function PurchasePaymentManagement({ onBack }: PurchasePaymentManagementProps) {
     const [payments, setPayments] = useState<PurchasePayment[]>([]);
     const [purchases, setPurchases] = useState<Purchase[]>([]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [currencies, setCurrencies] = useState<Currency[]>([]);
     const [purchasePaymentsMap, setPurchasePaymentsMap] = useState<Record<number, PurchasePayment[]>>({});
     const [loading, setLoading] = useState(false);
@@ -116,15 +118,17 @@ export default function PurchasePaymentManagement({ onBack }: PurchasePaymentMan
                 console.log("Table initialization:", err);
             }
 
-            const [paymentsResponse, purchasesResponse, currenciesData] = await Promise.all([
+            const [paymentsResponse, purchasesResponse, suppliersResponse, currenciesData] = await Promise.all([
                 getPurchasePayments(page, perPage, search, sortBy, sortOrder),
                 getPurchases(1, 10000), // Get all purchases
+                getSuppliers(1, 10000), // Get all suppliers
                 getCurrencies(),
             ]);
 
             setPayments(paymentsResponse.items);
             setTotalItems(paymentsResponse.total);
             setPurchases(purchasesResponse.items);
+            setSuppliers(suppliersResponse.items);
             setCurrencies(currenciesData);
 
             // Load all payments grouped by purchase to calculate remaining amounts
@@ -275,9 +279,15 @@ export default function PurchasePaymentManagement({ onBack }: PurchasePaymentMan
         }
     };
 
+    const getSupplierName = (supplierId: number) => {
+        return suppliers.find(s => s.id === supplierId)?.full_name || `ID: ${supplierId}`;
+    };
+
     const getPurchaseInfo = (purchaseId: number): string => {
         const purchase = purchases.find(p => p.id === purchaseId);
-        return purchase ? `خریداری #${purchase.id} - ${formatPersianDate(purchase.date)}` : "نامشخص";
+        if (!purchase) return "نامشخص";
+        const supplierName = getSupplierName(purchase.supplier_id);
+        return `${supplierName} - ${formatPersianDate(purchase.date)}`;
     };
 
     const calculatePaidAmount = (purchaseId: number): number => {
@@ -473,11 +483,14 @@ export default function PurchasePaymentManagement({ onBack }: PurchasePaymentMan
                                             dir="rtl"
                                         >
                                             <option value="">{translations.placeholders.purchase}</option>
-                                            {purchases.map((purchase) => (
-                                                <option key={purchase.id} value={purchase.id}>
-                                                    خریداری #{purchase.id} - {formatPersianDate(purchase.date)} - {purchase.total_amount.toLocaleString()}
-                                                </option>
-                                            ))}
+                                            {purchases.map((purchase) => {
+                                                const supplierName = suppliers.find(s => s.id === purchase.supplier_id)?.full_name || `ID: ${purchase.supplier_id}`;
+                                                return (
+                                                    <option key={purchase.id} value={purchase.id}>
+                                                        {supplierName} - {formatPersianDate(purchase.date)} - {purchase.total_amount.toLocaleString()}
+                                                    </option>
+                                                );
+                                            })}
                                         </select>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

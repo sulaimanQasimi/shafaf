@@ -1,5 +1,5 @@
 {
-  "name": "finance-app",
+  "name": "shafaf",
   "private": true,
   "version": "2.0.0",
   "type": "module",
@@ -36,6 +36,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.23",
     "postcss": "^8.5.6",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"

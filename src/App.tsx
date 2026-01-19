@@ -391,19 +391,25 @@ function App() {
             {/* Logo & Brand */}
             <div className="flex items-center gap-4">
               <motion.div
-                whileHover={{ rotate: 360 }}
-                transition={{ duration: 0.5 }}
-                className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg"
+                whileHover={{ scale: 1.05, rotate: 5 }}
+                transition={{ duration: 0.3 }}
+                className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg overflow-hidden bg-white"
               >
-                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                </svg>
+                <img 
+                  src="/logo.jpeg" 
+                  alt="Shafaf Logo" 
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                  }}
+                />
               </motion.div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                  {companySettings?.name || "سیستم مدیریت داروخانه"}
+                  Shafaf
                 </h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">شفاف</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{companySettings?.name || "سیستم مدیریت داروخانه"}</p>
               </div>
             </div>
 
@@ -468,7 +474,7 @@ function App() {
             خوش آمدید، {user.username}! 👋
           </h2>
           <p className="text-gray-600 dark:text-gray-400 text-lg">
-            به پنل مدیریت داروخانه خوش آمدید. از منوی زیر بخش مورد نظر را انتخاب کنید.
+            به پنل مدیریت مالیخوش آمدید. از منوی زیر بخش مورد نظر را انتخاب کنید.
           </p>
         </motion.div>
 

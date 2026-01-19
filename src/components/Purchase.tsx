@@ -1216,7 +1216,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                 className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
               >
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                  {translations.addPayment} - خریداری #{viewingPurchase.purchase.id}
+                  {translations.addPayment} - {getSupplierName(viewingPurchase.purchase.supplier_id)}
                 </h2>
                 <form onSubmit={handleAddPayment} className="space-y-4">
                   <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl mb-4">

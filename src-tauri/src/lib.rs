@@ -4746,6 +4746,7 @@ pub struct CompanySettings {
     pub logo: Option<String>,
     pub phone: Option<String>,
     pub address: Option<String>,
+    pub font: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -4756,6 +4757,14 @@ fn init_company_settings_table(db_state: State<'_, Mutex<Option<Database>>>) -> 
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
+    // First, check if font column exists, if not add it
+    let check_column_sql = "PRAGMA table_info(company_settings)";
+    let columns = db.query(check_column_sql, &[], |row| {
+        Ok(row.get::<_, String>(1)?)
+    }).unwrap_or_else(|_| vec![]);
+    
+    let has_font_column = columns.iter().any(|col| col == "font");
+    
     let create_table_sql = "
         CREATE TABLE IF NOT EXISTS company_settings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4763,6 +4772,7 @@ fn init_company_settings_table(db_state: State<'_, Mutex<Option<Database>>>) -> 
             logo TEXT,
             phone TEXT,
             address TEXT,
+            font TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -4771,6 +4781,12 @@ fn init_company_settings_table(db_state: State<'_, Mutex<Option<Database>>>) -> 
     db.execute(create_table_sql, &[])
         .map_err(|e| format!("Failed to create company_settings table: {}", e))?;
 
+    // Add font column if it doesn't exist (for existing databases)
+    if !has_font_column {
+        db.execute("ALTER TABLE company_settings ADD COLUMN font TEXT", &[])
+            .map_err(|e| format!("Failed to add font column: {}", e))?;
+    }
+
     // Insert default row if table is empty
     let count_sql = "SELECT COUNT(*) FROM company_settings";
     let counts = db.query(count_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
@@ -4778,9 +4794,10 @@ fn init_company_settings_table(db_state: State<'_, Mutex<Option<Database>>>) -> 
     let count: i64 = counts.first().copied().unwrap_or(0);
     
     if count == 0 {
-        let insert_sql = "INSERT INTO company_settings (name, logo, phone, address) VALUES (?, ?, ?, ?)";
+        let insert_sql = "INSERT INTO company_settings (name, logo, phone, address, font) VALUES (?, ?, ?, ?, ?)";
         db.execute(insert_sql, &[
             &"شرکت" as &dyn rusqlite::ToSql,
+            &None::<String> as &dyn rusqlite::ToSql,
             &None::<String> as &dyn rusqlite::ToSql,
             &None::<String> as &dyn rusqlite::ToSql,
             &None::<String> as &dyn rusqlite::ToSql,
@@ -4797,7 +4814,7 @@ fn get_company_settings(db_state: State<'_, Mutex<Option<Database>>>) -> Result<
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, name, logo, phone, address, created_at, updated_at FROM company_settings ORDER BY id LIMIT 1";
+    let sql = "SELECT id, name, logo, phone, address, font, created_at, updated_at FROM company_settings ORDER BY id LIMIT 1";
     let settings_list = db
         .query(sql, &[], |row| {
             Ok(CompanySettings {
@@ -4806,8 +4823,9 @@ fn get_company_settings(db_state: State<'_, Mutex<Option<Database>>>) -> Result<
                 logo: row.get(2)?,
                 phone: row.get(3)?,
                 address: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                font: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
             })
         })
         .map_err(|e| format!("Failed to fetch company settings: {}", e))?;
@@ -4824,6 +4842,7 @@ fn update_company_settings(
     logo: Option<String>,
     phone: Option<String>,
     address: Option<String>,
+    font: Option<String>,
 ) -> Result<CompanySettings, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
@@ -4836,28 +4855,30 @@ fn update_company_settings(
 
     if count == 0 {
         // Insert new settings
-        let insert_sql = "INSERT INTO company_settings (name, logo, phone, address) VALUES (?, ?, ?, ?)";
+        let insert_sql = "INSERT INTO company_settings (name, logo, phone, address, font) VALUES (?, ?, ?, ?, ?)";
         db.execute(insert_sql, &[
             &name as &dyn rusqlite::ToSql,
             &logo as &dyn rusqlite::ToSql,
             &phone as &dyn rusqlite::ToSql,
             &address as &dyn rusqlite::ToSql,
+            &font as &dyn rusqlite::ToSql,
         ])
         .map_err(|e| format!("Failed to insert company settings: {}", e))?;
     } else {
         // Update existing settings (update first row)
-        let update_sql = "UPDATE company_settings SET name = ?, logo = ?, phone = ?, address = ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT id FROM company_settings ORDER BY id LIMIT 1)";
+        let update_sql = "UPDATE company_settings SET name = ?, logo = ?, phone = ?, address = ?, font = ?, updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT id FROM company_settings ORDER BY id LIMIT 1)";
         db.execute(update_sql, &[
             &name as &dyn rusqlite::ToSql,
             &logo as &dyn rusqlite::ToSql,
             &phone as &dyn rusqlite::ToSql,
             &address as &dyn rusqlite::ToSql,
+            &font as &dyn rusqlite::ToSql,
         ])
         .map_err(|e| format!("Failed to update company settings: {}", e))?;
     }
 
     // Get the updated settings (reuse the same db reference)
-    let get_sql = "SELECT id, name, logo, phone, address, created_at, updated_at FROM company_settings ORDER BY id LIMIT 1";
+    let get_sql = "SELECT id, name, logo, phone, address, font, created_at, updated_at FROM company_settings ORDER BY id LIMIT 1";
     let settings_list = db
         .query(get_sql, &[], |row| {
             Ok(CompanySettings {
@@ -4866,8 +4887,9 @@ fn update_company_settings(
                 logo: row.get(2)?,
                 phone: row.get(3)?,
                 address: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                font: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
             })
         })
         .map_err(|e| format!("Failed to fetch updated company settings: {}", e))?;

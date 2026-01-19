@@ -327,6 +327,26 @@ export default function SaleInvoice({
                     padding-bottom: 20px;
                     margin-bottom: 30px;
                 }
+                .company-logo {
+                    width: 120px;
+                    height: 120px;
+                    object-fit: contain;
+                    border-radius: 8px;
+                }
+                .company-info {
+                    flex: 1;
+                }
+                .company-name {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: #1a1a1a;
+                    margin-bottom: 8px;
+                }
+                .company-details {
+                    font-size: 14px;
+                    color: #64748b;
+                    line-height: 1.6;
+                }
                 .invoice-title {
                     font-size: 32px;
                     font-weight: bold;

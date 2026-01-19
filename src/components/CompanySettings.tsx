@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { getCompanySettings, updateCompanySettings, initCompanySettingsTable, type CompanySettings } from "../utils/company";
+import { getAvailableFonts, applyFont } from "../utils/fonts";
 import Footer from "./Footer";
 
 // Dari translations
@@ -14,6 +15,7 @@ const translations = {
     logo: "لوگو",
     phone: "شماره تماس",
     address: "آدرس",
+    font: "فونت",
     companyInfo: "اطلاعات شرکت",
     success: {
         updated: "تنظیمات شرکت با موفقیت بروزرسانی شد",
@@ -42,7 +44,9 @@ export default function CompanySettings({ onBack }: CompanySettingsProps) {
         logo: "",
         phone: "",
         address: "",
+        font: "",
     });
+    const [availableFonts] = useState(getAvailableFonts());
 
     useEffect(() => {
         loadSettings();
@@ -61,6 +65,7 @@ export default function CompanySettings({ onBack }: CompanySettingsProps) {
                     logo: settingsData.logo || "",
                     phone: settingsData.phone || "",
                     address: settingsData.address || "",
+                    font: settingsData.font || "",
                 });
             }
         } catch (error: any) {
@@ -116,10 +121,21 @@ export default function CompanySettings({ onBack }: CompanySettingsProps) {
                 logo: formData.logo || undefined,
                 phone: formData.phone || undefined,
                 address: formData.address || undefined,
+                font: formData.font || undefined,
             });
 
             if (updatedSettings) {
                 toast.success(translations.success.updated);
+                // Apply the new font immediately
+                try {
+                    if (updatedSettings.font) {
+                        await applyFont(updatedSettings.font);
+                    } else {
+                        await applyFont(null);
+                    }
+                } catch (fontError) {
+                    console.error("Error applying font:", fontError);
+                }
             }
         } catch (error: any) {
             toast.error(translations.errors.update);
@@ -349,6 +365,35 @@ export default function CompanySettings({ onBack }: CompanySettingsProps) {
                                         dir="rtl"
                                     />
                                 </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                    {translations.font}
+                                </label>
+                                <div className="relative">
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                        </svg>
+                                    </div>
+                                    <select
+                                        value={formData.font}
+                                        onChange={(e) => setFormData({ ...formData, font: e.target.value })}
+                                        className="w-full pr-11 pl-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200 appearance-none cursor-pointer"
+                                        dir="rtl"
+                                        style={{ fontFamily: formData.font && formData.font !== "system" ? formData.font : undefined }}
+                                    >
+                                        {availableFonts.map((font) => (
+                                            <option key={font.name} value={font.name === "system" ? "" : font.name}>
+                                                {font.displayName}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                    فونت‌های سفارشی را در پوشه public/fonts قرار دهید (فرمت‌های .ttf, .otf, .woff, .woff2)
+                                </p>
                             </div>
                         </div>
                     </motion.div>

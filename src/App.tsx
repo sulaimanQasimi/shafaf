@@ -11,6 +11,7 @@ import toast from "react-hot-toast";
 import { getDashboardStats, formatPersianNumber, formatLargeNumber } from "./utils/dashboard";
 import { playClickSound } from "./utils/sound";
 import { getCompanySettings, initCompanySettingsTable, type CompanySettings as CompanySettingsType } from "./utils/company";
+import { applyFont } from "./utils/fonts";
 import { isLicenseValid } from "./utils/license";
 import Login from "./components/Login";
 import License from "./components/License";
@@ -126,13 +127,20 @@ function App() {
     };
   }, []);
 
-  // Load company settings
+  // Load company settings and apply font
   useEffect(() => {
     const loadCompanySettings = async () => {
       try {
         await initCompanySettingsTable();
         const settings = await getCompanySettings();
         setCompanySettings(settings);
+        
+        // Apply font from settings
+        if (settings.font) {
+          await applyFont(settings.font);
+        } else {
+          await applyFont(null); // Use system default
+        }
       } catch (error) {
         console.error("Error loading company settings:", error);
       }

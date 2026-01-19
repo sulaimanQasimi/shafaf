@@ -6,6 +6,7 @@ export interface CompanySettings {
     logo?: string;
     phone?: string;
     address?: string;
+    font?: string;
     created_at: string;
     updated_at: string;
 }
@@ -15,6 +16,7 @@ export interface CompanySettingsFormData {
     logo?: string;
     phone?: string;
     address?: string;
+    font?: string;
 }
 
 /**
@@ -46,5 +48,6 @@ export async function updateCompanySettings(
         logo: settings.logo || null,
         phone: settings.phone || null,
         address: settings.address || null,
+        font: settings.font || null,
     });
 }

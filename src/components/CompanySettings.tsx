@@ -382,13 +382,23 @@ export default function CompanySettings({ onBack }: CompanySettingsProps) {
                                         onChange={(e) => setFormData({ ...formData, font: e.target.value })}
                                         className="w-full pr-11 pl-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200 appearance-none cursor-pointer"
                                         dir="rtl"
-                                        style={{ fontFamily: formData.font && formData.font !== "system" ? formData.font : undefined }}
+                                        style={{ 
+                                            fontFamily: formData.font && formData.font !== "system" && !formData.font.includes('/') 
+                                                ? formData.font 
+                                                : (formData.font && formData.font.includes('IRANSans') ? 'IRANSans' : undefined)
+                                        }}
                                     >
-                                        {availableFonts.map((font) => (
-                                            <option key={font.name} value={font.name === "system" ? "" : font.name}>
-                                                {font.displayName}
-                                            </option>
-                                        ))}
+                                        {availableFonts.map((font, index) => {
+                                            // Use file path as value if available, otherwise use name
+                                            const value = font.name === "system" 
+                                                ? "" 
+                                                : (font.file ? font.file : font.name);
+                                            return (
+                                                <option key={`${font.name}-${index}`} value={value}>
+                                                    {font.displayName}
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 </div>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">

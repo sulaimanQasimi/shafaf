@@ -80,6 +80,76 @@ export default function PurchaseInvoice({
         return unit?.name || "نامشخص";
     };
 
+    // Helper function to convert oklch/rgb/computed colors to hex
+    const convertColorToHex = (color: string): string => {
+        if (!color || color === 'transparent' || color === 'rgba(0, 0, 0, 0)') {
+            return '#ffffff';
+        }
+        
+        // If already hex, return as is
+        if (color.startsWith('#')) {
+            return color;
+        }
+        
+        // If rgb/rgba, convert to hex
+        const rgbMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+        if (rgbMatch) {
+            const r = parseInt(rgbMatch[1]);
+            const g = parseInt(rgbMatch[2]);
+            const b = parseInt(rgbMatch[3]);
+            return `#${[r, g, b].map(x => {
+                const hex = x.toString(16);
+                return hex.length === 1 ? '0' + hex : hex;
+            }).join('')}`;
+        }
+        
+        // Fallback
+        return '#000000';
+    };
+
+    // Recursively process all elements and convert their styles
+    const processElementStyles = (element: HTMLElement) => {
+        const computedStyle = window.getComputedStyle(element);
+        
+        // Convert color properties
+        const colorProps = ['color', 'backgroundColor', 'borderColor', 'borderTopColor', 
+                          'borderRightColor', 'borderBottomColor', 'borderLeftColor'];
+        
+        colorProps.forEach(prop => {
+            const value = computedStyle.getPropertyValue(prop);
+            if (value && (value.includes('oklch') || value.includes('rgb') || value.includes('rgba'))) {
+                try {
+                    // Create a temporary element to get computed color
+                    const temp = document.createElement('div');
+                    temp.style.color = value;
+                    temp.style.position = 'absolute';
+                    temp.style.visibility = 'hidden';
+                    document.body.appendChild(temp);
+                    const computed = window.getComputedStyle(temp).color;
+                    document.body.removeChild(temp);
+                    
+                    if (computed && !computed.includes('oklch')) {
+                        element.style.setProperty(prop, computed, 'important');
+                    } else {
+                        element.style.setProperty(prop, convertColorToHex(computed || value), 'important');
+                    }
+                } catch (e) {
+                    // If conversion fails, use a safe default
+                    if (prop === 'backgroundColor') {
+                        element.style.setProperty(prop, '#ffffff', 'important');
+                    } else {
+                        element.style.setProperty(prop, '#000000', 'important');
+                    }
+                }
+            }
+        });
+        
+        // Process children
+        Array.from(element.children).forEach(child => {
+            processElementStyles(child as HTMLElement);
+        });
+    };
+
     const handleExportPDF = async () => {
         if (!printRef.current) {
             toast.error("خطا در تولید PDF");
@@ -98,9 +168,12 @@ export default function PurchaseInvoice({
             // Create a clone of the element to avoid modifying the original
             const clone = printRef.current.cloneNode(true) as HTMLElement;
             
-            // Add inline styles to override oklch colors with standard colors
+            // Add comprehensive inline styles to override all Tailwind classes with standard colors
             const styleOverrides = document.createElement('style');
             styleOverrides.textContent = `
+                * {
+                    color: inherit !important;
+                }
                 .invoice-container {
                     background: #ffffff !important;
                     color: #1a1a1a !important;
@@ -124,8 +197,13 @@ export default function PurchaseInvoice({
                     background: #059669 !important;
                     color: #ffffff !important;
                 }
+                .items-table th {
+                    background: #059669 !important;
+                    color: #ffffff !important;
+                }
                 .items-table td {
                     color: #1a1a1a !important;
+                    background: transparent !important;
                 }
                 .total-label {
                     color: #64748b !important;
@@ -147,23 +225,65 @@ export default function PurchaseInvoice({
                 .notes-text {
                     color: #64748b !important;
                 }
-                .text-gray-500 {
+                .text-gray-500,
+                .text-gray-500 * {
                     color: #64748b !important;
                 }
-                .text-gray-600 {
+                .text-gray-600,
+                .text-gray-600 * {
                     color: #475569 !important;
                 }
-                .text-green-600 {
+                .text-gray-900,
+                .text-gray-900 * {
+                    color: #0f172a !important;
+                }
+                .text-green-600,
+                .text-green-600 * {
                     color: #059669 !important;
+                }
+                .text-white,
+                .text-white * {
+                    color: #ffffff !important;
+                }
+                .bg-white {
+                    background: #ffffff !important;
+                }
+                .bg-gray-50 {
+                    background: #f9fafb !important;
+                }
+                .bg-gray-300 {
+                    background: #d1d5db !important;
+                }
+                .bg-green-600 {
+                    background: #059669 !important;
+                }
+                .bg-green-700 {
+                    background: #047857 !important;
+                }
+                .bg-gray-400 {
+                    background: #9ca3af !important;
+                }
+                .bg-black {
+                    background: #000000 !important;
+                }
+                .bg-opacity-50 {
+                    background-color: rgba(0, 0, 0, 0.5) !important;
                 }
             `;
             clone.appendChild(styleOverrides);
+            
+            // Process all elements to convert computed styles
+            processElementStyles(clone);
             
             // Temporarily append clone to body for rendering
             clone.style.position = 'absolute';
             clone.style.left = '-9999px';
             clone.style.top = '0';
+            clone.style.width = printRef.current.offsetWidth + 'px';
             document.body.appendChild(clone);
+
+            // Wait a bit for styles to apply
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             // Capture the invoice as canvas
             const canvas = await html2canvas(clone, {
@@ -171,9 +291,41 @@ export default function PurchaseInvoice({
                 useCORS: true,
                 logging: false,
                 backgroundColor: '#ffffff',
+                removeContainer: true,
                 ignoreElements: (element) => {
                     // Ignore any elements that might cause issues
                     return element.classList.contains('no-print');
+                },
+                onclone: (clonedDoc) => {
+                    // Process all elements in the cloned document to remove oklch colors
+                    const allElements = clonedDoc.querySelectorAll('*');
+                    allElements.forEach((el) => {
+                        const htmlEl = el as HTMLElement;
+                        const computedStyle = clonedDoc.defaultView?.getComputedStyle(htmlEl);
+                        if (computedStyle) {
+                            // Convert all color-related properties
+                            const colorProps = ['color', 'backgroundColor', 'borderColor', 
+                                              'borderTopColor', 'borderRightColor', 
+                                              'borderBottomColor', 'borderLeftColor'];
+                            
+                            colorProps.forEach(prop => {
+                                const value = computedStyle.getPropertyValue(prop);
+                                if (value && (value.includes('oklch') || value.includes('oklab'))) {
+                                    // Remove oklch colors by setting to a safe default
+                                    if (prop === 'backgroundColor' || prop.includes('background')) {
+                                        htmlEl.style.setProperty(prop, '#ffffff', 'important');
+                                    } else if (prop === 'color') {
+                                        htmlEl.style.setProperty(prop, '#000000', 'important');
+                                    } else {
+                                        htmlEl.style.setProperty(prop, 'transparent', 'important');
+                                    }
+                                } else if (value && (value.includes('rgb') || value.includes('rgba'))) {
+                                    // Keep rgb/rgba as they're supported
+                                    htmlEl.style.setProperty(prop, value, 'important');
+                                }
+                            });
+                        }
+                    });
                 },
             });
 

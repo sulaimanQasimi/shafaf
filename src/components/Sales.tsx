@@ -457,7 +457,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             key: "total_amount", label: translations.totalAmount, sortable: true,
             render: (sale: Sale) => (
                 <span className="font-bold text-purple-700 dark:text-purple-300">
-                    {sale.total_amount.toLocaleString('fa-IR')} افغانی
+                    {sale.total_amount.toLocaleString('en-US')} افغانی
                 </span>
             )
         },
@@ -465,7 +465,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             key: "paid_amount", label: translations.paidAmount, sortable: true,
             render: (sale: Sale) => (
                 <span className="font-bold text-green-700 dark:text-green-300">
-                    {sale.paid_amount.toLocaleString('fa-IR')} افغانی
+                    {sale.paid_amount.toLocaleString('en-US')} افغانی
                 </span>
             )
         },
@@ -475,7 +475,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                 const remaining = sale.total_amount - sale.paid_amount;
                 return (
                     <span className={`font-bold ${remaining > 0 ? 'text-red-700 dark:text-red-300' : 'text-gray-500'}`}>
-                        {remaining.toLocaleString('fa-IR')} افغانی
+                        {remaining.toLocaleString('en-US')} افغانی
                     </span>
                 );
             }
@@ -766,7 +766,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                                                 {translations.total}
                                                             </div>
                                                             <div className="px-3 py-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-sm font-bold text-purple-700 dark:text-purple-300">
-                                                                {calculateItemTotal(item).toLocaleString('fa-IR')}
+                                                                {calculateItemTotal(item).toLocaleString('en-US')}
                                                             </div>
                                                         </div>
                                                         <div className="col-span-1">
@@ -791,7 +791,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                                     {translations.totalAmount}:
                                                 </span>
                                                 <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                                                    {calculateTotal().toLocaleString('fa-IR')}
+                                                    {calculateTotal().toLocaleString('en-US')}
                                                 </span>
                                             </div>
 
@@ -813,7 +813,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                                         {translations.remainingAmount}
                                                     </label>
                                                     <div className="px-3 py-2 rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-white text-lg font-bold">
-                                                        {calculateRemaining().toLocaleString('fa-IR')}
+                                                        {calculateRemaining().toLocaleString('en-US')}
                                                     </div>
                                                 </div>
                                             </div>
@@ -961,7 +961,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                             </label>
                                         </div>
                                         <p className="text-lg font-semibold text-gray-900 dark:text-white mr-8">
-                                            {viewingSale.sale.total_amount.toLocaleString('fa-IR')}
+                                            {viewingSale.sale.total_amount.toLocaleString('en-US')}
                                         </p>
                                     </motion.div>
                                     <motion.div
@@ -976,7 +976,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                             </label>
                                         </div>
                                         <p className="text-lg font-semibold text-gray-900 dark:text-white mr-8">
-                                            {(viewingSale.sale.total_amount - viewingSale.sale.paid_amount).toLocaleString('fa-IR')}
+                                            {(viewingSale.sale.total_amount - viewingSale.sale.paid_amount).toLocaleString('en-US')}
                                         </p>
                                     </motion.div>
                                 </div>
@@ -998,9 +998,9 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                                 <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                                                     <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{getProductName(item.product_id)}</td>
                                                     <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{getUnitName(item.unit_id)}</td>
-                                                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300" dir="ltr">{item.per_price.toLocaleString('fa-IR')}</td>
-                                                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300" dir="ltr">{item.amount.toLocaleString('fa-IR')}</td>
-                                                    <td className="px-6 py-4 text-sm font-bold text-purple-600 dark:text-purple-400" dir="ltr">{item.total.toLocaleString('fa-IR')}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300" dir="ltr">{item.per_price.toLocaleString('en-US')}</td>
+                                                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300" dir="ltr">{item.amount.toLocaleString('en-US')}</td>
+                                                    <td className="px-6 py-4 text-sm font-bold text-purple-600 dark:text-purple-400" dir="ltr">{item.total.toLocaleString('en-US')}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -1034,7 +1034,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                                         </div>
                                                         <div>
                                                             <div className="font-bold text-gray-900 dark:text-white">
-                                                                {payment.amount.toLocaleString('fa-IR')}
+                                                                {payment.amount.toLocaleString('en-US')}
                                                             </div>
                                                             <div className="text-sm text-gray-500 dark:text-gray-400">
                                                                 {formatPersianDate(payment.date)}

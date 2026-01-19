@@ -78,16 +78,16 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 }
 
 /**
- * Format number with Persian digits and thousand separators
+ * Format number with English digits and thousand separators
  * @param num Number to format
- * @returns Formatted string with Persian digits
+ * @returns Formatted string with English digits
  */
 export function formatPersianNumber(num: number): string {
-  return new Intl.NumberFormat('fa-IR').format(num);
+  return new Intl.NumberFormat('en-US').format(num);
 }
 
 /**
- * Format large numbers with K, M suffixes in Persian
+ * Format large numbers with K, M suffixes
  * @param num Number to format
  * @returns Formatted string
  */

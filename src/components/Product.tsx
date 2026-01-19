@@ -389,7 +389,7 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
       key: "price", label: translations.price, sortable: true,
       render: (p: Product) => p.price ? (
         <span className="font-medium text-gray-900 dark:text-white">
-          {p.price.toLocaleString('fa-IR')} <span className="text-xs text-gray-500">{getCurrencyName(p.currency_id)}</span>
+          {p.price.toLocaleString('en-US')} <span className="text-xs text-gray-500">{getCurrencyName(p.currency_id)}</span>
         </span>
       ) : <span className="text-gray-400">-</span>
     },
@@ -397,7 +397,7 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
       key: "stock_quantity", label: translations.stockQuantity, sortable: true,
       render: (p: Product) => p.stock_quantity ? (
         <span className="font-medium text-gray-900 dark:text-white">
-          {p.stock_quantity.toLocaleString('fa-IR')} <span className="text-xs text-gray-500">{p.unit}</span>
+          {p.stock_quantity.toLocaleString('en-US')} <span className="text-xs text-gray-500">{p.unit}</span>
         </span>
       ) : <span className="text-gray-400">-</span>
     },

@@ -430,7 +430,7 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
         const balance = customerBalances[c.id];
         return (
           <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
-            {balance ? balance.totalSales.toLocaleString('fa-IR') : '0'} افغانی
+            {balance ? balance.totalSales.toLocaleString('en-US') : '0'} افغانی
           </span>
         );
       }
@@ -441,7 +441,7 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
         const balance = customerBalances[c.id];
         return (
           <span className="text-lg font-bold text-green-600 dark:text-green-400">
-            {balance ? balance.totalPaid.toLocaleString('fa-IR') : '0'} افغانی
+            {balance ? balance.totalPaid.toLocaleString('en-US') : '0'} افغانی
           </span>
         );
       }
@@ -453,7 +453,7 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
         const remaining = balance ? balance.totalRemaining : 0;
         return (
           <span className={`text-lg font-bold ${remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-            {remaining.toLocaleString('fa-IR')} افغانی
+            {remaining.toLocaleString('en-US')} افغانی
           </span>
         );
       }
@@ -818,7 +818,7 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
                         {translations.totalSales}
                       </div>
                       <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                        {customerBalances[selectedCustomer.id].totalSales.toLocaleString('fa-IR')} افغانی
+                        {customerBalances[selectedCustomer.id].totalSales.toLocaleString('en-US')} افغانی
                       </div>
                     </motion.div>
                     <motion.div
@@ -828,7 +828,7 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
                         {translations.totalPaid}
                       </div>
                       <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {customerBalances[selectedCustomer.id].totalPaid.toLocaleString('fa-IR')} افغانی
+                        {customerBalances[selectedCustomer.id].totalPaid.toLocaleString('en-US')} افغانی
                       </div>
                     </motion.div>
                     <motion.div
@@ -838,7 +838,7 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
                         {translations.totalRemaining}
                       </div>
                       <div className={`text-2xl font-bold ${customerBalances[selectedCustomer.id].totalRemaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                        {customerBalances[selectedCustomer.id].totalRemaining.toLocaleString('fa-IR')} افغانی
+                        {customerBalances[selectedCustomer.id].totalRemaining.toLocaleString('en-US')} افغانی
                       </div>
                     </motion.div>
                   </div>
@@ -870,19 +870,19 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
                                 <div>
                                   <span className="text-gray-500 dark:text-gray-400">مبلغ کل:</span>
                                   <span className="font-bold text-purple-600 dark:text-purple-400 mr-2">
-                                    {sale.total_amount.toLocaleString('fa-IR')} افغانی
+                                    {sale.total_amount.toLocaleString('en-US')} افغانی
                                   </span>
                                 </div>
                                 <div>
                                   <span className="text-gray-500 dark:text-gray-400">پرداخت شده:</span>
                                   <span className="font-bold text-green-600 dark:text-green-400 mr-2">
-                                    {paid.toLocaleString('fa-IR')} افغانی
+                                    {paid.toLocaleString('en-US')} افغانی
                                   </span>
                                 </div>
                                 <div>
                                   <span className="text-gray-500 dark:text-gray-400">باقیمانده:</span>
                                   <span className={`font-bold mr-2 ${remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                                    {remaining.toLocaleString('fa-IR')} افغانی
+                                    {remaining.toLocaleString('en-US')} افغانی
                                   </span>
                                 </div>
                               </div>
@@ -912,7 +912,7 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
                                     <div className="flex-1">
                                       <div className="flex items-center gap-3">
                                         <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                                          {payment.amount.toLocaleString('fa-IR')} افغانی
+                                          {payment.amount.toLocaleString('en-US')} افغانی
                                         </span>
                                       </div>
                                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -972,13 +972,13 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
                   <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl mb-4">
                     <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">مبلغ کل فروش</div>
                     <div className="text-xl font-bold text-gray-900 dark:text-white">
-                      {selectedSaleForPayment.total_amount.toLocaleString('fa-IR')} افغانی
+                      {selectedSaleForPayment.total_amount.toLocaleString('en-US')} افغانی
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                      پرداخت شده: {calculatePaidAmount(selectedSaleForPayment.id).toLocaleString('fa-IR')} افغانی
+                      پرداخت شده: {calculatePaidAmount(selectedSaleForPayment.id).toLocaleString('en-US')} افغانی
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">
-                      باقیمانده: {calculateRemainingAmount(selectedSaleForPayment).toLocaleString('fa-IR')} افغانی
+                      باقیمانده: {calculateRemainingAmount(selectedSaleForPayment).toLocaleString('en-US')} افغانی
                     </div>
                   </div>
                   <div>

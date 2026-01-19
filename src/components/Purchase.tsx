@@ -542,7 +542,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
               key: "total_amount", label: translations.totalAmount, sortable: true,
               render: (p: Purchase) => (
                 <span className="text-lg font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                  {p.total_amount.toLocaleString('fa-IR')} افغانی
+                  {p.total_amount.toLocaleString('en-US')} افغانی
                 </span>
               )
             },
@@ -552,7 +552,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                 const paid = calculatePaidAmount(p.id);
                 return (
                   <span className="text-lg font-bold text-green-600 dark:text-green-400">
-                    {paid.toLocaleString('fa-IR')} افغانی
+                    {paid.toLocaleString('en-US')} افغانی
                   </span>
                 );
               }
@@ -563,7 +563,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                 const remaining = calculateRemainingAmount(p);
                 return (
                   <span className={`text-lg font-bold ${remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                    {remaining.toLocaleString('fa-IR')} افغانی
+                    {remaining.toLocaleString('en-US')} افغانی
                   </span>
                 );
               }
@@ -815,7 +815,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                                 {translations.total}
                               </div>
                               <div className="px-3 py-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-sm font-bold text-purple-700 dark:text-purple-300">
-                                {calculateItemTotal(item).toLocaleString('fa-IR')}
+                                {calculateItemTotal(item).toLocaleString('en-US')}
                               </div>
                             </div>
                             <div className="col-span-1">
@@ -841,7 +841,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                             {translations.totalAmount}:
                           </span>
                           <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                            {calculateTotal().toLocaleString('fa-IR')}
+                            {calculateTotal().toLocaleString('en-US')}
                           </span>
                         </div>
                       </div>
@@ -1047,14 +1047,14 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                                 {unit ? unit.name : `ID: ${item.unit_id}`}
                               </td>
                               <td className="px-6 py-4 text-gray-900 dark:text-white text-left font-semibold">
-                                {item.per_price.toLocaleString('fa-IR')}
+                                {item.per_price.toLocaleString('en-US')}
                               </td>
                               <td className="px-6 py-4 text-gray-900 dark:text-white text-left font-semibold">
-                                {item.amount.toLocaleString('fa-IR')}
+                                {item.amount.toLocaleString('en-US')}
                               </td>
                               <td className="px-6 py-4 text-left">
                                 <span className="inline-block px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-bold rounded-lg">
-                                  {item.total.toLocaleString('fa-IR')}
+                                  {item.total.toLocaleString('en-US')}
                                 </span>
                               </td>
                             </motion.tr>
@@ -1073,7 +1073,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                           </td>
                           <td className="px-6 py-5 text-left">
                             <span className="inline-block px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-xl rounded-xl shadow-lg">
-                              {viewingPurchase.purchase.total_amount.toLocaleString('fa-IR')} افغانی
+                              {viewingPurchase.purchase.total_amount.toLocaleString('en-US')} افغانی
                             </span>
                           </td>
                         </tr>
@@ -1100,7 +1100,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                         {translations.totalAmount}
                       </div>
                       <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                        {viewingPurchase.purchase.total_amount.toLocaleString('fa-IR')} افغانی
+                        {viewingPurchase.purchase.total_amount.toLocaleString('en-US')} افغانی
                       </div>
                     </motion.div>
                     <motion.div
@@ -1110,7 +1110,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                         {translations.paidAmount}
                       </div>
                       <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {calculatePaidAmount(viewingPurchase.purchase.id).toLocaleString('fa-IR')} افغانی
+                        {calculatePaidAmount(viewingPurchase.purchase.id).toLocaleString('en-US')} افغانی
                       </div>
                     </motion.div>
                     <motion.div
@@ -1120,7 +1120,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                         {translations.remainingAmount}
                       </div>
                       <div className={`text-2xl font-bold ${calculateRemainingAmount(viewingPurchase.purchase) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                        {calculateRemainingAmount(viewingPurchase.purchase).toLocaleString('fa-IR')} افغانی
+                        {calculateRemainingAmount(viewingPurchase.purchase).toLocaleString('en-US')} افغانی
                       </div>
                     </motion.div>
                   </div>
@@ -1150,11 +1150,11 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                             <div className="flex-1">
                               <div className="flex items-center gap-3 mb-2">
                                 <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                                  {payment.amount.toLocaleString('fa-IR')} {payment.currency}
+                                  {payment.amount.toLocaleString('en-US')} {payment.currency}
                                 </span>
                                 <span className="text-xs text-gray-500">× {payment.rate}</span>
                                 <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                                  = {payment.total.toLocaleString('fa-IR')} افغانی
+                                  = {payment.total.toLocaleString('en-US')} افغانی
                                 </span>
                               </div>
                               <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -1222,13 +1222,13 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                   <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl mb-4">
                     <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">مبلغ کل خریداری</div>
                     <div className="text-xl font-bold text-gray-900 dark:text-white">
-                      {viewingPurchase.purchase.total_amount.toLocaleString('fa-IR')} افغانی
+                      {viewingPurchase.purchase.total_amount.toLocaleString('en-US')} افغانی
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                      پرداخت شده: {calculatePaidAmount(viewingPurchase.purchase.id).toLocaleString('fa-IR')} افغانی
+                      پرداخت شده: {calculatePaidAmount(viewingPurchase.purchase.id).toLocaleString('en-US')} افغانی
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">
-                      باقیمانده: {calculateRemainingAmount(viewingPurchase.purchase).toLocaleString('fa-IR')} افغانی
+                      باقیمانده: {calculateRemainingAmount(viewingPurchase.purchase).toLocaleString('en-US')} افغانی
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

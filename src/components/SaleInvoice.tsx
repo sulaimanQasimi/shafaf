@@ -70,7 +70,7 @@ export default function SaleInvoice({
     };
 
     const formatNumber = (num: number) => {
-        return new Intl.NumberFormat("fa-AF").format(num);
+        return new Intl.NumberFormat("en-US").format(num);
     };
 
     const getProductName = (productId: number) => {

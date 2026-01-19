@@ -320,19 +320,19 @@ export default function PurchasePaymentManagement({ onBack }: PurchasePaymentMan
                             <div className="flex items-center gap-2">
                                 <span className="text-gray-500 dark:text-gray-400">مبلغ کل:</span>
                                 <span className="font-bold text-purple-600 dark:text-purple-400">
-                                    {purchase ? purchase.total_amount.toLocaleString('fa-IR') : '0'} افغانی
+                                    {purchase ? purchase.total_amount.toLocaleString('en-US') : '0'} افغانی
                                 </span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="text-gray-500 dark:text-gray-400">پرداخت شده:</span>
                                 <span className="font-bold text-green-600 dark:text-green-400">
-                                    {paid.toLocaleString('fa-IR')} افغانی
+                                    {paid.toLocaleString('en-US')} افغانی
                                 </span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="text-gray-500 dark:text-gray-400">باقیمانده:</span>
                                 <span className={`font-bold ${remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                                    {remaining.toLocaleString('fa-IR')} افغانی
+                                    {remaining.toLocaleString('en-US')} افغانی
                                 </span>
                             </div>
                         </div>

@@ -485,7 +485,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
         const balance = supplierBalances[s.id];
         return (
           <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
-            {balance ? balance.totalPurchases.toLocaleString('fa-IR') : '0'} افغانی
+            {balance ? balance.totalPurchases.toLocaleString('en-US') : '0'} افغانی
           </span>
         );
       }
@@ -496,7 +496,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
         const balance = supplierBalances[s.id];
         return (
           <span className="text-lg font-bold text-green-600 dark:text-green-400">
-            {balance ? balance.totalPaid.toLocaleString('fa-IR') : '0'} افغانی
+            {balance ? balance.totalPaid.toLocaleString('en-US') : '0'} افغانی
           </span>
         );
       }
@@ -508,7 +508,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
         const remaining = balance ? balance.totalRemaining : 0;
         return (
           <span className={`text-lg font-bold ${remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-            {remaining.toLocaleString('fa-IR')} افغانی
+            {remaining.toLocaleString('en-US')} افغانی
           </span>
         );
       }
@@ -873,7 +873,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
                         {translations.totalPurchases}
                       </div>
                       <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                        {supplierBalances[selectedSupplier.id].totalPurchases.toLocaleString('fa-IR')} افغانی
+                        {supplierBalances[selectedSupplier.id].totalPurchases.toLocaleString('en-US')} افغانی
                       </div>
                     </motion.div>
                     <motion.div
@@ -883,7 +883,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
                         {translations.totalPaid}
                       </div>
                       <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {supplierBalances[selectedSupplier.id].totalPaid.toLocaleString('fa-IR')} افغانی
+                        {supplierBalances[selectedSupplier.id].totalPaid.toLocaleString('en-US')} افغانی
                       </div>
                     </motion.div>
                     <motion.div
@@ -893,7 +893,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
                         {translations.totalRemaining}
                       </div>
                       <div className={`text-2xl font-bold ${supplierBalances[selectedSupplier.id].totalRemaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                        {supplierBalances[selectedSupplier.id].totalRemaining.toLocaleString('fa-IR')} افغانی
+                        {supplierBalances[selectedSupplier.id].totalRemaining.toLocaleString('en-US')} افغانی
                       </div>
                     </motion.div>
                   </div>
@@ -925,19 +925,19 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
                                 <div>
                                   <span className="text-gray-500 dark:text-gray-400">مبلغ کل:</span>
                                   <span className="font-bold text-purple-600 dark:text-purple-400 mr-2">
-                                    {purchase.total_amount.toLocaleString('fa-IR')} افغانی
+                                    {purchase.total_amount.toLocaleString('en-US')} افغانی
                                   </span>
                                 </div>
                                 <div>
                                   <span className="text-gray-500 dark:text-gray-400">پرداخت شده:</span>
                                   <span className="font-bold text-green-600 dark:text-green-400 mr-2">
-                                    {paid.toLocaleString('fa-IR')} افغانی
+                                    {paid.toLocaleString('en-US')} افغانی
                                   </span>
                                 </div>
                                 <div>
                                   <span className="text-gray-500 dark:text-gray-400">باقیمانده:</span>
                                   <span className={`font-bold mr-2 ${remaining > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                                    {remaining.toLocaleString('fa-IR')} افغانی
+                                    {remaining.toLocaleString('en-US')} افغانی
                                   </span>
                                 </div>
                               </div>
@@ -967,11 +967,11 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
                                     <div className="flex-1">
                                       <div className="flex items-center gap-3">
                                         <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                                          {payment.amount.toLocaleString('fa-IR')} {payment.currency}
+                                          {payment.amount.toLocaleString('en-US')} {payment.currency}
                                         </span>
                                         <span className="text-xs text-gray-500">× {payment.rate}</span>
                                         <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                                          = {payment.total.toLocaleString('fa-IR')} افغانی
+                                          = {payment.total.toLocaleString('en-US')} افغانی
                                         </span>
                                       </div>
                                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -1032,13 +1032,13 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
                   <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl mb-4">
                     <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">مبلغ کل خریداری</div>
                     <div className="text-xl font-bold text-gray-900 dark:text-white">
-                      {selectedPurchaseForPayment.total_amount.toLocaleString('fa-IR')} افغانی
+                      {selectedPurchaseForPayment.total_amount.toLocaleString('en-US')} افغانی
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                      پرداخت شده: {calculatePaidAmount(selectedPurchaseForPayment.id).toLocaleString('fa-IR')} افغانی
+                      پرداخت شده: {calculatePaidAmount(selectedPurchaseForPayment.id).toLocaleString('en-US')} افغانی
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">
-                      باقیمانده: {calculateRemainingAmount(selectedPurchaseForPayment).toLocaleString('fa-IR')} افغانی
+                      باقیمانده: {calculateRemainingAmount(selectedPurchaseForPayment).toLocaleString('en-US')} افغانی
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

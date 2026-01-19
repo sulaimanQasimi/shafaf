@@ -146,18 +146,31 @@ export default function License({ onLicenseValid }: LicenseProps) {
           transition={{ duration: 0.4, delay: 0.1 }}
           className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-purple-100/50 dark:border-purple-900/30"
         >
-          {/* Logo/Icon Section */}
+          {/* Logo & App Name Section */}
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-            className="flex justify-center mb-6"
+            className="flex flex-col items-center justify-center mb-6"
           >
-            <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-              </svg>
-            </div>
+            <motion.div
+              whileHover={{ scale: 1.05, rotate: 5 }}
+              transition={{ duration: 0.3 }}
+              className="w-24 h-24 rounded-2xl flex items-center justify-center shadow-lg overflow-hidden bg-white mb-4"
+            >
+              <img 
+                src="/logo.jpeg" 
+                alt="Shafaf Logo" 
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+              />
+            </motion.div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">
+              Shafaf
+            </h1>
           </motion.div>
 
           {/* Title */}
@@ -167,12 +180,12 @@ export default function License({ onLicenseValid }: LicenseProps) {
             transition={{ delay: 0.2 }}
             className="text-center mb-8"
           >
-            <h1
-              className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2"
+            <h2
+              className="text-3xl font-bold text-gray-900 dark:text-white mb-2"
               dir="rtl"
             >
               {translations.title}
-            </h1>
+            </h2>
             <p className="text-gray-600 dark:text-gray-400 text-base" dir="rtl">
               {translations.subtitle}
             </p>

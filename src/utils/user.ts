@@ -23,6 +23,14 @@ export interface UserFormData {
     is_active: boolean;
 }
 
+export interface PaginatedResponse<T> {
+    items: T[];
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+}
+
 /**
  * Initialize the users table with extended fields for user management
  * @returns Promise with success message
@@ -33,7 +41,7 @@ export async function initExtendedUsersTable(): Promise<string> {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
       email TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
       full_name TEXT,
       phone TEXT,
       role TEXT DEFAULT 'user',
@@ -45,6 +53,12 @@ export async function initExtendedUsersTable(): Promise<string> {
     await executeQuery(sql);
 
     // Add missing columns if table already exists
+    try {
+        await executeQuery("ALTER TABLE users ADD COLUMN password_hash TEXT");
+    } catch (e) {
+        // Column might already exist
+    }
+
     try {
         await executeQuery("ALTER TABLE users ADD COLUMN full_name TEXT");
     } catch (e) {
@@ -79,17 +93,36 @@ export async function initExtendedUsersTable(): Promise<string> {
 }
 
 /**
- * Get all users
- * @returns Promise with array of users
+ * Get all users with pagination
+ * @param page Page number
+ * @param perPage Items per page
+ * @param search Search query
+ * @param sortBy Sort column
+ * @param sortOrder Sort order
+ * @returns Promise with paginated users
  */
-export async function getUsers(): Promise<User[]> {
-    const result = await queryDatabase(
-        "SELECT id, username, email, full_name, phone, role, is_active, created_at, updated_at FROM users ORDER BY created_at DESC"
-    );
-    return resultToObjects(result).map((row) => ({
-        ...row,
-        is_active: Boolean(row.is_active),
-    })) as User[];
+export async function getUsers(
+    page: number = 1,
+    perPage: number = 10,
+    search: string = "",
+    sortBy: string = "created_at",
+    sortOrder: "asc" | "desc" = "desc"
+): Promise<PaginatedResponse<User>> {
+    const response = await invoke<PaginatedResponse<User>>("get_users", {
+        page,
+        perPage,
+        search: search || null,
+        sortBy: sortBy || null,
+        sortOrder: sortOrder || null,
+    });
+
+    return {
+        ...response,
+        items: response.items.map((user) => ({
+            ...user,
+            is_active: Boolean(user.is_active),
+        })),
+    };
 }
 
 /**
@@ -120,7 +153,7 @@ export async function createUser(userData: UserFormData): Promise<string> {
     const hashedPassword = await invoke<string>("hash_password", { password: userData.password });
 
     await executeQuery(
-        `INSERT INTO users (username, email, password, full_name, phone, role, is_active, updated_at) 
+        `INSERT INTO users (username, email, password_hash, full_name, phone, role, is_active, updated_at) 
      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
         [
             userData.username,
@@ -155,7 +188,7 @@ export async function updateUser(id: number, userData: Partial<UserFormData>): P
     }
     if (userData.password !== undefined && userData.password.length > 0) {
         const hashedPassword = await invoke<string>("hash_password", { password: userData.password });
-        updates.push("password = ?");
+        updates.push("password_hash = ?");
         params.push(hashedPassword);
     }
     if (userData.full_name !== undefined) {
@@ -226,7 +259,7 @@ export async function updateUserProfile(
     if (profileData.newPassword && profileData.currentPassword) {
         // Verify current password
         const result = await queryDatabase(
-            "SELECT password FROM users WHERE id = ?",
+            "SELECT password_hash FROM users WHERE id = ?",
             [id]
         );
         const users = resultToObjects(result);
@@ -236,7 +269,7 @@ export async function updateUserProfile(
 
         const isValid = await invoke<boolean>("verify_password", {
             password: profileData.currentPassword,
-            hash: users[0].password,
+            hash: users[0].password_hash,
         });
 
         if (!isValid) {
@@ -246,7 +279,7 @@ export async function updateUserProfile(
         const hashedPassword = await invoke<string>("hash_password", {
             password: profileData.newPassword,
         });
-        updates.push("password = ?");
+        updates.push("password_hash = ?");
         params.push(hashedPassword);
     }
 

@@ -289,7 +289,12 @@ pub struct User {
     pub id: i64,
     pub username: String,
     pub email: String,
+    pub full_name: Option<String>,
+    pub phone: Option<String>,
+    pub role: String,
+    pub is_active: i64,
     pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -359,14 +364,19 @@ fn register_user(
         .map_err(|e| format!("Failed to insert user: {}", e))?;
 
     // Get the created user
-    let user_sql = "SELECT id, username, email, created_at FROM users WHERE username = ?";
+    let user_sql = "SELECT id, username, email, full_name, phone, role, is_active, created_at, updated_at FROM users WHERE username = ?";
     let users = db
         .query(user_sql, &[&username as &dyn rusqlite::ToSql], |row| {
             Ok(User {
                 id: row.get(0)?,
                 username: row.get(1)?,
                 email: row.get(2)?,
-                created_at: row.get(3)?,
+                full_name: row.get(3)?,
+                phone: row.get(4)?,
+                role: row.get(5)?,
+                is_active: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })
         .map_err(|e| format!("Failed to fetch user: {}", e))?;
@@ -393,7 +403,7 @@ fn login_user(
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Get user by username or email
-    let user_sql = "SELECT id, username, email, password_hash, created_at FROM users WHERE username = ? OR email = ?";
+    let user_sql = "SELECT id, username, email, password_hash, created_at, full_name, phone, role, is_active, updated_at FROM users WHERE username = ? OR email = ?";
     let users = db
         .query(user_sql, &[&username as &dyn rusqlite::ToSql, &username as &dyn rusqlite::ToSql], |row| {
             Ok((
@@ -402,6 +412,11 @@ fn login_user(
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, i64>(8)?,
+                row.get::<_, String>(9)?,
             ))
         })
         .map_err(|e| format!("Database query error: {}", e))?;
@@ -414,7 +429,7 @@ fn login_user(
         });
     }
 
-    let (id, db_username, email, password_hash, created_at) = &users[0];
+    let (id, db_username, email, password_hash, created_at, full_name, phone, role, is_active, updated_at) = &users[0];
 
     // Verify password
     let password_valid = bcrypt::verify(&password, password_hash)
@@ -434,9 +449,120 @@ fn login_user(
             id: *id,
             username: db_username.clone(),
             email: email.clone(),
+            full_name: full_name.clone(),
+            phone: phone.clone(),
+            role: role.clone(),
+            is_active: *is_active,
             created_at: created_at.clone(),
+            updated_at: updated_at.clone(),
         }),
         message: "Login successful".to_string(),
+    })
+}
+
+/// Get all users with pagination
+#[tauri::command]
+fn get_users(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+    search: Option<String>,
+    sort_by: Option<String>,
+    sort_order: Option<String>,
+) -> Result<PaginatedResponse<User>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let offset = (page - 1) * per_page;
+    
+    // Build WHERE clause
+    let mut where_clause = String::new();
+    let mut params: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(s) = search {
+        if !s.trim().is_empty() {
+            let search_term = format!("%{}%", s);
+            where_clause = "WHERE (username LIKE ? OR email LIKE ? OR full_name LIKE ? OR phone LIKE ?)".to_string();
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term.clone()));
+            params.push(serde_json::Value::String(search_term));
+        }
+    }
+
+    // Get total count
+    let count_sql = format!("SELECT COUNT(*) FROM users {}", where_clause);
+    let total: i64 = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&count_sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let count: i64 = stmt.query_row(rusqlite::params_from_iter(rusqlite_params.iter()), |row| row.get(0))
+             .map_err(|e| anyhow::anyhow!("{}", e))?;
+        Ok(count)
+    }).map_err(|e| format!("Failed to count users: {}", e))?;
+
+    // Build Order By
+    let order_clause = if let Some(sort) = sort_by {
+        let order = sort_order.unwrap_or_else(|| "ASC".to_string());
+        let allowed_cols = ["username", "email", "full_name", "phone", "role", "is_active", "created_at"];
+        if allowed_cols.contains(&sort.as_str()) {
+             format!("ORDER BY {} {}", sort, if order.to_uppercase() == "DESC" { "DESC" } else { "ASC" })
+        } else {
+            "ORDER BY created_at DESC".to_string()
+        }
+    } else {
+        "ORDER BY created_at DESC".to_string()
+    };
+
+    let sql = format!("SELECT id, username, email, full_name, phone, role, is_active, created_at, updated_at FROM users {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    
+    params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
+    params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
+
+    let users = db.with_connection(|conn| {
+        let mut stmt = conn.prepare(&sql).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let rusqlite_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+            match v {
+                serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                serde_json::Value::Number(n) => rusqlite::types::Value::Integer(n.as_i64().unwrap_or(0)),
+                _ => rusqlite::types::Value::Null,
+            }
+        }).collect();
+
+        let rows = stmt.query_map(rusqlite::params_from_iter(rusqlite_params.iter()), |row| {
+             Ok(User {
+                id: row.get(0)?,
+                username: row.get(1)?,
+                email: row.get(2)?,
+                full_name: row.get(3)?,
+                phone: row.get(4)?,
+                role: row.get(5)?,
+                is_active: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        }).map_err(|e| anyhow::anyhow!("{}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| anyhow::anyhow!("{}", e))?);
+        }
+        Ok(results)
+    }).map_err(|e| format!("Failed to fetch users: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+
+    Ok(PaginatedResponse {
+        items: users,
+        total,
+        page,
+        per_page,
+        total_pages,
     })
 }
 
@@ -479,6 +605,20 @@ fn get_license_key() -> Result<Option<String>, String> {
 #[tauri::command]
 fn validate_license_key(entered_key: String) -> Result<bool, String> {
     license::validate_license_key(&entered_key)
+}
+
+/// Hash a password using bcrypt
+#[tauri::command]
+fn hash_password(password: String) -> Result<String, String> {
+    bcrypt::hash(&password, bcrypt::DEFAULT_COST)
+        .map_err(|e| format!("Failed to hash password: {}", e))
+}
+
+/// Verify a password against a hash using bcrypt
+#[tauri::command]
+fn verify_password(password: String, hash: String) -> Result<bool, String> {
+    bcrypt::verify(&password, &hash)
+        .map_err(|e| format!("Password verification error: {}", e))
 }
 
 // Currency Model
@@ -5420,6 +5560,7 @@ pub fn run() {
             init_users_table,
             register_user,
             login_user,
+            get_users,
             init_currencies_table,
             create_currency,
             get_currencies,
@@ -5523,7 +5664,9 @@ pub fn run() {
             get_machine_id,
             store_license_key,
             get_license_key,
-            validate_license_key
+            validate_license_key,
+            hash_password,
+            verify_password
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

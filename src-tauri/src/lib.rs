@@ -2434,7 +2434,7 @@ fn create_purchase_payment(
     ])
         .map_err(|e| format!("Failed to insert purchase payment: {}", e))?;
 
-    // If account_id is provided, deposit the payment amount into the account
+    // If account_id is provided, withdraw the payment amount from the account
     if let Some(aid) = account_id {
         // Get currency_id from currency name
         let currency_sql = "SELECT id FROM currencies WHERE name = ? LIMIT 1";
@@ -2445,12 +2445,20 @@ fn create_purchase_payment(
             .map_err(|e| format!("Failed to find currency: {}", e))?;
         
         if let Some(currency_id) = currency_ids.first() {
-            // Create account transaction record for this payment
+            // Check if account has sufficient balance
+            let current_balance = get_account_balance_by_currency_internal(db, aid, *currency_id)
+                .unwrap_or(0.0);
+            
+            if current_balance < amount {
+                return Err(format!("Insufficient balance in account. Available: {}, Required: {}", current_balance, amount));
+            }
+            
+            // Create account transaction record for this payment (withdrawal)
             let payment_notes = notes.as_ref().map(|s| format!("Payment for Purchase #{}", purchase_id));
             let payment_notes_str: Option<&str> = payment_notes.as_ref().map(|s| s.as_str());
             let is_full_int = 0i64;
             
-            let insert_transaction_sql = "INSERT INTO account_transactions (account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes) VALUES (?, 'deposit', ?, ?, ?, ?, ?, ?, ?)";
+            let insert_transaction_sql = "INSERT INTO account_transactions (account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes) VALUES (?, 'withdraw', ?, ?, ?, ?, ?, ?, ?)";
             db.execute(insert_transaction_sql, &[
                 &aid as &dyn rusqlite::ToSql,
                 &amount as &dyn rusqlite::ToSql,
@@ -2463,12 +2471,8 @@ fn create_purchase_payment(
             ])
             .map_err(|e| format!("Failed to create account transaction: {}", e))?;
             
-            // Get current balance for this account and currency
-            let current_balance = get_account_balance_by_currency_internal(db, aid, *currency_id)
-                .unwrap_or(0.0);
-            
-            // Add the payment amount to the balance
-            let new_balance = current_balance + amount;
+            // Subtract the payment amount from the balance
+            let new_balance = current_balance - amount;
             
             // Update account currency balance
             update_account_currency_balance_internal(db, aid, *currency_id, new_balance)?;

@@ -16,7 +16,7 @@ import { getSuppliers, type Supplier } from "../utils/supplier";
 import { getProducts, type Product } from "../utils/product";
 import { getUnits, type Unit } from "../utils/unit";
 import { getCurrencies, type Currency } from "../utils/currency";
-import { getAccounts, type Account } from "../utils/account";
+import { getAccounts, getAccountBalanceByCurrency, type Account } from "../utils/account";
 import {
   initPurchasePaymentsTable,
   createPurchasePayment,
@@ -103,6 +103,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
   const [units, setUnits] = useState<Unit[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [selectedAccountBalance, setSelectedAccountBalance] = useState<number | null>(null);
   const [purchasePayments, setPurchasePayments] = useState<Record<number, PurchasePayment[]>>({});
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(false);
@@ -446,6 +447,31 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
     const total = calculatePaymentTotal();
     setPaymentFormData(prev => ({ ...prev, total: total.toFixed(2) }));
   }, [paymentFormData.amount, paymentFormData.rate]);
+
+  // Load account balance when account and currency are selected
+  useEffect(() => {
+    const loadAccountBalance = async () => {
+      if (paymentFormData.account_id && paymentFormData.currency) {
+        try {
+          const selectedCurrency = currencies.find(c => c.name === paymentFormData.currency);
+          if (selectedCurrency) {
+            const balance = await getAccountBalanceByCurrency(
+              parseInt(paymentFormData.account_id),
+              selectedCurrency.id
+            );
+            setSelectedAccountBalance(balance);
+          }
+        } catch (error) {
+          console.error("Error loading account balance:", error);
+          setSelectedAccountBalance(null);
+        }
+      } else {
+        setSelectedAccountBalance(null);
+      }
+    };
+
+    loadAccountBalance();
+  }, [paymentFormData.account_id, paymentFormData.currency, currencies]);
 
   const handleAddPayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1388,6 +1414,43 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                         هیچ حسابی با این ارز یافت نشد
                       </p>
+                    )}
+                    {paymentFormData.account_id && selectedAccountBalance !== null && (
+                      <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            موجودی حساب:
+                          </span>
+                          <span className={`text-lg font-bold ${
+                            selectedAccountBalance >= 0 
+                              ? 'text-green-600 dark:text-green-400' 
+                              : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {selectedAccountBalance.toLocaleString('en-US')} {paymentFormData.currency}
+                          </span>
+                        </div>
+                        {parseFloat(paymentFormData.amount) > 0 && (
+                          <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">
+                                موجودی پس از پرداخت:
+                              </span>
+                              <span className={`text-sm font-semibold ${
+                                (selectedAccountBalance - parseFloat(paymentFormData.amount)) >= 0 
+                                  ? 'text-green-600 dark:text-green-400' 
+                                  : 'text-red-600 dark:text-red-400'
+                              }`}>
+                                {(selectedAccountBalance - parseFloat(paymentFormData.amount)).toLocaleString('en-US')} {paymentFormData.currency}
+                              </span>
+                            </div>
+                            {selectedAccountBalance < parseFloat(paymentFormData.amount) && (
+                              <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                                ⚠️ موجودی کافی نیست
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

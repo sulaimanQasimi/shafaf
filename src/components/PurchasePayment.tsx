@@ -246,6 +246,7 @@ export default function PurchasePaymentManagement({ onBack }: PurchasePaymentMan
             } else {
                 await createPurchasePayment(
                     purchase_id,
+                    null, // account_id (optional)
                     amount,
                     formData.currency,
                     rate,

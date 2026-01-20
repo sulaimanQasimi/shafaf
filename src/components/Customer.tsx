@@ -356,6 +356,9 @@ export default function CustomerManagement({ onBack }: CustomerManagementProps) 
       const amount = parseFloat(paymentFormData.amount);
       await createSalePayment(
         selectedSaleForPayment.id,
+        null, // account_id (optional)
+        selectedSaleForPayment.currency_id, // currency_id
+        selectedSaleForPayment.exchange_rate || 1, // exchange_rate
         amount,
         paymentFormData.date
       );

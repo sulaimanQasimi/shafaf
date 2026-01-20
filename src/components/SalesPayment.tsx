@@ -182,10 +182,18 @@ export default function SalesPaymentManagement({ onBack }: SalesPaymentManagemen
 
         const amount = parseFloat(formData.amount);
         const sale_id = parseInt(formData.sale_id);
+        const sale = sales.find(s => s.id === sale_id);
 
         try {
             setLoading(true);
-            await createSalePayment(sale_id, amount, formData.date);
+            await createSalePayment(
+                sale_id,
+                null, // account_id (optional)
+                sale?.currency_id || null, // currency_id
+                sale?.exchange_rate || 1, // exchange_rate
+                amount,
+                formData.date
+            );
             toast.success(translations.success.created);
             handleCloseModal();
             await loadData();

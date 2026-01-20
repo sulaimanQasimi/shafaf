@@ -308,6 +308,7 @@ export default function SupplierManagement({ onBack }: SupplierManagementProps) 
       const rate = parseFloat(paymentFormData.rate) || 1;
       await createPurchasePayment(
         selectedPurchaseForPayment.id,
+        null, // account_id (optional)
         amount,
         paymentFormData.currency,
         rate,

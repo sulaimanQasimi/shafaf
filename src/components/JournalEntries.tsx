@@ -64,7 +64,7 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<[JournalEntry, JournalEntryLine[]] | null>(null);
     const [page, setPage] = useState(1);
-    const [perPage, setPerPage] = useState(10);
+    const [perPage] = useState(10);
     const [totalItems, setTotalItems] = useState(0);
     const [formData, setFormData] = useState({
         entry_date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],

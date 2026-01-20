@@ -19,7 +19,7 @@ import {
 import { getCustomers, type Customer } from "../utils/customer";
 import { getProducts, type Product } from "../utils/product";
 import { getUnits, type Unit } from "../utils/unit";
-import { getCurrencies, getExchangeRate, type Currency } from "../utils/currency";
+import { getCurrencies, type Currency } from "../utils/currency";
 import { getAccounts, getAccountBalanceByCurrency, type Account } from "../utils/account";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
@@ -231,6 +231,8 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             setFormData({
                 customer_id: saleData.sale.customer_id,
                 date: saleData.sale.date,
+                currency_id: saleData.sale.currency_id ? saleData.sale.currency_id.toString() : (baseCurrency?.id.toString() || ""),
+                exchange_rate: saleData.sale.exchange_rate || 1,
                 notes: saleData.sale.notes || "",
                 paid_amount: saleData.sale.paid_amount,
                 additional_cost: saleData.sale.additional_cost || 0,

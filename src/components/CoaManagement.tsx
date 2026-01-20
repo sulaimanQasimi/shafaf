@@ -197,7 +197,7 @@ export default function CoaManagement({ onBack }: CoaManagementProps) {
         }
     };
 
-    const renderCategoryTree = (cats: (CoaCategory & { children?: CoaCategory[] })[], level: number = 0): JSX.Element[] => {
+    const renderCategoryTree = (cats: (CoaCategory & { children?: CoaCategory[] })[], level: number = 0): React.ReactElement[] => {
         return cats.map((cat) => (
             <div key={cat.id} className="ml-4" style={{ marginLeft: `${level * 1.5}rem` }}>
                 <motion.div

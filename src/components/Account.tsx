@@ -25,6 +25,7 @@ import PersianDatePicker from "./PersianDatePicker";
 import { formatPersianDate, getCurrentPersianDate, persianToGeorgian } from "../utils/date";
 import PageHeader from "./common/PageHeader";
 import CoaManagement from "./CoaManagement";
+import JournalEntries from "./JournalEntries";
 
 // Dari translations
 const translations = {
@@ -90,6 +91,7 @@ interface AccountManagementProps {
 
 export default function AccountManagement({ onBack }: AccountManagementProps) {
     const [showCoaManagement, setShowCoaManagement] = useState(false);
+    const [showJournalEntries, setShowJournalEntries] = useState(false);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [currencies, setCurrencies] = useState<Currency[]>([]);
     const [coaCategories, setCoaCategories] = useState<CoaCategory[]>([]);
@@ -412,6 +414,17 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
         );
     }
 
+    // If showing Journal Entries, render that component
+    if (showJournalEntries) {
+        return (
+            <JournalEntries 
+                onBack={() => {
+                    setShowJournalEntries(false);
+                }} 
+            />
+        );
+    }
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6" dir="rtl">
             <div className="max-w-6xl mx-auto">
@@ -420,6 +433,16 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
                     onBack={onBack}
                     backLabel={translations.backToDashboard}
                     actions={[
+                        {
+                            label: "دفتر روزنامه",
+                            onClick: () => setShowJournalEntries(true),
+                            variant: "secondary" as const,
+                            icon: (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            )
+                        },
                         {
                             label: "مدیریت دسته‌بندی حساب‌ها (COA)",
                             onClick: () => setShowCoaManagement(true),

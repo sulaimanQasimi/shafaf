@@ -2454,7 +2454,7 @@ fn create_purchase_payment(
             }
             
             // Create account transaction record for this payment (withdrawal)
-            let payment_notes = notes.as_ref().map(|s| format!("Payment for Purchase #{}", purchase_id));
+            let payment_notes = notes.as_ref().map(|_s| format!("Payment for Purchase #{}", purchase_id));
             let payment_notes_str: Option<&str> = payment_notes.as_ref().map(|s| s.as_str());
             let is_full_int = 0i64;
             

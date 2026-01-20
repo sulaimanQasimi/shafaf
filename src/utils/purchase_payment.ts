@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export interface PurchasePayment {
     id: number;
     purchase_id: number;
+    account_id: number | null;
     amount: number;
     currency: string;
     rate: number;
@@ -40,6 +41,7 @@ export async function initPurchasePaymentsTable(): Promise<string> {
  */
 export async function createPurchasePayment(
     purchase_id: number,
+    account_id: number | null,
     amount: number,
     currency: string,
     rate: number,
@@ -48,6 +50,7 @@ export async function createPurchasePayment(
 ): Promise<PurchasePayment> {
     return await invoke<PurchasePayment>("create_purchase_payment", {
         purchaseId: purchase_id,
+        accountId: account_id,
         amount,
         currency,
         rate,

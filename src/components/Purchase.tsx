@@ -16,6 +16,7 @@ import { getSuppliers, type Supplier } from "../utils/supplier";
 import { getProducts, type Product } from "../utils/product";
 import { getUnits, type Unit } from "../utils/unit";
 import { getCurrencies, type Currency } from "../utils/currency";
+import { getAccounts, type Account } from "../utils/account";
 import {
   initPurchasePaymentsTable,
   createPurchasePayment,
@@ -101,6 +102,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
   const [products, setProducts] = useState<Product[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [purchasePayments, setPurchasePayments] = useState<Record<number, PurchasePayment[]>>({});
   const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(false);
@@ -119,6 +121,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [showInvoice, setShowInvoice] = useState(false);
   const [paymentFormData, setPaymentFormData] = useState({
+    account_id: "",
     amount: "",
     currency: "",
     rate: "1",
@@ -165,12 +168,13 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
         console.log("Table initialization:", err);
       }
 
-      const [purchasesResponse, suppliersResponse, productsResponse, unitsData, currenciesData] = await Promise.all([
+      const [purchasesResponse, suppliersResponse, productsResponse, unitsData, currenciesData, accountsData] = await Promise.all([
         getPurchases(page, perPage, search, sortBy, sortOrder),
         getSuppliers(1, 1000), // Get all suppliers (large page size)
         getProducts(1, 1000), // Get all products (large page size)
         getUnits(),
         getCurrencies(),
+        getAccounts().catch(() => []),
       ]);
 
       setPurchases(purchasesResponse.items);
@@ -179,6 +183,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
       setProducts(productsResponse.items);
       setUnits(unitsData);
       setCurrencies(currenciesData);
+      setAccounts(accountsData);
 
       // Load payments for all purchases
       const paymentsMap: Record<number, PurchasePayment[]> = {};
@@ -395,6 +400,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
   const handleOpenPaymentModal = (purchase: Purchase) => {
     setViewingPurchase({ purchase, items: [] });
     setPaymentFormData({
+      account_id: "",
       amount: "",
       currency: currencies[0]?.name || "",
       rate: "1",
@@ -408,6 +414,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
   const handleClosePaymentModal = () => {
     setIsPaymentModalOpen(false);
     setPaymentFormData({
+      account_id: "",
       amount: "",
       currency: "",
       rate: "1",
@@ -415,6 +422,18 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
       date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
       notes: "",
     });
+  };
+
+  // Get filtered accounts based on selected currency
+  const getFilteredAccounts = () => {
+    if (!paymentFormData.currency) {
+      return [];
+    }
+    const selectedCurrency = currencies.find(c => c.name === paymentFormData.currency);
+    if (!selectedCurrency) {
+      return [];
+    }
+    return accounts.filter(account => account.currency_id === selectedCurrency.id && account.is_active);
   };
 
   const calculatePaymentTotal = () => {
@@ -448,6 +467,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
       const rate = parseFloat(paymentFormData.rate) || 1;
       await createPurchasePayment(
         viewingPurchase.purchase.id,
+        paymentFormData.account_id ? parseInt(paymentFormData.account_id) : null,
         amount,
         paymentFormData.currency,
         rate,
@@ -1326,7 +1346,13 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                       </label>
                       <select
                         value={paymentFormData.currency}
-                        onChange={(e) => setPaymentFormData({ ...paymentFormData, currency: e.target.value })}
+                        onChange={(e) => {
+                          setPaymentFormData({ 
+                            ...paymentFormData, 
+                            currency: e.target.value,
+                            account_id: "" // Reset account when currency changes
+                          });
+                        }}
                         required
                         className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
                         dir="rtl"
@@ -1339,6 +1365,30 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                         ))}
                       </select>
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      حساب
+                    </label>
+                    <select
+                      value={paymentFormData.account_id}
+                      onChange={(e) => setPaymentFormData({ ...paymentFormData, account_id: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      dir="rtl"
+                      disabled={!paymentFormData.currency}
+                    >
+                      <option value="">انتخاب حساب (اختیاری)</option>
+                      {getFilteredAccounts().map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.name} {account.account_code ? `(${account.account_code})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {paymentFormData.currency && getFilteredAccounts().length === 0 && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        هیچ حسابی با این ارز یافت نشد
+                      </p>
+                    )}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>

@@ -35,6 +35,7 @@ export interface SaleWithItems {
 export interface SalePayment {
     id: number;
     sale_id: number;
+    account_id: number | null;
     currency_id: number | null;
     exchange_rate: number;
     amount: number;
@@ -271,6 +272,7 @@ export async function deleteSaleItem(id: number): Promise<string> {
 /**
  * Create a sale payment
  * @param sale_id Sale ID
+ * @param account_id Account ID (optional)
  * @param currency_id Currency ID (optional)
  * @param exchange_rate Exchange rate
  * @param amount Payment Amount
@@ -279,6 +281,7 @@ export async function deleteSaleItem(id: number): Promise<string> {
  */
 export async function createSalePayment(
     sale_id: number,
+    account_id: number | null,
     currency_id: number | null,
     exchange_rate: number,
     amount: number,
@@ -286,6 +289,7 @@ export async function createSalePayment(
 ): Promise<SalePayment> {
     return await invoke<SalePayment>("create_sale_payment", {
         saleId: sale_id,
+        accountId: account_id,
         currencyId: currency_id,
         exchangeRate: exchange_rate,
         amount,

@@ -2749,6 +2749,7 @@ pub struct SaleItem {
 pub struct SalePayment {
     pub id: i64,
     pub sale_id: i64,
+    pub account_id: Option<i64>,
     pub currency_id: Option<i64>,
     pub exchange_rate: f64,
     pub amount: f64,
@@ -2820,6 +2821,7 @@ fn init_sales_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
         CREATE TABLE IF NOT EXISTS sale_payments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sale_id INTEGER NOT NULL,
+            account_id INTEGER,
             currency_id INTEGER,
             exchange_rate REAL NOT NULL DEFAULT 1,
             amount REAL NOT NULL,
@@ -2827,6 +2829,7 @@ fn init_sales_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
             date TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
+            FOREIGN KEY (account_id) REFERENCES accounts(id),
             FOREIGN KEY (currency_id) REFERENCES currencies(id)
         )
     ";
@@ -2836,6 +2839,7 @@ fn init_sales_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
 
     // Add new columns if they don't exist (for existing databases)
     let alter_payment_queries = vec![
+        "ALTER TABLE sale_payments ADD COLUMN account_id INTEGER",
         "ALTER TABLE sale_payments ADD COLUMN currency_id INTEGER",
         "ALTER TABLE sale_payments ADD COLUMN exchange_rate REAL NOT NULL DEFAULT 1",
         "ALTER TABLE sale_payments ADD COLUMN base_amount REAL NOT NULL DEFAULT 0",
@@ -3428,6 +3432,7 @@ fn delete_sale_item(
 fn create_sale_payment(
     db_state: State<'_, Mutex<Option<Database>>>,
     sale_id: i64,
+    account_id: Option<i64>,
     currency_id: Option<i64>,
     exchange_rate: f64,
     amount: f64,
@@ -3452,9 +3457,10 @@ fn create_sale_payment(
             })
     });
 
-    let insert_sql = "INSERT INTO sale_payments (sale_id, currency_id, exchange_rate, amount, base_amount, date) VALUES (?, ?, ?, ?, ?, ?)";
+    let insert_sql = "INSERT INTO sale_payments (sale_id, account_id, currency_id, exchange_rate, amount, base_amount, date) VALUES (?, ?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
         &sale_id as &dyn rusqlite::ToSql,
+        &account_id as &dyn rusqlite::ToSql,
         &payment_currency_id as &dyn rusqlite::ToSql,
         &exchange_rate as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
@@ -3462,6 +3468,56 @@ fn create_sale_payment(
         &date as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to insert sale payment: {}", e))?;
+
+    // If account_id is provided, deposit the payment amount to the account
+    if let Some(aid) = account_id {
+        // Check if account has sufficient balance (for withdrawal - but sales payments are deposits)
+        let current_balance = get_account_balance_by_currency_internal(db, aid, payment_currency_id)
+            .unwrap_or(0.0);
+        
+        // Get currency name for transaction record
+        let currency_name_sql = "SELECT name FROM currencies WHERE id = ? LIMIT 1";
+        let currency_names = db
+            .query(currency_name_sql, &[&payment_currency_id as &dyn rusqlite::ToSql], |row| {
+                Ok(row.get::<_, String>(0)?)
+            })
+            .map_err(|e| format!("Failed to find currency name: {}", e))?;
+        
+        if let Some(currency_name) = currency_names.first() {
+            // Create account transaction record for this payment (deposit)
+            let payment_notes = Some(format!("Payment for Sale #{}", sale_id));
+            let payment_notes_str: Option<&str> = payment_notes.as_ref().map(|s| s.as_str());
+            let is_full_int = 0i64;
+            
+            let insert_transaction_sql = "INSERT INTO account_transactions (account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes) VALUES (?, 'deposit', ?, ?, ?, ?, ?, ?, ?)";
+            db.execute(insert_transaction_sql, &[
+                &aid as &dyn rusqlite::ToSql,
+                &amount as &dyn rusqlite::ToSql,
+                currency_name as &dyn rusqlite::ToSql,
+                &exchange_rate as &dyn rusqlite::ToSql,
+                &base_amount as &dyn rusqlite::ToSql,
+                &date as &dyn rusqlite::ToSql,
+                &is_full_int as &dyn rusqlite::ToSql,
+                &payment_notes_str as &dyn rusqlite::ToSql,
+            ])
+            .map_err(|e| format!("Failed to create account transaction: {}", e))?;
+            
+            // Add the payment amount to the balance (deposit)
+            let new_balance = current_balance + amount;
+            
+            // Update account currency balance
+            update_account_currency_balance_internal(db, aid, payment_currency_id, new_balance)?;
+            
+            // Update account's current_balance
+            let new_account_balance = calculate_account_balance_internal(db, aid)?;
+            let update_balance_sql = "UPDATE accounts SET current_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+            db.execute(update_balance_sql, &[
+                &new_account_balance as &dyn rusqlite::ToSql,
+                &aid as &dyn rusqlite::ToSql,
+            ])
+            .map_err(|e| format!("Failed to update account balance: {}", e))?;
+        }
+    }
 
     // Update sale paid_amount
     let update_sale_sql = "UPDATE sales SET paid_amount = (SELECT COALESCE(SUM(base_amount), 0) FROM sale_payments WHERE sale_id = ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?";
@@ -3488,18 +3544,19 @@ fn create_sale_payment(
     }
 
     // Get the created payment
-    let payment_sql = "SELECT id, sale_id, currency_id, exchange_rate, amount, base_amount, date, created_at FROM sale_payments WHERE sale_id = ? ORDER BY id DESC LIMIT 1";
+    let payment_sql = "SELECT id, sale_id, account_id, currency_id, exchange_rate, amount, base_amount, date, created_at FROM sale_payments WHERE sale_id = ? ORDER BY id DESC LIMIT 1";
     let payments = db
         .query(payment_sql, &[&sale_id as &dyn rusqlite::ToSql], |row| {
             Ok(SalePayment {
                 id: row.get(0)?,
                 sale_id: row.get(1)?,
-                currency_id: row.get(2)?,
-                exchange_rate: row.get(3)?,
-                amount: row.get(4)?,
-                base_amount: row.get(5)?,
-                date: row.get(6)?,
-                created_at: row.get(7)?,
+                account_id: row.get(2)?,
+                currency_id: row.get(3)?,
+                exchange_rate: row.get(4)?,
+                amount: row.get(5)?,
+                base_amount: row.get(6)?,
+                date: row.get(7)?,
+                created_at: row.get(8)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale payment: {}", e))?;
@@ -3517,18 +3574,19 @@ fn get_sale_payments(db_state: State<'_, Mutex<Option<Database>>>, sale_id: i64)
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, sale_id, currency_id, exchange_rate, amount, base_amount, date, created_at FROM sale_payments WHERE sale_id = ? ORDER BY date DESC, created_at DESC";
+    let sql = "SELECT id, sale_id, account_id, currency_id, exchange_rate, amount, base_amount, date, created_at FROM sale_payments WHERE sale_id = ? ORDER BY date DESC, created_at DESC";
     let payments = db
         .query(sql, &[&sale_id as &dyn rusqlite::ToSql], |row| {
             Ok(SalePayment {
                 id: row.get(0)?,
                 sale_id: row.get(1)?,
-                currency_id: row.get(2)?,
-                exchange_rate: row.get(3)?,
-                amount: row.get(4)?,
-                base_amount: row.get(5)?,
-                date: row.get(6)?,
-                created_at: row.get(7)?,
+                account_id: row.get(2)?,
+                currency_id: row.get(3)?,
+                exchange_rate: row.get(4)?,
+                amount: row.get(5)?,
+                base_amount: row.get(6)?,
+                date: row.get(7)?,
+                created_at: row.get(8)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale payments: {}", e))?;

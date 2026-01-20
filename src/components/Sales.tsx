@@ -20,6 +20,7 @@ import { getCustomers, type Customer } from "../utils/customer";
 import { getProducts, type Product } from "../utils/product";
 import { getUnits, type Unit } from "../utils/unit";
 import { getCurrencies, getExchangeRate, type Currency } from "../utils/currency";
+import { getAccounts, getAccountBalanceByCurrency, type Account } from "../utils/account";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
 import PersianDatePicker from "./PersianDatePicker";
@@ -103,6 +104,8 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
     const [units, setUnits] = useState<Unit[]>([]);
     const [currencies, setCurrencies] = useState<Currency[]>([]);
     const [baseCurrency, setBaseCurrency] = useState<Currency | null>(null);
+    const [accounts, setAccounts] = useState<Account[]>([]);
+    const [selectedAccountBalance, setSelectedAccountBalance] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -120,6 +123,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
     });
     const [payments, setPayments] = useState<SalePayment[]>([]);
     const [newPayment, setNewPayment] = useState({
+        account_id: "",
         currency_id: "",
         exchange_rate: 1,
         amount: '',
@@ -139,6 +143,43 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
         loadData();
     }, [page, perPage, search, sortBy, sortOrder]);
 
+    // Get filtered accounts based on selected currency
+    const getFilteredAccounts = () => {
+        if (!newPayment.currency_id || !accounts || !Array.isArray(accounts)) {
+            return [];
+        }
+        const selectedCurrency = currencies.find(c => c.id.toString() === newPayment.currency_id);
+        if (!selectedCurrency) {
+            return [];
+        }
+        return accounts.filter(account => account.currency_id === selectedCurrency.id && account.is_active);
+    };
+
+    // Load account balance when account and currency are selected
+    useEffect(() => {
+        const loadAccountBalance = async () => {
+            if (newPayment.account_id && newPayment.currency_id) {
+                try {
+                    const selectedCurrency = currencies.find(c => c.id.toString() === newPayment.currency_id);
+                    if (selectedCurrency) {
+                        const balance = await getAccountBalanceByCurrency(
+                            parseInt(newPayment.account_id),
+                            selectedCurrency.id
+                        );
+                        setSelectedAccountBalance(balance);
+                    }
+                } catch (error) {
+                    console.error("Error loading account balance:", error);
+                    setSelectedAccountBalance(null);
+                }
+            } else {
+                setSelectedAccountBalance(null);
+            }
+        };
+
+        loadAccountBalance();
+    }, [newPayment.account_id, newPayment.currency_id, currencies]);
+
     const loadData = async () => {
         try {
             setLoading(true);
@@ -153,11 +194,13 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                 console.log("Table initialization:", err);
             }
 
-            const [salesResponse, customersResponse, productsResponse, unitsData] = await Promise.all([
+            const [salesResponse, customersResponse, productsResponse, unitsData, currenciesData, accountsData] = await Promise.all([
                 getSales(page, perPage, search, sortBy, sortOrder),
                 getCustomers(1, 1000), // Get all customers (large page size)
                 getProducts(1, 1000), // Get all products (large page size)
                 getUnits(),
+                getCurrencies(),
+                getAccounts(), // Get all accounts
             ]);
 
             setSales(salesResponse.items);
@@ -165,6 +208,14 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             setCustomers(customersResponse.items);
             setProducts(productsResponse.items);
             setUnits(unitsData);
+            setCurrencies(currenciesData);
+            setAccounts(accountsData || []);
+            
+            // Set base currency
+            const base = currenciesData.find(c => c.base);
+            if (base) {
+                setBaseCurrency(base);
+            }
         } catch (error: any) {
             toast.error(translations.errors.fetch);
             console.error("Error loading data:", error);
@@ -224,6 +275,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             setLoading(true);
             await createSalePayment(
                 viewingSale.sale.id,
+                newPayment.account_id ? parseInt(newPayment.account_id) : null,
                 newPayment.currency_id ? parseInt(newPayment.currency_id) : null,
                 parseFloat(newPayment.exchange_rate.toString()) || 1,
                 parseFloat(newPayment.amount),
@@ -231,11 +283,13 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             );
             toast.success("پرداخت با موفقیت ثبت شد");
             setNewPayment({
+                account_id: "",
                 currency_id: "",
                 exchange_rate: 1,
                 amount: '',
                 date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
             });
+            setSelectedAccountBalance(null);
             await loadPayments(viewingSale.sale.id);
             await loadData();
             const updatedSale = await getSale(viewingSale.sale.id);
@@ -276,7 +330,9 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             setEditingSale(null);
             setFormData({
                 customer_id: 0,
-                date: new Date().toISOString().split('T')[0],
+                date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+                currency_id: baseCurrency?.id.toString() || "",
+                exchange_rate: 1,
                 notes: "",
                 paid_amount: 0,
                 additional_cost: 0,
@@ -401,7 +457,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                     formData.date,
                     formData.notes || null,
                     formData.currency_id ? parseInt(formData.currency_id) : null,
-                    parseFloat(formData.exchange_rate.toString()) || 1,
+                    formData.exchange_rate ? parseFloat(formData.exchange_rate.toString()) : 1,
                     formData.paid_amount,
                     formData.additional_cost || 0,
                     formData.items
@@ -413,7 +469,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                     formData.date,
                     formData.notes || null,
                     formData.currency_id ? parseInt(formData.currency_id) : null,
-                    parseFloat(formData.exchange_rate.toString()) || 1,
+                    formData.exchange_rate ? parseFloat(formData.exchange_rate.toString()) : 1,
                     formData.paid_amount,
                     formData.additional_cost || 0,
                     formData.items
@@ -1199,18 +1255,116 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                                    {translations.payments.amount}
+                                                    ارز
                                                 </label>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={newPayment.amount}
-                                                    onChange={(e) => setNewPayment({ ...newPayment, amount: e.target.value })}
+                                                <select
+                                                    value={newPayment.currency_id}
+                                                    onChange={(e) => {
+                                                        setNewPayment({ 
+                                                            ...newPayment, 
+                                                            currency_id: e.target.value,
+                                                            account_id: "" // Reset account when currency changes
+                                                        });
+                                                    }}
                                                     required
-                                                    placeholder="0.00"
                                                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
-                                                    dir="ltr"
-                                                />
+                                                    dir="rtl"
+                                                >
+                                                    <option value="">انتخاب ارز</option>
+                                                    {currencies.map((currency) => (
+                                                        <option key={currency.id} value={currency.id}>
+                                                            {currency.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                                    حساب
+                                                </label>
+                                                <select
+                                                    value={newPayment.account_id}
+                                                    onChange={(e) => setNewPayment({ ...newPayment, account_id: e.target.value })}
+                                                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    dir="rtl"
+                                                    disabled={!newPayment.currency_id}
+                                                >
+                                                    <option value="">انتخاب حساب (اختیاری)</option>
+                                                    {getFilteredAccounts().map((account) => (
+                                                        <option key={account.id} value={account.id}>
+                                                            {account.name} {account.account_code ? `(${account.account_code})` : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {newPayment.currency_id && getFilteredAccounts().length === 0 && (
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                        هیچ حسابی با این ارز یافت نشد
+                                                    </p>
+                                                )}
+                                                {newPayment.account_id && selectedAccountBalance !== null && (
+                                                    <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                                                                موجودی حساب:
+                                                            </span>
+                                                            <span className={`text-sm font-bold ${
+                                                                selectedAccountBalance >= 0 
+                                                                    ? 'text-green-600 dark:text-green-400' 
+                                                                    : 'text-red-600 dark:text-red-400'
+                                                            }`}>
+                                                                {selectedAccountBalance.toLocaleString('en-US')} {currencies.find(c => c.id.toString() === newPayment.currency_id)?.name || ''}
+                                                            </span>
+                                                        </div>
+                                                        {parseFloat(newPayment.amount) > 0 && (
+                                                            <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600 dark:text-gray-400">
+                                                                        موجودی پس از پرداخت:
+                                                                    </span>
+                                                                    <span className={`text-xs font-semibold ${
+                                                                        (selectedAccountBalance + parseFloat(newPayment.amount)) >= 0 
+                                                                            ? 'text-green-600 dark:text-green-400' 
+                                                                            : 'text-red-600 dark:text-red-400'
+                                                                    }`}>
+                                                                        {(selectedAccountBalance + parseFloat(newPayment.amount)).toLocaleString('en-US')} {currencies.find(c => c.id.toString() === newPayment.currency_id)?.name || ''}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                                        {translations.payments.amount}
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={newPayment.amount}
+                                                        onChange={(e) => setNewPayment({ ...newPayment, amount: e.target.value })}
+                                                        required
+                                                        placeholder="0.00"
+                                                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                                        dir="ltr"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                                        نرخ تبدیل
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={newPayment.exchange_rate}
+                                                        onChange={(e) => setNewPayment({ ...newPayment, exchange_rate: parseFloat(e.target.value) || 1 })}
+                                                        required
+                                                        placeholder="1.00"
+                                                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                                        dir="ltr"
+                                                    />
+                                                </div>
                                             </div>
                                             <button
                                                 type="submit"

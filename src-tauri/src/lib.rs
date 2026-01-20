@@ -316,6 +316,10 @@ fn init_users_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
             username TEXT NOT NULL UNIQUE,
             email TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
+            full_name TEXT,
+            phone TEXT,
+            role TEXT NOT NULL DEFAULT 'user',
+            is_active INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -323,6 +327,26 @@ fn init_users_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
 
     db.execute(create_table_sql, &[])
         .map_err(|e| format!("Failed to create users table: {}", e))?;
+
+    // Add new columns if they don't exist (for existing databases)
+    // Note: SQLite doesn't support NOT NULL DEFAULT in ALTER TABLE, so we add nullable columns and update them
+    let alter_queries = vec![
+        "ALTER TABLE users ADD COLUMN full_name TEXT",
+        "ALTER TABLE users ADD COLUMN phone TEXT",
+        "ALTER TABLE users ADD COLUMN role TEXT",
+        "ALTER TABLE users ADD COLUMN is_active INTEGER",
+    ];
+
+    for alter_sql in alter_queries {
+        let _ = db.execute(alter_sql, &[]);
+    }
+
+    // Update existing rows to set default values for new columns
+    let update_role_sql = "UPDATE users SET role = 'user' WHERE role IS NULL";
+    let _ = db.execute(update_role_sql, &[]);
+    
+    let update_active_sql = "UPDATE users SET is_active = 1 WHERE is_active IS NULL";
+    let _ = db.execute(update_active_sql, &[]);
 
     Ok("Users table initialized successfully".to_string())
 }
@@ -403,7 +427,7 @@ fn login_user(
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Get user by username or email
-    let user_sql = "SELECT id, username, email, password_hash, created_at, full_name, phone, role, is_active, updated_at FROM users WHERE username = ? OR email = ?";
+    let user_sql = "SELECT id, username, email, password_hash, full_name, phone, role, is_active, created_at, updated_at FROM users WHERE username = ? OR email = ?";
     let users = db
         .query(user_sql, &[&username as &dyn rusqlite::ToSql, &username as &dyn rusqlite::ToSql], |row| {
             Ok((
@@ -411,11 +435,11 @@ fn login_user(
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
+                row.get::<_, Option<String>>(4)?,
                 row.get::<_, Option<String>>(5)?,
                 row.get::<_, Option<String>>(6)?,
-                row.get::<_, String>(7)?,
-                row.get::<_, i64>(8)?,
+                row.get::<_, Option<i64>>(7)?,
+                row.get::<_, String>(8)?,
                 row.get::<_, String>(9)?,
             ))
         })
@@ -429,7 +453,7 @@ fn login_user(
         });
     }
 
-    let (id, db_username, email, password_hash, created_at, full_name, phone, role, is_active, updated_at) = &users[0];
+    let (id, db_username, email, password_hash, full_name, phone, role, is_active, created_at, updated_at) = &users[0];
 
     // Verify password
     let password_valid = bcrypt::verify(&password, password_hash)
@@ -451,8 +475,8 @@ fn login_user(
             email: email.clone(),
             full_name: full_name.clone(),
             phone: phone.clone(),
-            role: role.clone(),
-            is_active: *is_active,
+            role: role.clone().unwrap_or_else(|| "user".to_string()),
+            is_active: is_active.unwrap_or(1),
             created_at: created_at.clone(),
             updated_at: updated_at.clone(),
         }),
@@ -2631,7 +2655,10 @@ pub struct Sale {
     pub customer_id: i64,
     pub date: String,
     pub notes: Option<String>,
+    pub currency_id: Option<i64>,
+    pub exchange_rate: f64,
     pub total_amount: f64,
+    pub base_amount: f64,
     pub paid_amount: f64,
     pub additional_cost: f64,
     pub created_at: String,
@@ -2656,7 +2683,10 @@ pub struct SaleItem {
 pub struct SalePayment {
     pub id: i64,
     pub sale_id: i64,
+    pub currency_id: Option<i64>,
+    pub exchange_rate: f64,
     pub amount: f64,
+    pub base_amount: f64,
     pub date: String,
     pub created_at: String,
 }
@@ -2673,21 +2703,33 @@ fn init_sales_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
             customer_id INTEGER NOT NULL,
             date TEXT NOT NULL,
             notes TEXT,
+            currency_id INTEGER,
+            exchange_rate REAL NOT NULL DEFAULT 1,
             total_amount REAL NOT NULL DEFAULT 0,
+            base_amount REAL NOT NULL DEFAULT 0,
             paid_amount REAL NOT NULL DEFAULT 0,
             additional_cost REAL NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (customer_id) REFERENCES customers(id)
+            FOREIGN KEY (customer_id) REFERENCES customers(id),
+            FOREIGN KEY (currency_id) REFERENCES currencies(id)
         )
     ";
 
     db.execute(create_table_sql, &[])
         .map_err(|e| format!("Failed to create sales table: {}", e))?;
 
-    // Add additional_cost column if it doesn't exist (for existing databases)
-    let alter_sql = "ALTER TABLE sales ADD COLUMN additional_cost REAL NOT NULL DEFAULT 0";
-    let _ = db.execute(alter_sql, &[]);
+    // Add new columns if they don't exist (for existing databases)
+    let alter_queries = vec![
+        "ALTER TABLE sales ADD COLUMN additional_cost REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE sales ADD COLUMN currency_id INTEGER",
+        "ALTER TABLE sales ADD COLUMN exchange_rate REAL NOT NULL DEFAULT 1",
+        "ALTER TABLE sales ADD COLUMN base_amount REAL NOT NULL DEFAULT 0",
+    ];
+
+    for alter_sql in alter_queries {
+        let _ = db.execute(alter_sql, &[]);
+    }
 
     let create_items_table_sql = "
         CREATE TABLE IF NOT EXISTS sale_items (
@@ -2712,15 +2754,30 @@ fn init_sales_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
         CREATE TABLE IF NOT EXISTS sale_payments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sale_id INTEGER NOT NULL,
+            currency_id INTEGER,
+            exchange_rate REAL NOT NULL DEFAULT 1,
             amount REAL NOT NULL,
+            base_amount REAL NOT NULL DEFAULT 0,
             date TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+            FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
+            FOREIGN KEY (currency_id) REFERENCES currencies(id)
         )
     ";
 
     db.execute(create_payments_table_sql, &[])
         .map_err(|e| format!("Failed to create sale_payments table: {}", e))?;
+
+    // Add new columns if they don't exist (for existing databases)
+    let alter_payment_queries = vec![
+        "ALTER TABLE sale_payments ADD COLUMN currency_id INTEGER",
+        "ALTER TABLE sale_payments ADD COLUMN exchange_rate REAL NOT NULL DEFAULT 1",
+        "ALTER TABLE sale_payments ADD COLUMN base_amount REAL NOT NULL DEFAULT 0",
+    ];
+
+    for alter_sql in alter_payment_queries {
+        let _ = db.execute(alter_sql, &[]);
+    }
 
     Ok("Sales, sale_items, and sale_payments tables initialized successfully".to_string())
 }
@@ -2732,6 +2789,8 @@ fn create_sale(
     customer_id: i64,
     date: String,
     notes: Option<String>,
+    currency_id: Option<i64>,
+    exchange_rate: f64,
     paid_amount: f64,
     additional_cost: f64,
     items: Vec<(i64, i64, f64, f64)>, // (product_id, unit_id, per_price, amount)
@@ -2742,15 +2801,19 @@ fn create_sale(
     // Calculate total amount from items + additional_cost
     let items_total: f64 = items.iter().map(|(_, _, per_price, amount)| per_price * amount).sum();
     let total_amount = items_total + additional_cost;
+    let base_amount = total_amount * exchange_rate;
 
     // Insert sale
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
-    let insert_sql = "INSERT INTO sales (customer_id, date, notes, total_amount, paid_amount, additional_cost) VALUES (?, ?, ?, ?, ?, ?)";
+    let insert_sql = "INSERT INTO sales (customer_id, date, notes, currency_id, exchange_rate, total_amount, base_amount, paid_amount, additional_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
         &customer_id as &dyn rusqlite::ToSql,
         &date as &dyn rusqlite::ToSql,
         &notes_str as &dyn rusqlite::ToSql,
+        &currency_id as &dyn rusqlite::ToSql,
+        &exchange_rate as &dyn rusqlite::ToSql,
         &total_amount as &dyn rusqlite::ToSql,
+        &base_amount as &dyn rusqlite::ToSql,
         &paid_amount as &dyn rusqlite::ToSql,
         &additional_cost as &dyn rusqlite::ToSql,
     ])
@@ -2766,12 +2829,51 @@ fn create_sale(
 
     let sale_id = sale_ids.first().ok_or("Failed to retrieve sale ID")?;
 
+    // Get base currency ID (first currency marked as base, or first currency)
+    let base_currency_sql = "SELECT id FROM currencies WHERE base = 1 LIMIT 1";
+    let base_currencies = db.query(base_currency_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .map_err(|e| format!("Failed to get base currency: {}", e))?;
+    let base_currency_id = base_currencies.first().copied().unwrap_or_else(|| {
+        // Fallback to first currency if no base currency set
+        db.query("SELECT id FROM currencies LIMIT 1", &[], |row| Ok(row.get::<_, i64>(0)?))
+            .ok()
+            .and_then(|v| v.first().copied())
+            .unwrap_or(1)
+    });
+
+    // Create journal entry for sale: Debit Accounts Receivable, Credit Sales Revenue
+    // Note: This assumes accounts exist for AR and Sales Revenue - in production, these should be configurable
+    let ar_account_sql = "SELECT id FROM accounts WHERE account_type = 'Asset' AND name LIKE '%Receivable%' LIMIT 1";
+    let ar_accounts = db.query(ar_account_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .ok()
+        .and_then(|v| v.first().copied());
+    
+    let revenue_account_sql = "SELECT id FROM accounts WHERE account_type = 'Revenue' LIMIT 1";
+    let revenue_accounts = db.query(revenue_account_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .ok()
+        .and_then(|v| v.first().copied());
+
+    // Only create journal entry if accounts exist
+    if let (Some(ar_account), Some(revenue_account)) = (ar_accounts, revenue_accounts) {
+        let sale_currency_id = currency_id.unwrap_or(base_currency_id);
+        let journal_lines = vec![
+            (ar_account, sale_currency_id, base_amount, 0.0, exchange_rate, Some(format!("Sale #{}", sale_id))),
+            (revenue_account, sale_currency_id, 0.0, base_amount, exchange_rate, Some(format!("Sale #{}", sale_id))),
+        ];
+        let _ = create_journal_entry_internal(db, &date, notes.clone(), Some("sale".to_string()), Some(*sale_id), journal_lines);
+    }
+
     // Insert initial payment if paid_amount > 0
     if paid_amount > 0.0 {
-        let insert_payment_sql = "INSERT INTO sale_payments (sale_id, amount, date) VALUES (?, ?, ?)";
+        let payment_currency_id = currency_id.unwrap_or(base_currency_id);
+        let payment_base_amount = paid_amount * exchange_rate;
+        let insert_payment_sql = "INSERT INTO sale_payments (sale_id, currency_id, exchange_rate, amount, base_amount, date) VALUES (?, ?, ?, ?, ?, ?)";
         db.execute(insert_payment_sql, &[
             sale_id as &dyn rusqlite::ToSql,
+            &payment_currency_id as &dyn rusqlite::ToSql,
+            &exchange_rate as &dyn rusqlite::ToSql,
             &paid_amount as &dyn rusqlite::ToSql,
+            &payment_base_amount as &dyn rusqlite::ToSql,
             &date as &dyn rusqlite::ToSql,
         ])
             .map_err(|e| format!("Failed to insert initial payment: {}", e))?;
@@ -2793,7 +2895,7 @@ fn create_sale(
     }
 
     // Get the created sale
-    let sale_sql = "SELECT id, customer_id, date, notes, total_amount, paid_amount, additional_cost, created_at, updated_at FROM sales WHERE id = ?";
+    let sale_sql = "SELECT id, customer_id, date, notes, currency_id, exchange_rate, total_amount, base_amount, paid_amount, additional_cost, created_at, updated_at FROM sales WHERE id = ?";
     let sales = db
         .query(sale_sql, &[sale_id as &dyn rusqlite::ToSql], |row| {
             Ok(Sale {
@@ -2801,11 +2903,14 @@ fn create_sale(
                 customer_id: row.get(1)?,
                 date: row.get(2)?,
                 notes: row.get(3)?,
-                total_amount: row.get(4)?,
-                paid_amount: row.get(5)?,
-                additional_cost: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                currency_id: row.get(4)?,
+                exchange_rate: row.get(5)?,
+                total_amount: row.get(6)?,
+                base_amount: row.get(7)?,
+                paid_amount: row.get(8)?,
+                additional_cost: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale: {}", e))?;
@@ -2875,7 +2980,7 @@ fn get_sales(
         "ORDER BY s.date DESC, s.created_at DESC".to_string()
     };
 
-    let sql = format!("SELECT s.id, s.customer_id, s.date, s.notes, s.total_amount, s.paid_amount, s.additional_cost, s.created_at, s.updated_at FROM sales s {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    let sql = format!("SELECT s.id, s.customer_id, s.date, s.notes, s.currency_id, s.exchange_rate, s.total_amount, s.base_amount, s.paid_amount, s.additional_cost, s.created_at, s.updated_at FROM sales s {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
     
     params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
     params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
@@ -2896,11 +3001,14 @@ fn get_sales(
                 customer_id: row.get(1)?,
                 date: row.get(2)?,
                 notes: row.get::<_, Option<String>>(3)?,
-                total_amount: row.get(4)?,
-                paid_amount: row.get(5)?,
-                additional_cost: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                currency_id: row.get(4)?,
+                exchange_rate: row.get(5)?,
+                total_amount: row.get(6)?,
+                base_amount: row.get(7)?,
+                paid_amount: row.get(8)?,
+                additional_cost: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
@@ -2929,7 +3037,7 @@ fn get_sale(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<(Sa
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Get sale
-    let sale_sql = "SELECT id, customer_id, date, notes, total_amount, paid_amount, additional_cost, created_at, updated_at FROM sales WHERE id = ?";
+    let sale_sql = "SELECT id, customer_id, date, notes, currency_id, exchange_rate, total_amount, base_amount, paid_amount, additional_cost, created_at, updated_at FROM sales WHERE id = ?";
     let sales = db
         .query(sale_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Sale {
@@ -2937,11 +3045,14 @@ fn get_sale(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<(Sa
                 customer_id: row.get(1)?,
                 date: row.get(2)?,
                 notes: row.get(3)?,
-                total_amount: row.get(4)?,
-                paid_amount: row.get(5)?,
-                additional_cost: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                currency_id: row.get(4)?,
+                exchange_rate: row.get(5)?,
+                total_amount: row.get(6)?,
+                base_amount: row.get(7)?,
+                paid_amount: row.get(8)?,
+                additional_cost: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale: {}", e))?;
@@ -2976,6 +3087,8 @@ fn update_sale(
     customer_id: i64,
     date: String,
     notes: Option<String>,
+    currency_id: Option<i64>,
+    exchange_rate: f64,
     _paid_amount: f64, // Ignored, handled by payments table
     additional_cost: f64,
     items: Vec<(i64, i64, f64, f64)>, // (product_id, unit_id, per_price, amount)
@@ -2986,15 +3099,19 @@ fn update_sale(
     // Calculate total amount from items + additional_cost
     let items_total: f64 = items.iter().map(|(_, _, per_price, amount)| per_price * amount).sum();
     let total_amount = items_total + additional_cost;
+    let base_amount = total_amount * exchange_rate;
 
     // Update sale (excluding paid_amount)
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
-    let update_sql = "UPDATE sales SET customer_id = ?, date = ?, notes = ?, total_amount = ?, additional_cost = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let update_sql = "UPDATE sales SET customer_id = ?, date = ?, notes = ?, currency_id = ?, exchange_rate = ?, total_amount = ?, base_amount = ?, additional_cost = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     db.execute(update_sql, &[
         &customer_id as &dyn rusqlite::ToSql,
         &date as &dyn rusqlite::ToSql,
         &notes_str as &dyn rusqlite::ToSql,
+        &currency_id as &dyn rusqlite::ToSql,
+        &exchange_rate as &dyn rusqlite::ToSql,
         &total_amount as &dyn rusqlite::ToSql,
+        &base_amount as &dyn rusqlite::ToSql,
         &additional_cost as &dyn rusqlite::ToSql,
         &id as &dyn rusqlite::ToSql,
     ])
@@ -3021,7 +3138,7 @@ fn update_sale(
     }
 
     // Get the updated sale
-    let sale_sql = "SELECT id, customer_id, date, notes, total_amount, paid_amount, additional_cost, created_at, updated_at FROM sales WHERE id = ?";
+    let sale_sql = "SELECT id, customer_id, date, notes, currency_id, exchange_rate, total_amount, base_amount, paid_amount, additional_cost, created_at, updated_at FROM sales WHERE id = ?";
     let sales = db
         .query(sale_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Sale {
@@ -3029,11 +3146,14 @@ fn update_sale(
                 customer_id: row.get(1)?,
                 date: row.get(2)?,
                 notes: row.get(3)?,
-                total_amount: row.get(4)?,
-                paid_amount: row.get(5)?,
-                additional_cost: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                currency_id: row.get(4)?,
+                exchange_rate: row.get(5)?,
+                total_amount: row.get(6)?,
+                base_amount: row.get(7)?,
+                paid_amount: row.get(8)?,
+                additional_cost: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale: {}", e))?;
@@ -3242,35 +3362,78 @@ fn delete_sale_item(
 fn create_sale_payment(
     db_state: State<'_, Mutex<Option<Database>>>,
     sale_id: i64,
+    currency_id: Option<i64>,
+    exchange_rate: f64,
     amount: f64,
     date: String,
 ) -> Result<SalePayment, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let insert_sql = "INSERT INTO sale_payments (sale_id, amount, date) VALUES (?, ?, ?)";
+    let base_amount = amount * exchange_rate;
+    let payment_currency_id = currency_id.unwrap_or_else(|| {
+        // Get sale currency or base currency
+        let sale_currency_sql = "SELECT currency_id FROM sales WHERE id = ?";
+        db.query(sale_currency_sql, &[&sale_id as &dyn rusqlite::ToSql], |row| Ok(row.get::<_, Option<i64>>(0)?))
+            .ok()
+            .and_then(|v| v.first().and_then(|c| *c))
+            .unwrap_or_else(|| {
+                // Fallback to base currency
+                db.query("SELECT id FROM currencies WHERE base = 1 LIMIT 1", &[], |row| Ok(row.get::<_, i64>(0)?))
+                    .ok()
+                    .and_then(|v| v.first().copied())
+                    .unwrap_or(1)
+            })
+    });
+
+    let insert_sql = "INSERT INTO sale_payments (sale_id, currency_id, exchange_rate, amount, base_amount, date) VALUES (?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
         &sale_id as &dyn rusqlite::ToSql,
+        &payment_currency_id as &dyn rusqlite::ToSql,
+        &exchange_rate as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
+        &base_amount as &dyn rusqlite::ToSql,
         &date as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to insert sale payment: {}", e))?;
 
     // Update sale paid_amount
-    let update_sale_sql = "UPDATE sales SET paid_amount = (SELECT COALESCE(SUM(amount), 0) FROM sale_payments WHERE sale_id = ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let update_sale_sql = "UPDATE sales SET paid_amount = (SELECT COALESCE(SUM(base_amount), 0) FROM sale_payments WHERE sale_id = ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     db.execute(update_sale_sql, &[&sale_id as &dyn rusqlite::ToSql, &sale_id as &dyn rusqlite::ToSql])
         .map_err(|e| format!("Failed to update sale paid amount: {}", e))?;
 
+    // Create journal entry for payment: Debit Cash/Bank, Credit Accounts Receivable
+    let cash_account_sql = "SELECT id FROM accounts WHERE account_type = 'Asset' AND (name LIKE '%Cash%' OR name LIKE '%Bank%') LIMIT 1";
+    let cash_accounts = db.query(cash_account_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .ok()
+        .and_then(|v| v.first().copied());
+    
+    let ar_account_sql = "SELECT id FROM accounts WHERE account_type = 'Asset' AND name LIKE '%Receivable%' LIMIT 1";
+    let ar_accounts = db.query(ar_account_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .ok()
+        .and_then(|v| v.first().copied());
+
+    if let (Some(cash_account), Some(ar_account)) = (cash_accounts, ar_accounts) {
+        let journal_lines = vec![
+            (cash_account, payment_currency_id, base_amount, 0.0, exchange_rate, Some(format!("Payment for Sale #{}", sale_id))),
+            (ar_account, payment_currency_id, 0.0, base_amount, exchange_rate, Some(format!("Payment for Sale #{}", sale_id))),
+        ];
+        let _ = create_journal_entry_internal(db, &date, Some(format!("Payment for Sale #{}", sale_id)), Some("sale_payment".to_string()), Some(sale_id), journal_lines);
+    }
+
     // Get the created payment
-    let payment_sql = "SELECT id, sale_id, amount, date, created_at FROM sale_payments WHERE sale_id = ? ORDER BY id DESC LIMIT 1";
+    let payment_sql = "SELECT id, sale_id, currency_id, exchange_rate, amount, base_amount, date, created_at FROM sale_payments WHERE sale_id = ? ORDER BY id DESC LIMIT 1";
     let payments = db
         .query(payment_sql, &[&sale_id as &dyn rusqlite::ToSql], |row| {
             Ok(SalePayment {
                 id: row.get(0)?,
                 sale_id: row.get(1)?,
-                amount: row.get(2)?,
-                date: row.get(3)?,
-                created_at: row.get(4)?,
+                currency_id: row.get(2)?,
+                exchange_rate: row.get(3)?,
+                amount: row.get(4)?,
+                base_amount: row.get(5)?,
+                date: row.get(6)?,
+                created_at: row.get(7)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale payment: {}", e))?;
@@ -3288,15 +3451,18 @@ fn get_sale_payments(db_state: State<'_, Mutex<Option<Database>>>, sale_id: i64)
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, sale_id, amount, date, created_at FROM sale_payments WHERE sale_id = ? ORDER BY date DESC, created_at DESC";
+    let sql = "SELECT id, sale_id, currency_id, exchange_rate, amount, base_amount, date, created_at FROM sale_payments WHERE sale_id = ? ORDER BY date DESC, created_at DESC";
     let payments = db
         .query(sql, &[&sale_id as &dyn rusqlite::ToSql], |row| {
             Ok(SalePayment {
                 id: row.get(0)?,
                 sale_id: row.get(1)?,
-                amount: row.get(2)?,
-                date: row.get(3)?,
-                created_at: row.get(4)?,
+                currency_id: row.get(2)?,
+                exchange_rate: row.get(3)?,
+                amount: row.get(4)?,
+                base_amount: row.get(5)?,
+                date: row.get(6)?,
+                created_at: row.get(7)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale payments: {}", e))?;
@@ -5070,14 +5236,544 @@ fn update_company_settings(
     Ok(settings.clone())
 }
 
+// COA Category Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoaCategory {
+    pub id: i64,
+    pub parent_id: Option<i64>,
+    pub name: String,
+    pub code: String,
+    pub category_type: String, // Asset, Liability, Equity, Revenue, Expense
+    pub level: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// Account Currency Balance Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountCurrencyBalance {
+    pub id: i64,
+    pub account_id: i64,
+    pub currency_id: i64,
+    pub balance: f64,
+    pub updated_at: String,
+}
+
+// Journal Entry Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JournalEntry {
+    pub id: i64,
+    pub entry_number: String,
+    pub entry_date: String,
+    pub description: Option<String>,
+    pub reference_type: Option<String>, // sale, purchase, manual, etc.
+    pub reference_id: Option<i64>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+// Journal Entry Line Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JournalEntryLine {
+    pub id: i64,
+    pub journal_entry_id: i64,
+    pub account_id: i64,
+    pub currency_id: i64,
+    pub debit_amount: f64,
+    pub credit_amount: f64,
+    pub exchange_rate: f64,
+    pub base_amount: f64,
+    pub description: Option<String>,
+    pub created_at: String,
+}
+
+// Currency Exchange Rate Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurrencyExchangeRate {
+    pub id: i64,
+    pub from_currency_id: i64,
+    pub to_currency_id: i64,
+    pub rate: f64,
+    pub date: String,
+    pub created_at: String,
+}
+
+/// Initialize COA categories table schema
+#[tauri::command]
+fn init_coa_categories_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS coa_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_id INTEGER,
+            name TEXT NOT NULL,
+            code TEXT NOT NULL UNIQUE,
+            category_type TEXT NOT NULL,
+            level INTEGER NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (parent_id) REFERENCES coa_categories(id) ON DELETE SET NULL
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create coa_categories table: {}", e))?;
+
+    Ok("COA categories table initialized successfully".to_string())
+}
+
+/// Initialize account currency balances table schema
+#[tauri::command]
+fn init_account_currency_balances_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS account_currency_balances (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id INTEGER NOT NULL,
+            currency_id INTEGER NOT NULL,
+            balance REAL NOT NULL DEFAULT 0,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+            FOREIGN KEY (currency_id) REFERENCES currencies(id),
+            UNIQUE(account_id, currency_id)
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create account_currency_balances table: {}", e))?;
+
+    Ok("Account currency balances table initialized successfully".to_string())
+}
+
+/// Initialize journal entries table schema
+#[tauri::command]
+fn init_journal_entries_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS journal_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entry_number TEXT NOT NULL UNIQUE,
+            entry_date TEXT NOT NULL,
+            description TEXT,
+            reference_type TEXT,
+            reference_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create journal_entries table: {}", e))?;
+
+    Ok("Journal entries table initialized successfully".to_string())
+}
+
+/// Initialize journal entry lines table schema
+#[tauri::command]
+fn init_journal_entry_lines_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS journal_entry_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            journal_entry_id INTEGER NOT NULL,
+            account_id INTEGER NOT NULL,
+            currency_id INTEGER NOT NULL,
+            debit_amount REAL NOT NULL DEFAULT 0,
+            credit_amount REAL NOT NULL DEFAULT 0,
+            exchange_rate REAL NOT NULL DEFAULT 1,
+            base_amount REAL NOT NULL DEFAULT 0,
+            description TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (journal_entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE,
+            FOREIGN KEY (account_id) REFERENCES accounts(id),
+            FOREIGN KEY (currency_id) REFERENCES currencies(id)
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create journal_entry_lines table: {}", e))?;
+
+    Ok("Journal entry lines table initialized successfully".to_string())
+}
+
+/// Initialize currency exchange rates table schema
+#[tauri::command]
+fn init_currency_exchange_rates_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS currency_exchange_rates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_currency_id INTEGER NOT NULL,
+            to_currency_id INTEGER NOT NULL,
+            rate REAL NOT NULL,
+            date TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (from_currency_id) REFERENCES currencies(id),
+            FOREIGN KEY (to_currency_id) REFERENCES currencies(id)
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create currency_exchange_rates table: {}", e))?;
+
+    Ok("Currency exchange rates table initialized successfully".to_string())
+}
+
+/// Create a new COA category
+#[tauri::command]
+fn create_coa_category(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    parent_id: Option<i64>,
+    name: String,
+    code: String,
+    category_type: String,
+) -> Result<CoaCategory, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Calculate level based on parent
+    let level = if let Some(pid) = parent_id {
+        let parent_level_sql = "SELECT level FROM coa_categories WHERE id = ?";
+        let parent_levels = db
+            .query(parent_level_sql, &[&pid as &dyn rusqlite::ToSql], |row| {
+                Ok(row.get::<_, i64>(0)?)
+            })
+            .map_err(|e| format!("Failed to fetch parent level: {}", e))?;
+        parent_levels.first().copied().unwrap_or(0) + 1
+    } else {
+        0
+    };
+
+    let insert_sql = "INSERT INTO coa_categories (parent_id, name, code, category_type, level) VALUES (?, ?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &parent_id as &dyn rusqlite::ToSql,
+        &name as &dyn rusqlite::ToSql,
+        &code as &dyn rusqlite::ToSql,
+        &category_type as &dyn rusqlite::ToSql,
+        &level as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert COA category: {}", e))?;
+
+    // Get the created category
+    let category_sql = "SELECT id, parent_id, name, code, category_type, level, created_at, updated_at FROM coa_categories WHERE code = ? ORDER BY id DESC LIMIT 1";
+    let categories = db
+        .query(category_sql, &[&code as &dyn rusqlite::ToSql], |row| {
+            Ok(CoaCategory {
+                id: row.get(0)?,
+                parent_id: row.get(1)?,
+                name: row.get(2)?,
+                code: row.get(3)?,
+                category_type: row.get(4)?,
+                level: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch COA category: {}", e))?;
+
+    if let Some(category) = categories.first() {
+        Ok(category.clone())
+    } else {
+        Err("Failed to retrieve created COA category".to_string())
+    }
+}
+
+/// Get all COA categories
+#[tauri::command]
+fn get_coa_categories(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<CoaCategory>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, parent_id, name, code, category_type, level, created_at, updated_at FROM coa_categories ORDER BY level, code";
+    let categories = db
+        .query(sql, &[], |row| {
+            Ok(CoaCategory {
+                id: row.get(0)?,
+                parent_id: row.get(1)?,
+                name: row.get(2)?,
+                code: row.get(3)?,
+                category_type: row.get(4)?,
+                level: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch COA categories: {}", e))?;
+
+    Ok(categories)
+}
+
+/// Get COA category tree (hierarchical structure)
+#[tauri::command]
+fn get_coa_category_tree(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<CoaCategory>, String> {
+    // For now, return flat list sorted by level and code
+    // Frontend can build tree structure
+    get_coa_categories(db_state)
+}
+
+/// Update a COA category
+#[tauri::command]
+fn update_coa_category(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+    parent_id: Option<i64>,
+    name: String,
+    code: String,
+    category_type: String,
+) -> Result<CoaCategory, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Calculate level based on parent
+    let level = if let Some(pid) = parent_id {
+        let parent_level_sql = "SELECT level FROM coa_categories WHERE id = ?";
+        let parent_levels = db
+            .query(parent_level_sql, &[&pid as &dyn rusqlite::ToSql], |row| {
+                Ok(row.get::<_, i64>(0)?)
+            })
+            .map_err(|e| format!("Failed to fetch parent level: {}", e))?;
+        parent_levels.first().copied().unwrap_or(0) + 1
+    } else {
+        0
+    };
+
+    let update_sql = "UPDATE coa_categories SET parent_id = ?, name = ?, code = ?, category_type = ?, level = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_sql, &[
+        &parent_id as &dyn rusqlite::ToSql,
+        &name as &dyn rusqlite::ToSql,
+        &code as &dyn rusqlite::ToSql,
+        &category_type as &dyn rusqlite::ToSql,
+        &level as &dyn rusqlite::ToSql,
+        &id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update COA category: {}", e))?;
+
+    // Get the updated category
+    let category_sql = "SELECT id, parent_id, name, code, category_type, level, created_at, updated_at FROM coa_categories WHERE id = ?";
+    let categories = db
+        .query(category_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(CoaCategory {
+                id: row.get(0)?,
+                parent_id: row.get(1)?,
+                name: row.get(2)?,
+                code: row.get(3)?,
+                category_type: row.get(4)?,
+                level: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch COA category: {}", e))?;
+
+    if let Some(category) = categories.first() {
+        Ok(category.clone())
+    } else {
+        Err("COA category not found".to_string())
+    }
+}
+
+/// Delete a COA category
+#[tauri::command]
+fn delete_coa_category(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Check if category has children
+    let children_sql = "SELECT COUNT(*) FROM coa_categories WHERE parent_id = ?";
+    let children_count: i64 = db
+        .query(children_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to check children: {}", e))?
+        .first()
+        .copied()
+        .unwrap_or(0);
+
+    if children_count > 0 {
+        return Err("Cannot delete category with child categories".to_string());
+    }
+
+    // Check if category has accounts
+    let accounts_sql = "SELECT COUNT(*) FROM accounts WHERE coa_category_id = ?";
+    let accounts_count: i64 = db
+        .query(accounts_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to check accounts: {}", e))?
+        .first()
+        .copied()
+        .unwrap_or(0);
+
+    if accounts_count > 0 {
+        return Err("Cannot delete category with assigned accounts".to_string());
+    }
+
+    let delete_sql = "DELETE FROM coa_categories WHERE id = ?";
+    db.execute(delete_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete COA category: {}", e))?;
+
+    Ok("COA category deleted successfully".to_string())
+}
+
+/// Initialize all standard COA categories
+#[tauri::command]
+fn init_standard_coa_categories(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Check if categories already exist
+    let check_sql = "SELECT COUNT(*) FROM coa_categories";
+    let count: i64 = db
+        .query(check_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .map_err(|e| format!("Failed to check categories: {}", e))?
+        .first()
+        .copied()
+        .unwrap_or(0);
+
+    if count > 0 {
+        return Ok("COA categories already initialized".to_string());
+    }
+
+    // Helper function to insert category and return its ID
+    let insert_category = |parent_id: Option<i64>, name: &str, code: &str, category_type: &str, level: i64| -> Result<i64, String> {
+        let insert_sql = "INSERT INTO coa_categories (parent_id, name, code, category_type, level) VALUES (?, ?, ?, ?, ?)";
+        db.execute(insert_sql, &[
+            &parent_id as &dyn rusqlite::ToSql,
+            &name as &dyn rusqlite::ToSql,
+            &code as &dyn rusqlite::ToSql,
+            &category_type as &dyn rusqlite::ToSql,
+            &level as &dyn rusqlite::ToSql,
+        ])
+        .map_err(|e| format!("Failed to insert COA category {}: {}", code, e))?;
+
+        let get_id_sql = "SELECT id FROM coa_categories WHERE code = ? ORDER BY id DESC LIMIT 1";
+        let ids: Vec<i64> = db
+            .query(get_id_sql, &[&code as &dyn rusqlite::ToSql], |row| Ok(row.get::<_, i64>(0)?))
+            .map_err(|e| format!("Failed to get category ID: {}", e))?;
+        
+        ids.first().copied().ok_or_else(|| format!("Failed to retrieve category ID for {}", code))
+    };
+
+    // Assets (دارایی‌ها) - Level 0
+    let assets_id = insert_category(None, "دارایی‌ها", "1", "Asset", 0)?;
+    
+    // Current Assets (دارایی‌های جاری) - Level 1
+    let current_assets_id = insert_category(Some(assets_id), "دارایی‌های جاری", "11", "Asset", 1)?;
+    insert_category(Some(current_assets_id), "موجودی نقد", "111", "Asset", 2)?;
+    insert_category(Some(current_assets_id), "بانک‌ها", "112", "Asset", 2)?;
+    insert_category(Some(current_assets_id), "حساب‌های دریافتنی", "113", "Asset", 2)?;
+    insert_category(Some(current_assets_id), "پیش‌پرداخت‌ها", "114", "Asset", 2)?;
+    insert_category(Some(current_assets_id), "موجودی کالا", "115", "Asset", 2)?;
+    
+    // Fixed Assets (دارایی‌های ثابت) - Level 1
+    let fixed_assets_id = insert_category(Some(assets_id), "دارایی‌های ثابت", "12", "Asset", 1)?;
+    insert_category(Some(fixed_assets_id), "زمین و ساختمان", "121", "Asset", 2)?;
+    insert_category(Some(fixed_assets_id), "ماشین‌آلات و تجهیزات", "122", "Asset", 2)?;
+    insert_category(Some(fixed_assets_id), "وسایل نقلیه", "123", "Asset", 2)?;
+    insert_category(Some(fixed_assets_id), "اثاثیه و لوازم", "124", "Asset", 2)?;
+    insert_category(Some(fixed_assets_id), "استهلاک انباشته", "125", "Asset", 2)?;
+    
+    // Other Assets (سایر دارایی‌ها) - Level 1
+    let other_assets_id = insert_category(Some(assets_id), "سایر دارایی‌ها", "13", "Asset", 1)?;
+    insert_category(Some(other_assets_id), "سرمایه‌گذاری‌ها", "131", "Asset", 2)?;
+    insert_category(Some(other_assets_id), "دارایی‌های نامشهود", "132", "Asset", 2)?;
+    
+    // Liabilities (بدهی‌ها) - Level 0
+    let liabilities_id = insert_category(None, "بدهی‌ها", "2", "Liability", 0)?;
+    
+    // Current Liabilities (بدهی‌های جاری) - Level 1
+    let current_liabilities_id = insert_category(Some(liabilities_id), "بدهی‌های جاری", "21", "Liability", 1)?;
+    insert_category(Some(current_liabilities_id), "حساب‌های پرداختنی", "211", "Liability", 2)?;
+    insert_category(Some(current_liabilities_id), "وام‌های کوتاه‌مدت", "212", "Liability", 2)?;
+    insert_category(Some(current_liabilities_id), "پیش‌دریافت‌ها", "213", "Liability", 2)?;
+    insert_category(Some(current_liabilities_id), "بدهی‌های مالیاتی", "214", "Liability", 2)?;
+    insert_category(Some(current_liabilities_id), "حقوق و دستمزد پرداختنی", "215", "Liability", 2)?;
+    
+    // Long-term Liabilities (بدهی‌های بلندمدت) - Level 1
+    let long_term_liabilities_id = insert_category(Some(liabilities_id), "بدهی‌های بلندمدت", "22", "Liability", 1)?;
+    insert_category(Some(long_term_liabilities_id), "وام‌های بلندمدت", "221", "Liability", 2)?;
+    insert_category(Some(long_term_liabilities_id), "اوراق قرضه", "222", "Liability", 2)?;
+    
+    // Equity (حقوق صاحبان سهام) - Level 0
+    let equity_id = insert_category(None, "حقوق صاحبان سهام", "3", "Equity", 0)?;
+    
+    // Capital (سرمایه) - Level 1
+    let capital_id = insert_category(Some(equity_id), "سرمایه", "31", "Equity", 1)?;
+    insert_category(Some(capital_id), "سرمایه اولیه", "311", "Equity", 2)?;
+    insert_category(Some(capital_id), "افزایش سرمایه", "312", "Equity", 2)?;
+    
+    // Retained Earnings (سود انباشته) - Level 1
+    let retained_earnings_id = insert_category(Some(equity_id), "سود انباشته", "32", "Equity", 1)?;
+    insert_category(Some(retained_earnings_id), "سود سال جاری", "321", "Equity", 2)?;
+    insert_category(Some(retained_earnings_id), "سود سال‌های قبل", "322", "Equity", 2)?;
+    
+    // Reserves (ذخایر) - Level 1
+    insert_category(Some(equity_id), "ذخایر", "33", "Equity", 1)?;
+    
+    // Revenue (درآمدها) - Level 0
+    let revenue_id = insert_category(None, "درآمدها", "4", "Revenue", 0)?;
+    
+    // Operating Revenue (درآمدهای عملیاتی) - Level 1
+    let operating_revenue_id = insert_category(Some(revenue_id), "درآمدهای عملیاتی", "41", "Revenue", 1)?;
+    insert_category(Some(operating_revenue_id), "فروش کالا", "411", "Revenue", 2)?;
+    insert_category(Some(operating_revenue_id), "فروش خدمات", "412", "Revenue", 2)?;
+    
+    // Other Revenue (درآمدهای دیگر) - Level 1
+    let other_revenue_id = insert_category(Some(revenue_id), "درآمدهای دیگر", "42", "Revenue", 1)?;
+    insert_category(Some(other_revenue_id), "درآمد سود بانکی", "421", "Revenue", 2)?;
+    insert_category(Some(other_revenue_id), "درآمد سود سرمایه‌گذاری", "422", "Revenue", 2)?;
+    insert_category(Some(other_revenue_id), "سایر درآمدها", "423", "Revenue", 2)?;
+    
+    // Expenses (هزینه‌ها) - Level 0
+    let expenses_id = insert_category(None, "هزینه‌ها", "5", "Expense", 0)?;
+    
+    // Operating Expenses (هزینه‌های عملیاتی) - Level 1
+    let operating_expenses_id = insert_category(Some(expenses_id), "هزینه‌های عملیاتی", "51", "Expense", 1)?;
+    insert_category(Some(operating_expenses_id), "بهای تمام شده کالای فروش رفته", "511", "Expense", 2)?;
+    insert_category(Some(operating_expenses_id), "هزینه خرید", "512", "Expense", 2)?;
+    insert_category(Some(operating_expenses_id), "هزینه حقوق و دستمزد", "513", "Expense", 2)?;
+    insert_category(Some(operating_expenses_id), "هزینه اجاره", "514", "Expense", 2)?;
+    insert_category(Some(operating_expenses_id), "هزینه آب و برق", "515", "Expense", 2)?;
+    insert_category(Some(operating_expenses_id), "هزینه حمل و نقل", "516", "Expense", 2)?;
+    insert_category(Some(operating_expenses_id), "هزینه تبلیغات", "517", "Expense", 2)?;
+    insert_category(Some(operating_expenses_id), "هزینه استهلاک", "518", "Expense", 2)?;
+    
+    // Administrative Expenses (هزینه‌های اداری) - Level 1
+    let admin_expenses_id = insert_category(Some(expenses_id), "هزینه‌های اداری", "52", "Expense", 1)?;
+    insert_category(Some(admin_expenses_id), "هزینه‌های عمومی", "521", "Expense", 2)?;
+    
+    // Financial Expenses (هزینه‌های مالی) - Level 1
+    let financial_expenses_id = insert_category(Some(expenses_id), "هزینه‌های مالی", "53", "Expense", 1)?;
+    insert_category(Some(financial_expenses_id), "هزینه بهره", "531", "Expense", 2)?;
+    
+    // Other Expenses (سایر هزینه‌ها) - Level 1
+    insert_category(Some(expenses_id), "سایر هزینه‌ها", "54", "Expense", 1)?;
+
+    Ok("Standard COA categories initialized successfully".to_string())
+}
+
 // Account Model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub id: i64,
     pub name: String,
     pub currency_id: Option<i64>,
+    pub coa_category_id: Option<i64>,
+    pub account_code: Option<String>,
+    pub account_type: Option<String>,
     pub initial_balance: f64,
     pub current_balance: f64,
+    pub is_active: bool,
     pub notes: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -5111,17 +5807,34 @@ fn init_accounts_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<S
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             currency_id INTEGER,
+            coa_category_id INTEGER,
+            account_code TEXT UNIQUE,
+            account_type TEXT,
             initial_balance REAL NOT NULL DEFAULT 0,
             current_balance REAL NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (currency_id) REFERENCES currencies(id)
+            FOREIGN KEY (currency_id) REFERENCES currencies(id),
+            FOREIGN KEY (coa_category_id) REFERENCES coa_categories(id)
         )
     ";
 
     db.execute(create_table_sql, &[])
         .map_err(|e| format!("Failed to create accounts table: {}", e))?;
+
+    // Add new columns if they don't exist (for existing databases)
+    let alter_queries = vec![
+        "ALTER TABLE accounts ADD COLUMN coa_category_id INTEGER",
+        "ALTER TABLE accounts ADD COLUMN account_code TEXT UNIQUE",
+        "ALTER TABLE accounts ADD COLUMN account_type TEXT",
+        "ALTER TABLE accounts ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1",
+    ];
+
+    for alter_sql in alter_queries {
+        let _ = db.execute(alter_sql, &[]);
+    }
 
     Ok("Accounts table initialized successfully".to_string())
 }
@@ -5162,6 +5875,9 @@ fn create_account(
     db_state: State<'_, Mutex<Option<Database>>>,
     name: String,
     currency_id: Option<i64>,
+    coa_category_id: Option<i64>,
+    account_code: Option<String>,
+    account_type: Option<String>,
     initial_balance: f64,
     notes: Option<String>,
 ) -> Result<Account, String> {
@@ -5169,29 +5885,55 @@ fn create_account(
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
-    let insert_sql = "INSERT INTO accounts (name, currency_id, initial_balance, current_balance, notes) VALUES (?, ?, ?, ?, ?)";
+    let code_str: Option<&str> = account_code.as_ref().map(|s| s.as_str());
+    let type_str: Option<&str> = account_type.as_ref().map(|s| s.as_str());
+    let is_active_int = 1i64;
+
+    let insert_sql = "INSERT INTO accounts (name, currency_id, coa_category_id, account_code, account_type, initial_balance, current_balance, is_active, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
         &name as &dyn rusqlite::ToSql,
         &currency_id as &dyn rusqlite::ToSql,
+        &coa_category_id as &dyn rusqlite::ToSql,
+        &code_str as &dyn rusqlite::ToSql,
+        &type_str as &dyn rusqlite::ToSql,
         &initial_balance as &dyn rusqlite::ToSql,
         &initial_balance as &dyn rusqlite::ToSql,
+        &is_active_int as &dyn rusqlite::ToSql,
         &notes_str as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to insert account: {}", e))?;
 
+    // Get the created account ID first
+    let account_id_sql = "SELECT id FROM accounts WHERE name = ? ORDER BY id DESC LIMIT 1";
+    let account_ids = db
+        .query(account_id_sql, &[&name as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to get account ID: {}", e))?;
+    let account_id = account_ids.first().ok_or("Failed to get account ID")?;
+
+    // Initialize currency balance if currency_id is provided
+    if let Some(cid) = currency_id {
+        update_account_currency_balance_internal(db, *account_id, cid, initial_balance)?;
+    }
+
     // Get the created account
-    let account_sql = "SELECT id, name, currency_id, initial_balance, current_balance, notes, created_at, updated_at FROM accounts WHERE name = ? ORDER BY id DESC LIMIT 1";
+    let account_sql = "SELECT id, name, currency_id, coa_category_id, account_code, account_type, initial_balance, current_balance, is_active, notes, created_at, updated_at FROM accounts WHERE name = ? ORDER BY id DESC LIMIT 1";
     let accounts = db
         .query(account_sql, &[&name as &dyn rusqlite::ToSql], |row| {
             Ok(Account {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 currency_id: row.get(2)?,
-                initial_balance: row.get(3)?,
-                current_balance: row.get(4)?,
-                notes: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                coa_category_id: row.get(3)?,
+                account_code: row.get(4)?,
+                account_type: row.get(5)?,
+                initial_balance: row.get(6)?,
+                current_balance: row.get(7)?,
+                is_active: row.get::<_, i64>(8)? != 0,
+                notes: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })
         .map_err(|e| format!("Failed to fetch account: {}", e))?;
@@ -5209,18 +5951,22 @@ fn get_accounts(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Acco
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, name, currency_id, initial_balance, current_balance, notes, created_at, updated_at FROM accounts ORDER BY name";
+    let sql = "SELECT id, name, currency_id, coa_category_id, account_code, account_type, initial_balance, current_balance, is_active, notes, created_at, updated_at FROM accounts ORDER BY name";
     let accounts = db
         .query(sql, &[], |row| {
             Ok(Account {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 currency_id: row.get(2)?,
-                initial_balance: row.get(3)?,
-                current_balance: row.get(4)?,
-                notes: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                coa_category_id: row.get(3)?,
+                account_code: row.get(4)?,
+                account_type: row.get(5)?,
+                initial_balance: row.get(6)?,
+                current_balance: row.get(7)?,
+                is_active: row.get::<_, i64>(8)? != 0,
+                notes: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })
         .map_err(|e| format!("Failed to fetch accounts: {}", e))?;
@@ -5234,18 +5980,22 @@ fn get_account(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, name, currency_id, initial_balance, current_balance, notes, created_at, updated_at FROM accounts WHERE id = ?";
+    let sql = "SELECT id, name, currency_id, coa_category_id, account_code, account_type, initial_balance, current_balance, is_active, notes, created_at, updated_at FROM accounts WHERE id = ?";
     let accounts = db
         .query(sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Account {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 currency_id: row.get(2)?,
-                initial_balance: row.get(3)?,
-                current_balance: row.get(4)?,
-                notes: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                coa_category_id: row.get(3)?,
+                account_code: row.get(4)?,
+                account_type: row.get(5)?,
+                initial_balance: row.get(6)?,
+                current_balance: row.get(7)?,
+                is_active: row.get::<_, i64>(8)? != 0,
+                notes: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })
         .map_err(|e| format!("Failed to fetch account: {}", e))?;
@@ -5264,18 +6014,30 @@ fn update_account(
     id: i64,
     name: String,
     currency_id: Option<i64>,
+    coa_category_id: Option<i64>,
+    account_code: Option<String>,
+    account_type: Option<String>,
     initial_balance: f64,
+    is_active: bool,
     notes: Option<String>,
 ) -> Result<Account, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
-    let update_sql = "UPDATE accounts SET name = ?, currency_id = ?, initial_balance = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let code_str: Option<&str> = account_code.as_ref().map(|s| s.as_str());
+    let type_str: Option<&str> = account_type.as_ref().map(|s| s.as_str());
+    let is_active_int = if is_active { 1i64 } else { 0i64 };
+
+    let update_sql = "UPDATE accounts SET name = ?, currency_id = ?, coa_category_id = ?, account_code = ?, account_type = ?, initial_balance = ?, is_active = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     db.execute(update_sql, &[
         &name as &dyn rusqlite::ToSql,
         &currency_id as &dyn rusqlite::ToSql,
+        &coa_category_id as &dyn rusqlite::ToSql,
+        &code_str as &dyn rusqlite::ToSql,
+        &type_str as &dyn rusqlite::ToSql,
         &initial_balance as &dyn rusqlite::ToSql,
+        &is_active_int as &dyn rusqlite::ToSql,
         &notes_str as &dyn rusqlite::ToSql,
         &id as &dyn rusqlite::ToSql,
     ])
@@ -5288,18 +6050,22 @@ fn update_account(
         .map_err(|e| format!("Failed to update account balance: {}", e))?;
 
     // Get the updated account directly
-    let account_sql = "SELECT id, name, currency_id, initial_balance, current_balance, notes, created_at, updated_at FROM accounts WHERE id = ?";
+    let account_sql = "SELECT id, name, currency_id, coa_category_id, account_code, account_type, initial_balance, current_balance, is_active, notes, created_at, updated_at FROM accounts WHERE id = ?";
     let accounts = db
         .query(account_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Account {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 currency_id: row.get(2)?,
-                initial_balance: row.get(3)?,
-                current_balance: row.get(4)?,
-                notes: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                coa_category_id: row.get(3)?,
+                account_code: row.get(4)?,
+                account_type: row.get(5)?,
+                initial_balance: row.get(6)?,
+                current_balance: row.get(7)?,
+                is_active: row.get::<_, i64>(8)? != 0,
+                notes: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })
         .map_err(|e| format!("Failed to fetch account: {}", e))?;
@@ -5402,6 +6168,15 @@ fn deposit_account(
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
     let is_full_int = if is_full { 1 } else { 0 };
 
+    // Get currency ID from currency name
+    let currency_id_sql = "SELECT id FROM currencies WHERE name = ? LIMIT 1";
+    let currency_ids = db
+        .query(currency_id_sql, &[&currency as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to get currency ID: {}", e))?;
+    let currency_id = currency_ids.first().ok_or("Currency not found")?;
+
     // Insert transaction
     let insert_sql = "INSERT INTO account_transactions (account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes) VALUES (?, 'deposit', ?, ?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
@@ -5416,11 +6191,30 @@ fn deposit_account(
     ])
         .map_err(|e| format!("Failed to insert deposit transaction: {}", e))?;
 
+    // Update account currency balance
+    let current_currency_balance = get_account_balance_by_currency_internal(db, account_id, *currency_id)?;
+    let new_currency_balance = current_currency_balance + final_amount;
+    update_account_currency_balance_internal(db, account_id, *currency_id, new_currency_balance)?;
+
     // Update account balance
     let new_balance = calculate_account_balance_internal(db, account_id)?;
     let update_balance_sql = "UPDATE accounts SET current_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     db.execute(update_balance_sql, &[&new_balance as &dyn rusqlite::ToSql, &account_id as &dyn rusqlite::ToSql])
         .map_err(|e| format!("Failed to update account balance: {}", e))?;
+
+    // Create journal entry: Debit Account, Credit Cash/Source
+    let cash_account_sql = "SELECT id FROM accounts WHERE account_type = 'Asset' AND (name LIKE '%Cash%' OR name LIKE '%Bank%') LIMIT 1";
+    let cash_accounts = db.query(cash_account_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .ok()
+        .and_then(|v| v.first().copied());
+
+    if let Some(cash_account) = cash_accounts {
+        let journal_lines = vec![
+            (account_id, *currency_id, total, 0.0, rate, notes.clone()),
+            (cash_account, *currency_id, 0.0, total, rate, notes.clone()),
+        ];
+        let _ = create_journal_entry_internal(db, &transaction_date, notes.clone(), Some("account_deposit".to_string()), None, journal_lines);
+    }
 
     // Get the created transaction
     let transaction_sql = "SELECT id, account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes, created_at, updated_at FROM account_transactions WHERE account_id = ? AND transaction_type = 'deposit' ORDER BY id DESC LIMIT 1";
@@ -5489,6 +6283,15 @@ fn withdraw_account(
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
     let is_full_int = if is_full { 1 } else { 0 };
 
+    // Get currency ID from currency name
+    let currency_id_sql = "SELECT id FROM currencies WHERE name = ? LIMIT 1";
+    let currency_ids = db
+        .query(currency_id_sql, &[&currency as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to get currency ID: {}", e))?;
+    let currency_id = currency_ids.first().ok_or("Currency not found")?;
+
     // Insert transaction
     let insert_sql = "INSERT INTO account_transactions (account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes) VALUES (?, 'withdraw', ?, ?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
@@ -5503,11 +6306,30 @@ fn withdraw_account(
     ])
         .map_err(|e| format!("Failed to insert withdrawal transaction: {}", e))?;
 
+    // Update account currency balance
+    let current_currency_balance = get_account_balance_by_currency_internal(db, account_id, *currency_id)?;
+    let new_currency_balance = current_currency_balance - final_amount;
+    update_account_currency_balance_internal(db, account_id, *currency_id, new_currency_balance)?;
+
     // Update account balance
     let new_balance = calculate_account_balance_internal(db, account_id)?;
     let update_balance_sql = "UPDATE accounts SET current_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     db.execute(update_balance_sql, &[&new_balance as &dyn rusqlite::ToSql, &account_id as &dyn rusqlite::ToSql])
         .map_err(|e| format!("Failed to update account balance: {}", e))?;
+
+    // Create journal entry: Debit Expense/Cash, Credit Account
+    let expense_account_sql = "SELECT id FROM accounts WHERE account_type = 'Expense' LIMIT 1";
+    let expense_accounts = db.query(expense_account_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .ok()
+        .and_then(|v| v.first().copied());
+
+    if let Some(expense_account) = expense_accounts {
+        let journal_lines = vec![
+            (expense_account, *currency_id, total, 0.0, rate, notes.clone()),
+            (account_id, *currency_id, 0.0, total, rate, notes.clone()),
+        ];
+        let _ = create_journal_entry_internal(db, &transaction_date, notes.clone(), Some("account_withdraw".to_string()), None, journal_lines);
+    }
 
     // Get the created transaction
     let transaction_sql = "SELECT id, account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes, created_at, updated_at FROM account_transactions WHERE account_id = ? AND transaction_type = 'withdraw' ORDER BY id DESC LIMIT 1";
@@ -5567,6 +6389,572 @@ fn get_account_transactions(
         .map_err(|e| format!("Failed to fetch transactions: {}", e))?;
 
     Ok(transactions)
+}
+
+/// Get account balance by currency
+#[tauri::command]
+fn get_account_balance_by_currency(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    account_id: i64,
+    currency_id: i64,
+) -> Result<f64, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT balance FROM account_currency_balances WHERE account_id = ? AND currency_id = ?";
+    let balances = db
+        .query(sql, &[&account_id as &dyn rusqlite::ToSql, &currency_id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, f64>(0)?)
+        })
+        .map_err(|e| format!("Failed to fetch account balance: {}", e))?;
+
+    Ok(balances.first().copied().unwrap_or(0.0))
+}
+
+/// Get all currency balances for an account
+#[tauri::command]
+fn get_all_account_balances(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    account_id: i64,
+) -> Result<Vec<AccountCurrencyBalance>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, account_id, currency_id, balance, updated_at FROM account_currency_balances WHERE account_id = ?";
+    let balances = db
+        .query(sql, &[&account_id as &dyn rusqlite::ToSql], |row| {
+            Ok(AccountCurrencyBalance {
+                id: row.get(0)?,
+                account_id: row.get(1)?,
+                currency_id: row.get(2)?,
+                balance: row.get(3)?,
+                updated_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch account balances: {}", e))?;
+
+    Ok(balances)
+}
+
+/// Update account currency balance (internal function)
+fn update_account_currency_balance_internal(
+    db: &Database,
+    account_id: i64,
+    currency_id: i64,
+    balance: f64,
+) -> Result<(), String> {
+    let upsert_sql = "
+        INSERT INTO account_currency_balances (account_id, currency_id, balance, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(account_id, currency_id) DO UPDATE SET
+            balance = excluded.balance,
+            updated_at = CURRENT_TIMESTAMP
+    ";
+    db.execute(upsert_sql, &[
+        &account_id as &dyn rusqlite::ToSql,
+        &currency_id as &dyn rusqlite::ToSql,
+        &balance as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to update account currency balance: {}", e))?;
+    Ok(())
+}
+
+/// Internal helper to create journal entry (not exposed as command)
+fn create_journal_entry_internal(
+    db: &Database,
+    entry_date: &str,
+    description: Option<String>,
+    reference_type: Option<String>,
+    reference_id: Option<i64>,
+    lines: Vec<(i64, i64, f64, f64, f64, Option<String>)>, // (account_id, currency_id, debit_amount, credit_amount, exchange_rate, description)
+) -> Result<i64, String> {
+    // Validate that debits equal credits
+    let total_debits: f64 = lines.iter().map(|(_, _, debit, _, _, _)| debit).sum();
+    let total_credits: f64 = lines.iter().map(|(_, _, _, credit, _, _)| credit).sum();
+
+    if (total_debits - total_credits).abs() > 0.01 {
+        return Err(format!("Journal entry is not balanced. Debits: {}, Credits: {}", total_debits, total_credits));
+    }
+
+    // Generate entry number
+    let entry_number_sql = "SELECT COALESCE(MAX(CAST(SUBSTR(entry_number, 2) AS INTEGER)), 0) + 1 FROM journal_entries WHERE entry_number LIKE 'J%'";
+    let entry_numbers = db
+        .query(entry_number_sql, &[], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to generate entry number: {}", e))?;
+    let entry_number = format!("J{:06}", entry_numbers.first().copied().unwrap_or(1));
+
+    let desc_str: Option<&str> = description.as_ref().map(|s| s.as_str());
+    let ref_type_str: Option<&str> = reference_type.as_ref().map(|s| s.as_str());
+
+    // Insert journal entry
+    let insert_sql = "INSERT INTO journal_entries (entry_number, entry_date, description, reference_type, reference_id) VALUES (?, ?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &entry_number as &dyn rusqlite::ToSql,
+        &entry_date as &dyn rusqlite::ToSql,
+        &desc_str as &dyn rusqlite::ToSql,
+        &ref_type_str as &dyn rusqlite::ToSql,
+        &reference_id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert journal entry: {}", e))?;
+
+    // Get the created entry ID
+    let entry_id_sql = "SELECT id FROM journal_entries WHERE entry_number = ?";
+    let entry_ids = db
+        .query(entry_id_sql, &[&entry_number as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to fetch entry ID: {}", e))?;
+    let entry_id = entry_ids.first().ok_or("Failed to retrieve entry ID")?;
+
+    // Insert journal entry lines
+    for (account_id, currency_id, debit_amount, credit_amount, exchange_rate, line_desc) in lines {
+        let base_amount = if debit_amount > 0.0 {
+            debit_amount * exchange_rate
+        } else {
+            credit_amount * exchange_rate
+        };
+        let line_desc_str: Option<&str> = line_desc.as_ref().map(|s| s.as_str());
+
+        let insert_line_sql = "INSERT INTO journal_entry_lines (journal_entry_id, account_id, currency_id, debit_amount, credit_amount, exchange_rate, base_amount, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        db.execute(insert_line_sql, &[
+            entry_id as &dyn rusqlite::ToSql,
+            &account_id as &dyn rusqlite::ToSql,
+            &currency_id as &dyn rusqlite::ToSql,
+            &debit_amount as &dyn rusqlite::ToSql,
+            &credit_amount as &dyn rusqlite::ToSql,
+            &exchange_rate as &dyn rusqlite::ToSql,
+            &base_amount as &dyn rusqlite::ToSql,
+            &line_desc_str as &dyn rusqlite::ToSql,
+        ])
+            .map_err(|e| format!("Failed to insert journal entry line: {}", e))?;
+
+        // Update account currency balance
+        let current_balance = get_account_balance_by_currency_internal(db, account_id, currency_id)?;
+        let new_balance = if debit_amount > 0.0 {
+            current_balance + debit_amount
+        } else {
+            current_balance - credit_amount
+        };
+        update_account_currency_balance_internal(db, account_id, currency_id, new_balance)?;
+    }
+
+    Ok(*entry_id)
+}
+
+/// Create a journal entry with lines
+#[tauri::command]
+fn create_journal_entry(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    entry_date: String,
+    description: Option<String>,
+    reference_type: Option<String>,
+    reference_id: Option<i64>,
+    lines: Vec<(i64, i64, f64, f64, f64, Option<String>)>, // (account_id, currency_id, debit_amount, credit_amount, exchange_rate, description)
+) -> Result<JournalEntry, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Validate that debits equal credits
+    let total_debits: f64 = lines.iter().map(|(_, _, debit, _, _, _)| debit).sum();
+    let total_credits: f64 = lines.iter().map(|(_, _, _, credit, _, _)| credit).sum();
+
+    if (total_debits - total_credits).abs() > 0.01 {
+        return Err(format!("Journal entry is not balanced. Debits: {}, Credits: {}", total_debits, total_credits));
+    }
+
+    // Generate entry number
+    let entry_number_sql = "SELECT COALESCE(MAX(CAST(SUBSTR(entry_number, 2) AS INTEGER)), 0) + 1 FROM journal_entries WHERE entry_number LIKE 'J%'";
+    let entry_numbers = db
+        .query(entry_number_sql, &[], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to generate entry number: {}", e))?;
+    let entry_number = format!("J{:06}", entry_numbers.first().copied().unwrap_or(1));
+
+    let desc_str: Option<&str> = description.as_ref().map(|s| s.as_str());
+    let ref_type_str: Option<&str> = reference_type.as_ref().map(|s| s.as_str());
+
+    // Insert journal entry
+    let insert_sql = "INSERT INTO journal_entries (entry_number, entry_date, description, reference_type, reference_id) VALUES (?, ?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &entry_number as &dyn rusqlite::ToSql,
+        &entry_date as &dyn rusqlite::ToSql,
+        &desc_str as &dyn rusqlite::ToSql,
+        &ref_type_str as &dyn rusqlite::ToSql,
+        &reference_id as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert journal entry: {}", e))?;
+
+    // Get the created entry ID
+    let entry_id_sql = "SELECT id FROM journal_entries WHERE entry_number = ?";
+    let entry_ids = db
+        .query(entry_id_sql, &[&entry_number as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to fetch entry ID: {}", e))?;
+    let entry_id = entry_ids.first().ok_or("Failed to retrieve entry ID")?;
+
+    // Insert journal entry lines
+    for (account_id, currency_id, debit_amount, credit_amount, exchange_rate, line_desc) in lines {
+        let base_amount = if debit_amount > 0.0 {
+            debit_amount * exchange_rate
+        } else {
+            credit_amount * exchange_rate
+        };
+        let line_desc_str: Option<&str> = line_desc.as_ref().map(|s| s.as_str());
+
+        let insert_line_sql = "INSERT INTO journal_entry_lines (journal_entry_id, account_id, currency_id, debit_amount, credit_amount, exchange_rate, base_amount, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        db.execute(insert_line_sql, &[
+            entry_id as &dyn rusqlite::ToSql,
+            &account_id as &dyn rusqlite::ToSql,
+            &currency_id as &dyn rusqlite::ToSql,
+            &debit_amount as &dyn rusqlite::ToSql,
+            &credit_amount as &dyn rusqlite::ToSql,
+            &exchange_rate as &dyn rusqlite::ToSql,
+            &base_amount as &dyn rusqlite::ToSql,
+            &line_desc_str as &dyn rusqlite::ToSql,
+        ])
+            .map_err(|e| format!("Failed to insert journal entry line: {}", e))?;
+
+        // Update account currency balance
+        let current_balance = get_account_balance_by_currency_internal(db, account_id, currency_id)?;
+        let new_balance = if debit_amount > 0.0 {
+            current_balance + debit_amount
+        } else {
+            current_balance - credit_amount
+        };
+        update_account_currency_balance_internal(db, account_id, currency_id, new_balance)?;
+    }
+
+    // Get the created entry
+    let entry_sql = "SELECT id, entry_number, entry_date, description, reference_type, reference_id, created_at, updated_at FROM journal_entries WHERE id = ?";
+    let entries = db
+        .query(entry_sql, &[entry_id as &dyn rusqlite::ToSql], |row| {
+            Ok(JournalEntry {
+                id: row.get(0)?,
+                entry_number: row.get(1)?,
+                entry_date: row.get(2)?,
+                description: row.get(3)?,
+                reference_type: row.get(4)?,
+                reference_id: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch journal entry: {}", e))?;
+
+    if let Some(entry) = entries.first() {
+        Ok(entry.clone())
+    } else {
+        Err("Failed to retrieve created journal entry".to_string())
+    }
+}
+
+/// Internal helper to get account balance by currency
+fn get_account_balance_by_currency_internal(
+    db: &Database,
+    account_id: i64,
+    currency_id: i64,
+) -> Result<f64, String> {
+    let sql = "SELECT balance FROM account_currency_balances WHERE account_id = ? AND currency_id = ?";
+    let balances = db
+        .query(sql, &[&account_id as &dyn rusqlite::ToSql, &currency_id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, f64>(0)?)
+        })
+        .map_err(|e| format!("Failed to fetch account balance: {}", e))?;
+    Ok(balances.first().copied().unwrap_or(0.0))
+}
+
+/// Get journal entries with pagination
+#[tauri::command]
+fn get_journal_entries(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    page: i64,
+    per_page: i64,
+) -> Result<PaginatedResponse<JournalEntry>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let offset = (page - 1) * per_page;
+
+    // Get total count
+    let count_sql = "SELECT COUNT(*) FROM journal_entries";
+    let total: i64 = db
+        .query(count_sql, &[], |row| {
+            Ok(row.get::<_, i64>(0)?)
+        })
+        .map_err(|e| format!("Failed to count journal entries: {}", e))?
+        .first()
+        .copied()
+        .unwrap_or(0);
+
+    // Get paginated entries
+    let sql = "SELECT id, entry_number, entry_date, description, reference_type, reference_id, created_at, updated_at FROM journal_entries ORDER BY entry_date DESC, id DESC LIMIT ? OFFSET ?";
+    let entries = db
+        .query(sql, &[&per_page as &dyn rusqlite::ToSql, &offset as &dyn rusqlite::ToSql], |row| {
+            Ok(JournalEntry {
+                id: row.get(0)?,
+                entry_number: row.get(1)?,
+                entry_date: row.get(2)?,
+                description: row.get(3)?,
+                reference_type: row.get(4)?,
+                reference_id: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch journal entries: {}", e))?;
+
+    let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+
+    Ok(PaginatedResponse {
+        items: entries,
+        total,
+        page,
+        per_page,
+        total_pages,
+    })
+}
+
+/// Get a single journal entry with lines
+#[tauri::command]
+fn get_journal_entry(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    id: i64,
+) -> Result<(JournalEntry, Vec<JournalEntryLine>), String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Get entry
+    let entry_sql = "SELECT id, entry_number, entry_date, description, reference_type, reference_id, created_at, updated_at FROM journal_entries WHERE id = ?";
+    let entries = db
+        .query(entry_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(JournalEntry {
+                id: row.get(0)?,
+                entry_number: row.get(1)?,
+                entry_date: row.get(2)?,
+                description: row.get(3)?,
+                reference_type: row.get(4)?,
+                reference_id: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch journal entry: {}", e))?;
+
+    let entry = entries.first().ok_or("Journal entry not found")?;
+
+    // Get lines
+    let lines_sql = "SELECT id, journal_entry_id, account_id, currency_id, debit_amount, credit_amount, exchange_rate, base_amount, description, created_at FROM journal_entry_lines WHERE journal_entry_id = ?";
+    let lines = db
+        .query(lines_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(JournalEntryLine {
+                id: row.get(0)?,
+                journal_entry_id: row.get(1)?,
+                account_id: row.get(2)?,
+                currency_id: row.get(3)?,
+                debit_amount: row.get(4)?,
+                credit_amount: row.get(5)?,
+                exchange_rate: row.get(6)?,
+                base_amount: row.get(7)?,
+                description: row.get(8)?,
+                created_at: row.get(9)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch journal entry lines: {}", e))?;
+
+    Ok((entry.clone(), lines))
+}
+
+/// Create exchange rate
+#[tauri::command]
+fn create_exchange_rate(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    from_currency_id: i64,
+    to_currency_id: i64,
+    rate: f64,
+    date: String,
+) -> Result<CurrencyExchangeRate, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let insert_sql = "INSERT INTO currency_exchange_rates (from_currency_id, to_currency_id, rate, date) VALUES (?, ?, ?, ?)";
+    db.execute(insert_sql, &[
+        &from_currency_id as &dyn rusqlite::ToSql,
+        &to_currency_id as &dyn rusqlite::ToSql,
+        &rate as &dyn rusqlite::ToSql,
+        &date as &dyn rusqlite::ToSql,
+    ])
+        .map_err(|e| format!("Failed to insert exchange rate: {}", e))?;
+
+    // Get the created rate
+    let rate_sql = "SELECT id, from_currency_id, to_currency_id, rate, date, created_at FROM currency_exchange_rates WHERE from_currency_id = ? AND to_currency_id = ? AND date = ? ORDER BY id DESC LIMIT 1";
+    let rates = db
+        .query(rate_sql, &[&from_currency_id as &dyn rusqlite::ToSql, &to_currency_id as &dyn rusqlite::ToSql, &date as &dyn rusqlite::ToSql], |row| {
+            Ok(CurrencyExchangeRate {
+                id: row.get(0)?,
+                from_currency_id: row.get(1)?,
+                to_currency_id: row.get(2)?,
+                rate: row.get(3)?,
+                date: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch exchange rate: {}", e))?;
+
+    if let Some(rate) = rates.first() {
+        Ok(rate.clone())
+    } else {
+        Err("Failed to retrieve created exchange rate".to_string())
+    }
+}
+
+/// Get exchange rate for a specific date (or latest)
+#[tauri::command]
+fn get_exchange_rate(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    from_currency_id: i64,
+    to_currency_id: i64,
+    date: Option<String>,
+) -> Result<f64, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let rates = if let Some(d) = date {
+        let sql = "SELECT rate FROM currency_exchange_rates WHERE from_currency_id = ? AND to_currency_id = ? AND date <= ? ORDER BY date DESC LIMIT 1";
+        db.query(sql, &[&from_currency_id as &dyn rusqlite::ToSql, &to_currency_id as &dyn rusqlite::ToSql, &d as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, f64>(0)?)
+        })
+        .map_err(|e| format!("Failed to fetch exchange rate: {}", e))?
+    } else {
+        let sql = "SELECT rate FROM currency_exchange_rates WHERE from_currency_id = ? AND to_currency_id = ? ORDER BY date DESC LIMIT 1";
+        db.query(sql, &[&from_currency_id as &dyn rusqlite::ToSql, &to_currency_id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, f64>(0)?)
+        })
+        .map_err(|e| format!("Failed to fetch exchange rate: {}", e))?
+    };
+
+    Ok(rates.first().copied().unwrap_or(1.0))
+}
+
+/// Get exchange rate history
+#[tauri::command]
+fn get_exchange_rate_history(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    from_currency_id: i64,
+    to_currency_id: i64,
+) -> Result<Vec<CurrencyExchangeRate>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, from_currency_id, to_currency_id, rate, date, created_at FROM currency_exchange_rates WHERE from_currency_id = ? AND to_currency_id = ? ORDER BY date DESC";
+    let rates = db
+        .query(sql, &[&from_currency_id as &dyn rusqlite::ToSql, &to_currency_id as &dyn rusqlite::ToSql], |row| {
+            Ok(CurrencyExchangeRate {
+                id: row.get(0)?,
+                from_currency_id: row.get(1)?,
+                to_currency_id: row.get(2)?,
+                rate: row.get(3)?,
+                date: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch exchange rate history: {}", e))?;
+
+    Ok(rates)
+}
+
+/// Reconcile account balance - compare journal entries vs account balance
+#[tauri::command]
+fn reconcile_account_balance(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    account_id: i64,
+    currency_id: i64,
+) -> Result<serde_json::Value, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Get account currency balance
+    let account_balance = get_account_balance_by_currency_internal(db, account_id, currency_id)?;
+
+    // Calculate balance from journal entries
+    let journal_debits_sql = "SELECT COALESCE(SUM(debit_amount), 0) FROM journal_entry_lines WHERE account_id = ? AND currency_id = ?";
+    let journal_debits: f64 = db
+        .query(journal_debits_sql, &[&account_id as &dyn rusqlite::ToSql, &currency_id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, f64>(0)?)
+        })
+        .map_err(|e| format!("Failed to calculate journal debits: {}", e))?
+        .first()
+        .copied()
+        .unwrap_or(0.0);
+
+    let journal_credits_sql = "SELECT COALESCE(SUM(credit_amount), 0) FROM journal_entry_lines WHERE account_id = ? AND currency_id = ?";
+    let journal_credits: f64 = db
+        .query(journal_credits_sql, &[&account_id as &dyn rusqlite::ToSql, &currency_id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, f64>(0)?)
+        })
+        .map_err(|e| format!("Failed to calculate journal credits: {}", e))?
+        .first()
+        .copied()
+        .unwrap_or(0.0);
+
+    let journal_balance = journal_debits - journal_credits;
+    let difference = account_balance - journal_balance;
+
+    Ok(serde_json::json!({
+        "account_id": account_id,
+        "currency_id": currency_id,
+        "account_balance": account_balance,
+        "journal_debits": journal_debits,
+        "journal_credits": journal_credits,
+        "journal_balance": journal_balance,
+        "difference": difference,
+        "is_balanced": difference.abs() < 0.01
+    }))
+}
+
+/// Migrate existing data to new schema
+#[tauri::command]
+fn migrate_existing_data(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Get base currency
+    let base_currency_sql = "SELECT id FROM currencies WHERE base = 1 LIMIT 1";
+    let base_currencies = db.query(base_currency_sql, &[], |row| Ok(row.get::<_, i64>(0)?))
+        .map_err(|e| format!("Failed to get base currency: {}", e))?;
+    let base_currency_id = base_currencies.first().copied().unwrap_or_else(|| {
+        db.query("SELECT id FROM currencies LIMIT 1", &[], |row| Ok(row.get::<_, i64>(0)?))
+            .ok()
+            .and_then(|v| v.first().copied())
+            .unwrap_or(1)
+    });
+
+    // Migrate existing account balances to account_currency_balances
+    let accounts_sql = "SELECT id, currency_id, current_balance FROM accounts";
+    let accounts = db
+        .query(accounts_sql, &[], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, Option<i64>>(1)?, row.get::<_, f64>(2)?))
+        })
+        .map_err(|e| format!("Failed to fetch accounts: {}", e))?;
+
+    let mut migrated_count = 0;
+    for (account_id, currency_id, balance) in accounts {
+        let currency = currency_id.unwrap_or(base_currency_id);
+        if balance != 0.0 {
+            update_account_currency_balance_internal(db, account_id, currency, balance)?;
+            migrated_count += 1;
+        }
+    }
+
+    // Migrate existing sales to have base currency
+    let update_sales_sql = "UPDATE sales SET currency_id = ?, exchange_rate = 1, base_amount = total_amount WHERE currency_id IS NULL";
+    db.execute(update_sales_sql, &[&base_currency_id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to migrate sales: {}", e))?;
+
+    Ok(format!("Migration completed. Migrated {} account balances.", migrated_count))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -5687,6 +7075,27 @@ pub fn run() {
             withdraw_account,
             get_account_transactions,
             get_account_balance,
+            init_coa_categories_table,
+            init_standard_coa_categories,
+            create_coa_category,
+            get_coa_categories,
+            get_coa_category_tree,
+            update_coa_category,
+            delete_coa_category,
+            init_account_currency_balances_table,
+            get_account_balance_by_currency,
+            get_all_account_balances,
+            init_journal_entries_table,
+            init_journal_entry_lines_table,
+            create_journal_entry,
+            get_journal_entries,
+            get_journal_entry,
+            init_currency_exchange_rates_table,
+            create_exchange_rate,
+            get_exchange_rate,
+            get_exchange_rate_history,
+            reconcile_account_balance,
+            migrate_existing_data,
             init_purchase_payments_table,
             create_purchase_payment,
             get_purchase_payments,

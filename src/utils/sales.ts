@@ -5,7 +5,10 @@ export interface Sale {
     customer_id: number;
     date: string;
     notes?: string | null;
+    currency_id: number | null;
+    exchange_rate: number;
     total_amount: number;
+    base_amount: number;
     paid_amount: number;
     additional_cost: number;
     remaining_amount?: number; // Calculated on client side if needed, but useful in UI
@@ -32,7 +35,10 @@ export interface SaleWithItems {
 export interface SalePayment {
     id: number;
     sale_id: number;
+    currency_id: number | null;
+    exchange_rate: number;
     amount: number;
+    base_amount: number;
     date: string;
     created_at: string;
 }
@@ -57,7 +63,10 @@ export async function initSalesTable(): Promise<string> {
  * @param customer_id Customer ID
  * @param date Sale date
  * @param notes Optional notes
+ * @param currency_id Currency ID (optional)
+ * @param exchange_rate Exchange rate
  * @param paid_amount Amount paid
+ * @param additional_cost Additional cost
  * @param items Array of sale items
  * @returns Promise with Sale
  */
@@ -65,6 +74,8 @@ export async function createSale(
     customer_id: number,
     date: string,
     notes: string | null,
+    currency_id: number | null,
+    exchange_rate: number,
     paid_amount: number,
     additional_cost: number,
     items: SaleItemInput[]
@@ -81,6 +92,8 @@ export async function createSale(
         customerId: customer_id,
         date,
         notes: notes || null,
+        currencyId: currency_id,
+        exchangeRate: exchange_rate,
         paidAmount: paid_amount,
         additionalCost: additional_cost,
         items: itemsTuple,
@@ -139,7 +152,10 @@ export async function getSale(id: number): Promise<SaleWithItems> {
  * @param customer_id Customer ID
  * @param date Sale date
  * @param notes Optional notes
+ * @param currency_id Currency ID (optional)
+ * @param exchange_rate Exchange rate
  * @param paid_amount Amount paid
+ * @param additional_cost Additional cost
  * @param items Array of sale items
  * @returns Promise with Sale
  */
@@ -148,6 +164,8 @@ export async function updateSale(
     customer_id: number,
     date: string,
     notes: string | null,
+    currency_id: number | null,
+    exchange_rate: number,
     paid_amount: number,
     additional_cost: number,
     items: SaleItemInput[]
@@ -165,6 +183,8 @@ export async function updateSale(
         customerId: customer_id,
         date,
         notes: notes || null,
+        currencyId: currency_id,
+        exchangeRate: exchange_rate,
         paidAmount: paid_amount,
         additionalCost: additional_cost,
         items: itemsTuple,
@@ -251,17 +271,23 @@ export async function deleteSaleItem(id: number): Promise<string> {
 /**
  * Create a sale payment
  * @param sale_id Sale ID
+ * @param currency_id Currency ID (optional)
+ * @param exchange_rate Exchange rate
  * @param amount Payment Amount
  * @param date Payment Date
  * @returns Promise with SalePayment
  */
 export async function createSalePayment(
     sale_id: number,
+    currency_id: number | null,
+    exchange_rate: number,
     amount: number,
     date: string
 ): Promise<SalePayment> {
     return await invoke<SalePayment>("create_sale_payment", {
         saleId: sale_id,
+        currencyId: currency_id,
+        exchangeRate: exchange_rate,
         amount,
         date,
     });

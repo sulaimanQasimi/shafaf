@@ -19,6 +19,7 @@ import {
 import { getCustomers, type Customer } from "../utils/customer";
 import { getProducts, type Product } from "../utils/product";
 import { getUnits, type Unit } from "../utils/unit";
+import { getCurrencies, getExchangeRate, type Currency } from "../utils/currency";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
 import PersianDatePicker from "./PersianDatePicker";
@@ -100,6 +101,8 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [units, setUnits] = useState<Unit[]>([]);
+    const [currencies, setCurrencies] = useState<Currency[]>([]);
+    const [baseCurrency, setBaseCurrency] = useState<Currency | null>(null);
     const [loading, setLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -108,6 +111,8 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
     const [formData, setFormData] = useState({
         customer_id: 0,
         date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+        currency_id: "",
+        exchange_rate: 1,
         notes: "",
         paid_amount: 0,
         additional_cost: 0,
@@ -115,6 +120,8 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
     });
     const [payments, setPayments] = useState<SalePayment[]>([]);
     const [newPayment, setNewPayment] = useState({
+        currency_id: "",
+        exchange_rate: 1,
         amount: '',
         date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
     });
@@ -208,19 +215,29 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             return;
         }
 
+        if (!newPayment.currency_id) {
+            toast.error("انتخاب ارز الزامی است");
+            return;
+        }
+
         try {
             setLoading(true);
-            await createSalePayment(viewingSale.sale.id, parseFloat(newPayment.amount), newPayment.date);
+            await createSalePayment(
+                viewingSale.sale.id,
+                newPayment.currency_id ? parseInt(newPayment.currency_id) : null,
+                parseFloat(newPayment.exchange_rate.toString()) || 1,
+                parseFloat(newPayment.amount),
+                newPayment.date
+            );
             toast.success("پرداخت با موفقیت ثبت شد");
             setNewPayment({
+                currency_id: "",
+                exchange_rate: 1,
                 amount: '',
                 date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
             });
             await loadPayments(viewingSale.sale.id);
-            // Reload sale to update paid amount in main list/view logic if needed
-            // But main list (sales state) needs refresh too
             await loadData();
-            // Update viewingSale state as well
             const updatedSale = await getSale(viewingSale.sale.id);
             setViewingSale(updatedSale);
         } catch (error) {
@@ -274,7 +291,9 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
         setEditingSale(null);
         setFormData({
             customer_id: 0,
-            date: new Date().toISOString().split('T')[0],
+            date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+            currency_id: baseCurrency?.id.toString() || "",
+            exchange_rate: 1,
             notes: "",
             paid_amount: 0,
             additional_cost: 0,
@@ -381,6 +400,8 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                     formData.customer_id,
                     formData.date,
                     formData.notes || null,
+                    formData.currency_id ? parseInt(formData.currency_id) : null,
+                    parseFloat(formData.exchange_rate.toString()) || 1,
                     formData.paid_amount,
                     formData.additional_cost || 0,
                     formData.items
@@ -391,6 +412,8 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                     formData.customer_id,
                     formData.date,
                     formData.notes || null,
+                    formData.currency_id ? parseInt(formData.currency_id) : null,
+                    parseFloat(formData.exchange_rate.toString()) || 1,
                     formData.paid_amount,
                     formData.additional_cost || 0,
                     formData.items
@@ -462,19 +485,32 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
         },
         {
             key: "total_amount", label: translations.totalAmount, sortable: true,
-            render: (sale: Sale) => (
-                <span className="font-bold text-purple-700 dark:text-purple-300">
-                    {sale.total_amount.toLocaleString('en-US')} افغانی
-                </span>
-            )
+            render: (sale: Sale) => {
+                const saleCurrency = currencies.find(c => c.id === sale.currency_id);
+                return (
+                    <div>
+                        <span className="font-bold text-purple-700 dark:text-purple-300">
+                            {sale.total_amount.toLocaleString('en-US')} {saleCurrency?.name || ""}
+                        </span>
+                        {sale.base_amount !== sale.total_amount && (
+                            <div className="text-xs text-gray-500">
+                                ({sale.base_amount.toLocaleString('en-US')} پایه)
+                            </div>
+                        )}
+                    </div>
+                );
+            }
         },
         {
             key: "paid_amount", label: translations.paidAmount, sortable: true,
-            render: (sale: Sale) => (
-                <span className="font-bold text-green-700 dark:text-green-300">
-                    {sale.paid_amount.toLocaleString('en-US')} افغانی
-                </span>
-            )
+            render: (sale: Sale) => {
+                const saleCurrency = currencies.find(c => c.id === sale.currency_id);
+                return (
+                    <span className="font-bold text-green-700 dark:text-green-300">
+                        {sale.paid_amount.toLocaleString('en-US')} {saleCurrency?.name || ""}
+                    </span>
+                );
+            }
         },
         {
             key: "remaining", label: translations.remainingAmount, sortable: false,

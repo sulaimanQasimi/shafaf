@@ -11,15 +11,19 @@ import {
     depositAccount,
     withdrawAccount,
     getAccountTransactions,
+    getAllAccountBalances,
     type Account,
     type AccountTransaction,
+    type AccountCurrencyBalance,
 } from "../utils/account";
 import { getCurrencies, type Currency } from "../utils/currency";
+import { getCoaCategories, initStandardCoaCategories, type CoaCategory } from "../utils/coa";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
 import PersianDatePicker from "./PersianDatePicker";
 import { formatPersianDate, getCurrentPersianDate, persianToGeorgian } from "../utils/date";
 import PageHeader from "./common/PageHeader";
+import CoaManagement from "./CoaManagement";
 
 // Dari translations
 const translations = {
@@ -84,9 +88,12 @@ interface AccountManagementProps {
 }
 
 export default function AccountManagement({ onBack }: AccountManagementProps) {
+    const [showCoaManagement, setShowCoaManagement] = useState(false);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [currencies, setCurrencies] = useState<Currency[]>([]);
+    const [coaCategories, setCoaCategories] = useState<CoaCategory[]>([]);
     const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+    const [accountBalances, setAccountBalances] = useState<AccountCurrencyBalance[]>([]);
     const [transactions, setTransactions] = useState<AccountTransaction[]>([]);
     const [loading, setLoading] = useState(false);
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -96,7 +103,11 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
     const [accountFormData, setAccountFormData] = useState({
         name: "",
         currency_id: "",
+        coa_category_id: "",
+        account_code: "",
+        account_type: "",
         initial_balance: "",
+        is_active: true,
         notes: "",
     });
     const [transactionFormData, setTransactionFormData] = useState({
@@ -126,17 +137,23 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
             try {
                 await initAccountsTable();
                 await initAccountTransactionsTable();
+                // Initialize standard COA categories if they don't exist
+                await initStandardCoaCategories().catch(() => {
+                    // Categories might already exist, ignore error
+                });
             } catch (err) {
                 console.log("Table initialization:", err);
             }
 
-            const [accountsData, currenciesData] = await Promise.all([
+            const [accountsData, currenciesData, categoriesData] = await Promise.all([
                 getAccounts(),
                 getCurrencies(),
+                getCoaCategories().catch(() => []),
             ]);
 
             setAccounts(accountsData);
             setCurrencies(currenciesData);
+            setCoaCategories(categoriesData);
         } catch (error: any) {
             toast.error(translations.errors.fetch);
             console.error("Error loading data:", error);
@@ -147,8 +164,12 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
 
     const loadTransactions = async (accountId: number) => {
         try {
-            const transactionsData = await getAccountTransactions(accountId);
+            const [transactionsData, balancesData] = await Promise.all([
+                getAccountTransactions(accountId),
+                getAllAccountBalances(accountId).catch(() => []),
+            ]);
             setTransactions(transactionsData);
+            setAccountBalances(balancesData);
         } catch (error: any) {
             console.error("Error loading transactions:", error);
         }
@@ -173,7 +194,11 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
             setAccountFormData({
                 name: account.name,
                 currency_id: account.currency_id?.toString() || "",
+                coa_category_id: account.coa_category_id?.toString() || "",
+                account_code: account.account_code || "",
+                account_type: account.account_type || "",
                 initial_balance: account.initial_balance.toString(),
+                is_active: account.is_active,
                 notes: account.notes || "",
             });
         } else {
@@ -181,7 +206,11 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
             setAccountFormData({
                 name: "",
                 currency_id: "",
+                coa_category_id: "",
+                account_code: "",
+                account_type: "",
                 initial_balance: "",
+                is_active: true,
                 notes: "",
             });
         }
@@ -194,7 +223,11 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
         setAccountFormData({
             name: "",
             currency_id: "",
+            coa_category_id: "",
+            account_code: "",
+            account_type: "",
             initial_balance: "",
+            is_active: true,
             notes: "",
         });
     };
@@ -243,7 +276,11 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
                     editingAccount.id,
                     accountFormData.name,
                     accountFormData.currency_id ? parseInt(accountFormData.currency_id) : null,
+                    accountFormData.coa_category_id ? parseInt(accountFormData.coa_category_id) : null,
+                    accountFormData.account_code || null,
+                    accountFormData.account_type || null,
                     parseFloat(accountFormData.initial_balance) || 0,
+                    accountFormData.is_active,
                     accountFormData.notes || null
                 );
                 toast.success(translations.success.updated);
@@ -251,6 +288,9 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
                 await createAccount(
                     accountFormData.name,
                     accountFormData.currency_id ? parseInt(accountFormData.currency_id) : null,
+                    accountFormData.coa_category_id ? parseInt(accountFormData.coa_category_id) : null,
+                    accountFormData.account_code || null,
+                    accountFormData.account_type || null,
                     parseFloat(accountFormData.initial_balance) || 0,
                     accountFormData.notes || null
                 );
@@ -347,7 +387,7 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
         }
     };
 
-    const getCurrencyName = (currencyId: number | null): string => {
+    const getCurrencyName = (currencyId: number | null | undefined): string => {
         if (!currencyId) return "نامشخص";
         const currency = currencies.find(c => c.id === currencyId);
         return currency ? currency.name : "نامشخص";
@@ -358,6 +398,18 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
         await loadTransactions(account.id);
     };
 
+    // If showing COA management, render that component
+    if (showCoaManagement) {
+        return (
+            <CoaManagement 
+                onBack={() => {
+                    setShowCoaManagement(false);
+                    loadData(); // Reload accounts to refresh COA categories
+                }} 
+            />
+        );
+    }
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6" dir="rtl">
             <div className="max-w-6xl mx-auto">
@@ -366,6 +418,16 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
                     onBack={onBack}
                     backLabel={translations.backToDashboard}
                     actions={[
+                        {
+                            label: "مدیریت دسته‌بندی حساب‌ها (COA)",
+                            onClick: () => setShowCoaManagement(true),
+                            variant: "secondary" as const,
+                            icon: (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                </svg>
+                            )
+                        },
                         {
                             label: translations.addNew,
                             onClick: () => handleOpenAccountModal(),
@@ -434,8 +496,14 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
                                                 </motion.button>
                                             </div>
                                         </div>
-                                        <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                                            <span>ارز: {getCurrencyName(account.currency_id)}</span>
+                                        <div className="text-sm text-gray-600 dark:text-gray-400 mb-2 space-y-1">
+                                            <div><span>ارز: {getCurrencyName(account.currency_id)}</span></div>
+                                            {account.account_code && (
+                                                <div><span>کد: {account.account_code}</span></div>
+                                            )}
+                                            {account.account_type && (
+                                                <div><span>نوع: {account.account_type}</span></div>
+                                            )}
                                         </div>
                                         <div className="flex justify-between items-center">
                                             <div>
@@ -488,62 +556,90 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
                             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                                 یک حساب را انتخاب کنید
                             </div>
-                        ) : transactions.length === 0 ? (
-                            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                                {translations.noTransactions}
-                            </div>
                         ) : (
-                            <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                                {transactions.map((transaction) => (
-                                    <motion.div
-                                        key={transaction.id}
-                                        initial={{ opacity: 0, x: -20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        className={`p-4 rounded-xl border-2 ${
-                                            transaction.transaction_type === "deposit"
-                                                ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/10"
-                                                : "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10"
-                                        }`}
-                                    >
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${
+                            <div className="space-y-4">
+                                {/* Multicurrency Balances */}
+                                {accountBalances.length > 0 && (
+                                    <div className="mb-4">
+                                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">موجودی‌ها بر اساس ارز:</h4>
+                                        <div className="space-y-2">
+                                            {accountBalances.map((balance: AccountCurrencyBalance) => {
+                                                const currency = currencies.find(c => c.id === balance.currency_id);
+                                                return (
+                                                    <div key={balance.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                                        <span className="text-sm text-gray-700 dark:text-gray-300">{currency?.name || `ارز ${balance.currency_id}`}</span>
+                                                        <span className={`font-bold ${
+                                                            balance.balance >= 0
+                                                                ? "text-green-600 dark:text-green-400"
+                                                                : "text-red-600 dark:text-red-400"
+                                                        }`}>
+                                                            {balance.balance.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                {/* Transaction History */}
+                                {transactions.length === 0 ? (
+                                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                                        {translations.noTransactions}
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                                        {transactions.map((transaction) => (
+                                            <motion.div
+                                                key={transaction.id}
+                                                initial={{ opacity: 0, x: -20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                className={`p-4 rounded-xl border-2 ${
                                                     transaction.transaction_type === "deposit"
-                                                        ? "bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200"
-                                                        : "bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200"
-                                                }`}>
-                                                    {transaction.transaction_type === "deposit" ? translations.deposit : translations.withdraw}
-                                                </span>
-                                                {transaction.is_full && (
-                                                    <span className="px-2 py-1 rounded-lg text-xs font-semibold bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-200">
-                                                        {translations.full}
+                                                        ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/10"
+                                                        : "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10"
+                                                }`}
+                                            >
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${
+                                                            transaction.transaction_type === "deposit"
+                                                                ? "bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200"
+                                                                : "bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200"
+                                                        }`}>
+                                                            {transaction.transaction_type === "deposit" ? translations.deposit : translations.withdraw}
+                                                        </span>
+                                                        {transaction.is_full && (
+                                                            <span className="px-2 py-1 rounded-lg text-xs font-semibold bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-200">
+                                                                {translations.full}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className={`font-bold text-lg ${
+                                                        transaction.transaction_type === "deposit"
+                                                            ? "text-green-600 dark:text-green-400"
+                                                            : "text-red-600 dark:text-red-400"
+                                                    }`}>
+                                                        {transaction.transaction_type === "deposit" ? "+" : "-"}
+                                                        {transaction.total.toLocaleString()}
                                                     </span>
-                                                )}
-                                            </div>
-                                            <span className={`font-bold text-lg ${
-                                                transaction.transaction_type === "deposit"
-                                                    ? "text-green-600 dark:text-green-400"
-                                                    : "text-red-600 dark:text-red-400"
-                                            }`}>
-                                                {transaction.transaction_type === "deposit" ? "+" : "-"}
-                                                {transaction.total.toLocaleString()}
-                                            </span>
-                                        </div>
-                                        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                                            <div>
-                                                <span>مقدار: {transaction.amount.toLocaleString()} {transaction.currency}</span>
-                                                <span className="mx-2">•</span>
-                                                <span>نرخ: {transaction.rate}</span>
-                                            </div>
-                                            <div>تاریخ: {formatPersianDate(transaction.transaction_date)}</div>
-                                            {transaction.notes && (
-                                                <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                                                    {transaction.notes}
                                                 </div>
-                                            )}
-                                        </div>
-                                    </motion.div>
-                                ))}
+                                                <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                                    <div>
+                                                        <span>مقدار: {transaction.amount.toLocaleString()} {transaction.currency}</span>
+                                                        <span className="mx-2">•</span>
+                                                        <span>نرخ: {transaction.rate}</span>
+                                                    </div>
+                                                    <div>تاریخ: {formatPersianDate(transaction.transaction_date)}</div>
+                                                    {transaction.notes && (
+                                                        <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                                            {transaction.notes}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -605,6 +701,55 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
                                         </div>
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                                دسته COA
+                                            </label>
+                                            <select
+                                                value={accountFormData.coa_category_id}
+                                                onChange={(e) => setAccountFormData({ ...accountFormData, coa_category_id: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                                dir="rtl"
+                                            >
+                                                <option value="">انتخاب دسته (اختیاری)</option>
+                                                {coaCategories.map((category: CoaCategory) => (
+                                                    <option key={category.id} value={category.id}>
+                                                        {category.code} - {category.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                                کد حساب
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={accountFormData.account_code}
+                                                onChange={(e) => setAccountFormData({ ...accountFormData, account_code: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                                placeholder="کد حساب (اختیاری)"
+                                                dir="ltr"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                                نوع حساب
+                                            </label>
+                                            <select
+                                                value={accountFormData.account_type}
+                                                onChange={(e) => setAccountFormData({ ...accountFormData, account_type: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                                dir="rtl"
+                                            >
+                                                <option value="">انتخاب نوع (اختیاری)</option>
+                                                <option value="Asset">دارایی</option>
+                                                <option value="Liability">بدهی</option>
+                                                <option value="Equity">حقوق صاحبان سهام</option>
+                                                <option value="Revenue">درآمد</option>
+                                                <option value="Expense">هزینه</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                                                 {translations.initialBalance}
                                             </label>
                                             <input
@@ -616,6 +761,17 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
                                                 placeholder="0"
                                                 dir="ltr"
                                             />
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={accountFormData.is_active}
+                                                onChange={(e) => setAccountFormData({ ...accountFormData, is_active: e.target.checked })}
+                                                className="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                            />
+                                            <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                حساب فعال
+                                            </label>
                                         </div>
                                     </div>
                                     <div>

@@ -3471,7 +3471,7 @@ fn create_sale_payment(
 
     // If account_id is provided, deposit the payment amount to the account
     if let Some(aid) = account_id {
-        // Check if account has sufficient balance (for withdrawal - but sales payments are deposits)
+        // Get current balance for the account's currency
         let current_balance = get_account_balance_by_currency_internal(db, aid, payment_currency_id)
             .unwrap_or(0.0);
         

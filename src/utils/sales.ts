@@ -7,6 +7,7 @@ export interface Sale {
     notes?: string | null;
     total_amount: number;
     paid_amount: number;
+    additional_cost: number;
     remaining_amount?: number; // Calculated on client side if needed, but useful in UI
     created_at: string;
     updated_at: string;
@@ -65,6 +66,7 @@ export async function createSale(
     date: string,
     notes: string | null,
     paid_amount: number,
+    additional_cost: number,
     items: SaleItemInput[]
 ): Promise<Sale> {
     // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
@@ -80,6 +82,7 @@ export async function createSale(
         date,
         notes: notes || null,
         paidAmount: paid_amount,
+        additionalCost: additional_cost,
         items: itemsTuple,
     });
 }
@@ -146,6 +149,7 @@ export async function updateSale(
     date: string,
     notes: string | null,
     paid_amount: number,
+    additional_cost: number,
     items: SaleItemInput[]
 ): Promise<Sale> {
     // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
@@ -162,6 +166,7 @@ export async function updateSale(
         date,
         notes: notes || null,
         paidAmount: paid_amount,
+        additionalCost: additional_cost,
         items: itemsTuple,
     });
 }

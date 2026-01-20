@@ -25,6 +25,7 @@ export async function createDatabase(dbName: string): Promise<string> {
  * - Windows: %LOCALAPPDATA%\shafaf\db.sqlite
  * - macOS: ~/Library/Application Support/shafaf/db.sqlite
  * - Linux: ~/.local/share/shafaf/db.sqlite or $XDG_DATA_HOME/shafaf/db.sqlite
+ * Note: Directory name remains "shafaf" for technical compatibility
  * @param dbName Name of the database (without .db extension) - currently not used
  * @returns Promise with the database path
  */

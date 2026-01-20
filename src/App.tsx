@@ -405,7 +405,7 @@ function App() {
               >
                 <img 
                   src="/logo.jpeg" 
-                  alt="Shafaf Logo" 
+                  alt="شفاف Logo" 
                   className="w-full h-full object-contain"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
@@ -415,9 +415,9 @@ function App() {
               </motion.div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                  Shafaf
+                  شفاف
                 </h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{companySettings?.name || "سیستم مدیریت داروخانه"}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{companySettings?.name || "سیستم مدیریت مالی"}</p>
               </div>
             </div>
 
@@ -482,7 +482,7 @@ function App() {
             خوش آمدید، {user.username}! 👋
           </h2>
           <p className="text-gray-600 dark:text-gray-400 text-lg">
-            به پنل مدیریت مالیخوش آمدید. از منوی زیر بخش مورد نظر را انتخاب کنید.
+            به پنل مدیریت مالی شفاف خوش آمدید. از منوی زیر بخش مورد نظر را انتخاب کنید.
           </p>
         </motion.div>
 

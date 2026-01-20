@@ -160,7 +160,7 @@ export default function License({ onLicenseValid }: LicenseProps) {
             >
               <img 
                 src="/logo.jpeg" 
-                alt="Shafaf Logo" 
+                alt="شفاف Logo" 
                 className="w-full h-full object-contain"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
@@ -169,7 +169,7 @@ export default function License({ onLicenseValid }: LicenseProps) {
               />
             </motion.div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-2">
-              Shafaf
+              شفاف
             </h1>
           </motion.div>
 

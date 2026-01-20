@@ -6,6 +6,7 @@ export interface Purchase {
   date: string;
   notes?: string | null;
   total_amount: number;
+  additional_cost: number;
   created_at: string;
   updated_at: string;
 }
@@ -61,6 +62,7 @@ export async function createPurchase(
   supplier_id: number,
   date: string,
   notes: string | null,
+  additional_cost: number,
   items: PurchaseItemInput[]
 ): Promise<Purchase> {
   // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
@@ -75,6 +77,7 @@ export async function createPurchase(
     supplierId: supplier_id,
     date,
     notes: notes || null,
+    additionalCost: additional_cost,
     items: itemsTuple,
   });
 }
@@ -131,6 +134,7 @@ export async function updatePurchase(
   supplier_id: number,
   date: string,
   notes: string | null,
+  additional_cost: number,
   items: PurchaseItemInput[]
 ): Promise<Purchase> {
   // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
@@ -146,6 +150,7 @@ export async function updatePurchase(
     supplierId: supplier_id,
     date,
     notes: notes || null,
+    additionalCost: additional_cost,
     items: itemsTuple,
   });
 }

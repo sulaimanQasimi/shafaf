@@ -1,4 +1,4 @@
-package com.sulaiman.financeapp
+package com.sulaiman.shafaf
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

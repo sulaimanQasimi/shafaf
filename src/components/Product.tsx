@@ -196,13 +196,24 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
   const handleSelectImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error("لطفاً یک فایل تصویری انتخاب کنید");
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("حجم فایل نباید بیشتر از 5 مگابایت باشد");
+        return;
+      }
+
       // Create a local URL for preview
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
         setImagePreview(result);
-        // Store the file path or convert to base64 if needed
-        // For now, storing as data URL for preview
+        // Store as data URL (base64)
         setFormData({ ...formData, image_path: result });
       };
       reader.readAsDataURL(file);

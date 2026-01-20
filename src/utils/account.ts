@@ -55,6 +55,14 @@ export async function initAccountTransactionsTable(): Promise<string> {
 }
 
 /**
+ * Initialize the account currency balances table schema
+ * @returns Promise with success message
+ */
+export async function initAccountCurrencyBalancesTable(): Promise<string> {
+    return await invoke<string>("init_account_currency_balances_table");
+}
+
+/**
  * Create a new account
  * @param name Account name
  * @param currency_id Currency ID (optional)

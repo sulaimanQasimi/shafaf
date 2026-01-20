@@ -5885,7 +5885,9 @@ fn create_account(
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
-    let code_str: Option<&str> = account_code.as_ref().map(|s| s.as_str());
+    // Convert empty strings to None to avoid UNIQUE constraint violations
+    let code_str: Option<&str> = account_code.as_ref()
+        .and_then(|s| if s.trim().is_empty() { None } else { Some(s.as_str()) });
     let type_str: Option<&str> = account_type.as_ref().map(|s| s.as_str());
     let is_active_int = 1i64;
 
@@ -6025,7 +6027,9 @@ fn update_account(
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
-    let code_str: Option<&str> = account_code.as_ref().map(|s| s.as_str());
+    // Convert empty strings to None to avoid UNIQUE constraint violations
+    let code_str: Option<&str> = account_code.as_ref()
+        .and_then(|s| if s.trim().is_empty() { None } else { Some(s.as_str()) });
     let type_str: Option<&str> = account_type.as_ref().map(|s| s.as_str());
     let is_active_int = if is_active { 1i64 } else { 0i64 };
 

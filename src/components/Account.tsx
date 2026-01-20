@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import {
     initAccountsTable,
     initAccountTransactionsTable,
+    initAccountCurrencyBalancesTable,
     createAccount,
     getAccounts,
     updateAccount,
@@ -137,6 +138,7 @@ export default function AccountManagement({ onBack }: AccountManagementProps) {
             try {
                 await initAccountsTable();
                 await initAccountTransactionsTable();
+                await initAccountCurrencyBalancesTable();
                 // Initialize standard COA categories if they don't exist
                 await initStandardCoaCategories().catch(() => {
                     // Categories might already exist, ignore error

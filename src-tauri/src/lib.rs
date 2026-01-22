@@ -1814,6 +1814,16 @@ pub struct PurchaseItem {
     pub created_at: String,
 }
 
+// PurchaseAdditionalCost Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchaseAdditionalCost {
+    pub id: i64,
+    pub purchase_id: i64,
+    pub name: String,
+    pub amount: f64,
+    pub created_at: String,
+}
+
 /// Initialize purchases table schema
 #[tauri::command]
 fn init_purchases_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
@@ -2317,6 +2327,28 @@ fn get_purchase_items(db_state: State<'_, Mutex<Option<Database>>>, purchase_id:
         .map_err(|e| format!("Failed to fetch purchase items: {}", e))?;
 
     Ok(items)
+}
+
+/// Get purchase additional costs for a purchase
+#[tauri::command]
+fn get_purchase_additional_costs(db_state: State<'_, Mutex<Option<Database>>>, purchase_id: i64) -> Result<Vec<PurchaseAdditionalCost>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, purchase_id, name, amount, created_at FROM purchase_additional_costs WHERE purchase_id = ? ORDER BY id";
+    let costs = db
+        .query(sql, &[&purchase_id as &dyn rusqlite::ToSql], |row| {
+            Ok(PurchaseAdditionalCost {
+                id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                name: row.get(2)?,
+                amount: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch purchase additional costs: {}", e))?;
+
+    Ok(costs)
 }
 
 /// Update a purchase item
@@ -7193,6 +7225,7 @@ pub fn run() {
             get_purchase_items,
             update_purchase_item,
             delete_purchase_item,
+            get_purchase_additional_costs,
             init_units_table,
             create_unit,
             get_units,

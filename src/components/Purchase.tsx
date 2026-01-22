@@ -8,9 +8,11 @@ import {
   getPurchase,
   updatePurchase,
   deletePurchase,
+  getPurchaseAdditionalCosts,
   type Purchase,
   type PurchaseItemInput,
   type PurchaseWithItems,
+  type PurchaseAdditionalCost,
 } from "../utils/purchase";
 import { getSuppliers, type Supplier } from "../utils/supplier";
 import { getProducts, type Product } from "../utils/product";
@@ -116,7 +118,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
     supplier_id: 0,
     date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
     notes: "",
-    additional_cost: 0,
+    additional_costs: [] as Array<{ name: string; amount: number }>,
     items: [] as PurchaseItemInput[],
   });
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
@@ -210,12 +212,13 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
   const loadPurchaseDetails = async (id: number) => {
     try {
       const purchaseData = await getPurchase(id);
+      const additionalCosts = await getPurchaseAdditionalCosts(id);
       setEditingPurchase(purchaseData.purchase);
       setFormData({
         supplier_id: purchaseData.purchase.supplier_id,
         date: purchaseData.purchase.date,
         notes: purchaseData.purchase.notes || "",
-        additional_cost: purchaseData.purchase.additional_cost || 0,
+        additional_costs: additionalCosts.map(cost => ({ name: cost.name, amount: cost.amount })),
         items: purchaseData.items.map(item => ({
           product_id: item.product_id,
           unit_id: item.unit_id,
@@ -238,7 +241,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
         supplier_id: 0,
         date: new Date().toISOString().split('T')[0],
         notes: "",
-        additional_cost: 0,
+        additional_costs: [],
         items: [],
       });
     }
@@ -252,7 +255,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
       supplier_id: 0,
       date: new Date().toISOString().split('T')[0],
       notes: "",
-      additional_cost: 0,
+      additional_costs: [],
       items: [],
     });
   };
@@ -270,7 +273,13 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
   const handleViewPurchase = async (purchase: Purchase) => {
     try {
       const purchaseData = await getPurchase(purchase.id);
-      setViewingPurchase(purchaseData);
+      // Fetch additional costs
+      const additionalCosts = await getPurchaseAdditionalCosts(purchase.id);
+      const purchaseWithCosts = {
+        ...purchaseData,
+        additional_costs: additionalCosts,
+      };
+      setViewingPurchase(purchaseWithCosts);
       setIsViewModalOpen(true);
       // Load payments for this purchase
       try {
@@ -307,7 +316,8 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
 
   const calculateTotal = () => {
     const itemsTotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-    return itemsTotal + (formData.additional_cost || 0);
+    const additionalCostsTotal = formData.additional_costs.reduce((sum, cost) => sum + (cost.amount || 0), 0);
+    return itemsTotal + additionalCostsTotal;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -345,7 +355,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
           formData.supplier_id,
           formData.date,
           formData.notes || null,
-          formData.additional_cost || 0,
+          formData.additional_costs,
           formData.items
         );
         toast.success(translations.success.updated);
@@ -354,7 +364,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
           formData.supplier_id,
           formData.date,
           formData.notes || null,
-          formData.additional_cost || 0,
+          formData.additional_costs,
           formData.items
         );
         toast.success(translations.success.created);
@@ -777,18 +787,91 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      هزینه اضافی
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.additional_cost || ''}
-                      onChange={(e) => setFormData({ ...formData, additional_cost: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                      placeholder="0"
-                      dir="ltr"
-                    />
+                    <div className="flex justify-between items-center mb-4">
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        هزینه‌های اضافی
+                      </label>
+                      <motion.button
+                        type="button"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setFormData({
+                          ...formData,
+                          additional_costs: [...formData.additional_costs, { name: "", amount: 0 }]
+                        })}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm"
+                      >
+                        افزودن هزینه اضافی
+                      </motion.button>
+                    </div>
+
+                    <div className="space-y-3 max-h-48 overflow-y-auto">
+                      {formData.additional_costs.map((cost, index) => (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border-2 border-gray-200 dark:border-gray-600"
+                        >
+                          <div className="grid grid-cols-12 gap-3 items-end">
+                            <div className="col-span-5">
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                نام هزینه
+                              </label>
+                              <input
+                                type="text"
+                                value={cost.name}
+                                onChange={(e) => {
+                                  const newCosts = [...formData.additional_costs];
+                                  newCosts[index].name = e.target.value;
+                                  setFormData({ ...formData, additional_costs: newCosts });
+                                }}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                placeholder="مثال: حمل و نقل"
+                                dir="rtl"
+                              />
+                            </div>
+                            <div className="col-span-5">
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                مبلغ
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={cost.amount || ''}
+                                onChange={(e) => {
+                                  const newCosts = [...formData.additional_costs];
+                                  newCosts[index].amount = parseFloat(e.target.value) || 0;
+                                  setFormData({ ...formData, additional_costs: newCosts });
+                                }}
+                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                placeholder="0"
+                                dir="ltr"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <motion.button
+                                type="button"
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => {
+                                  const newCosts = formData.additional_costs.filter((_, i) => i !== index);
+                                  setFormData({ ...formData, additional_costs: newCosts });
+                                }}
+                                className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm"
+                              >
+                                حذف
+                              </motion.button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                      {formData.additional_costs.length === 0 && (
+                        <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                          هیچ هزینه اضافی اضافه نشده است
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -1045,7 +1128,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                       {formatPersianDate(viewingPurchase.purchase.date)}
                     </p>
                   </motion.div>
-                  {viewingPurchase.purchase.additional_cost > 0 && (
+                  {viewingPurchase.additional_costs && viewingPurchase.additional_costs.length > 0 && (
                     <motion.div
                       whileHover={{ scale: 1.02 }}
                       className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl border border-amber-200/50 dark:border-amber-700/30">
@@ -1054,12 +1137,25 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                          هزینه اضافی
+                          هزینه‌های اضافی
                         </label>
                       </div>
-                      <p className="text-lg font-semibold text-gray-900 dark:text-white mr-8">
-                        {viewingPurchase.purchase.additional_cost.toLocaleString('en-US')} افغانی
-                      </p>
+                      <div className="space-y-2 mr-8">
+                        {viewingPurchase.additional_costs.map((cost, idx) => (
+                          <div key={cost.id || idx} className="flex justify-between items-center">
+                            <span className="text-gray-700 dark:text-gray-300">{cost.name}:</span>
+                            <span className="text-lg font-semibold text-gray-900 dark:text-white">
+                              {cost.amount.toLocaleString('en-US')} افغانی
+                            </span>
+                          </div>
+                        ))}
+                        <div className="pt-2 border-t border-amber-200 dark:border-amber-700 flex justify-between items-center">
+                          <span className="font-bold text-gray-900 dark:text-white">مجموع:</span>
+                          <span className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                            {viewingPurchase.additional_costs.reduce((sum, cost) => sum + cost.amount, 0).toLocaleString('en-US')} افغانی
+                          </span>
+                        </div>
+                      </div>
                     </motion.div>
                   )}
                 </div>
@@ -1147,40 +1243,48 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                         })}
                       </tbody>
                       <tfoot>
-                        {viewingPurchase.purchase.additional_cost > 0 && (
-                          <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-                            <td colSpan={4} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
-                              <div className="flex items-center justify-end gap-2">
-                                <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                مجموع آیتم‌ها:
-                              </div>
-                            </td>
-                            <td className="px-6 py-3 text-left">
-                              <span className="inline-block px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-semibold rounded-lg">
-                                {(viewingPurchase.purchase.total_amount - viewingPurchase.purchase.additional_cost).toLocaleString('en-US')} افغانی
-                              </span>
-                            </td>
-                          </tr>
-                        )}
-                        {viewingPurchase.purchase.additional_cost > 0 && (
-                          <tr className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-                            <td colSpan={4} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
-                              <div className="flex items-center justify-end gap-2">
-                                <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                هزینه اضافی:
-                              </div>
-                            </td>
-                            <td className="px-6 py-3 text-left">
-                              <span className="inline-block px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-semibold rounded-lg">
-                                {viewingPurchase.purchase.additional_cost.toLocaleString('en-US')} افغانی
-                              </span>
-                            </td>
-                          </tr>
-                        )}
+                        {(() => {
+                          const itemsTotal = viewingPurchase.items.reduce((sum, item) => sum + item.total, 0);
+                          const additionalCostsTotal = viewingPurchase.additional_costs?.reduce((sum, cost) => sum + cost.amount, 0) || 0;
+                          return (
+                            <>
+                              {additionalCostsTotal > 0 && (
+                                <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
+                                  <td colSpan={4} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      مجموع آیتم‌ها:
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-3 text-left">
+                                    <span className="inline-block px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-semibold rounded-lg">
+                                      {itemsTotal.toLocaleString('en-US')} افغانی
+                                    </span>
+                                  </td>
+                                </tr>
+                              )}
+                              {viewingPurchase.additional_costs && viewingPurchase.additional_costs.length > 0 && viewingPurchase.additional_costs.map((cost, idx) => (
+                                <tr key={cost.id || idx} className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+                                  <td colSpan={4} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
+                                    <div className="flex items-center justify-end gap-2">
+                                      <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      {cost.name}:
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-3 text-left">
+                                    <span className="inline-block px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-semibold rounded-lg">
+                                      {cost.amount.toLocaleString('en-US')} افغانی
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </>
+                          );
+                        })()}
                         <tr className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/40 dark:to-blue-900/40">
                           <td colSpan={4} className="px-6 py-5 text-right font-bold text-gray-900 dark:text-white text-lg">
                             <div className="flex items-center justify-end gap-2">

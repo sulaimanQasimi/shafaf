@@ -4,8 +4,9 @@ import {
   openDatabase,
   isDatabaseOpen,
   backupDatabase,
+  restoreDatabase,
 } from "./utils/db";
-import { save } from "@tauri-apps/plugin-dialog";
+import { save, open } from "@tauri-apps/plugin-dialog";
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 import toast from "react-hot-toast";
 import { getDashboardStats, formatPersianNumber, formatLargeNumber } from "./utils/dashboard";
@@ -227,6 +228,39 @@ function App() {
     }
   };
 
+  const handleRestoreDatabase = async () => {
+    try {
+      // Open file dialog to select backup file
+      const filePath = await open({
+        filters: [{
+          name: 'SQLite Database',
+          extensions: ['sqlite', 'db']
+        }],
+        title: 'انتخاب فایل پشتیبان'
+      });
+
+      if (filePath && typeof filePath === 'string') {
+        // Confirm with user
+        const confirmed = window.confirm(
+          "آیا مطمئن هستید که می‌خواهید پایگاه داده را بازگردانی کنید؟ این عمل تمام داده‌های فعلی را جایگزین می‌کند."
+        );
+
+        if (confirmed) {
+          await restoreDatabase(filePath);
+          toast.success("بازگردانی پایگاه داده با موفقیت انجام شد");
+          
+          // Reload the page to refresh all data
+          window.location.reload();
+        }
+      }
+    } catch (error: any) {
+      console.error("Error restoring database:", error);
+      if (error.message && !error.message.includes("cancelled")) {
+        toast.error("خطا در بازگردانی پایگاه داده");
+      }
+    }
+  };
+
   // Show currency page if selected
   if (currentPage === "currency") {
     return (
@@ -436,6 +470,17 @@ function App() {
               >
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4 4m4-4V12" />
+                </svg>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleRestoreDatabase}
+                className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:shadow-xl transition-all duration-200 group relative"
+                title="بازگردانی پایگاه داده"
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </motion.button>
               <motion.button

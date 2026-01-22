@@ -10,7 +10,6 @@ export interface Sale {
     total_amount: number;
     base_amount: number;
     paid_amount: number;
-    additional_cost: number;
     remaining_amount?: number; // Calculated on client side if needed, but useful in UI
     created_at: string;
     updated_at: string;
@@ -27,9 +26,18 @@ export interface SaleItem {
     created_at: string;
 }
 
+export interface SaleAdditionalCost {
+    id: number;
+    sale_id: number;
+    name: string;
+    amount: number;
+    created_at: string;
+}
+
 export interface SaleWithItems {
     sale: Sale;
     items: SaleItem[];
+    additional_costs?: SaleAdditionalCost[];
 }
 
 export interface SalePayment {
@@ -51,6 +59,11 @@ export interface SaleItemInput {
     amount: number;
 }
 
+export interface SaleAdditionalCostInput {
+    name: string;
+    amount: number;
+}
+
 /**
  * Initialize the sales table schema
  * @returns Promise with success message
@@ -67,7 +80,7 @@ export async function initSalesTable(): Promise<string> {
  * @param currency_id Currency ID (optional)
  * @param exchange_rate Exchange rate
  * @param paid_amount Amount paid
- * @param additional_cost Additional cost
+ * @param additional_costs Array of additional costs
  * @param items Array of sale items
  * @returns Promise with Sale
  */
@@ -78,7 +91,7 @@ export async function createSale(
     currency_id: number | null,
     exchange_rate: number,
     paid_amount: number,
-    additional_cost: number,
+    additional_costs: SaleAdditionalCostInput[],
     items: SaleItemInput[]
 ): Promise<Sale> {
     // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
@@ -89,6 +102,12 @@ export async function createSale(
         item.amount,
     ]);
 
+    // Convert additional_costs to tuple format expected by Rust: (name, amount)
+    const additionalCostsTuple: [string, number][] = additional_costs.map(cost => [
+        cost.name,
+        cost.amount,
+    ]);
+
     return await invoke<Sale>("create_sale", {
         customerId: customer_id,
         date,
@@ -96,7 +115,7 @@ export async function createSale(
         currencyId: currency_id,
         exchangeRate: exchange_rate,
         paidAmount: paid_amount,
-        additionalCost: additional_cost,
+        additionalCosts: additionalCostsTuple,
         items: itemsTuple,
     });
 }
@@ -156,7 +175,7 @@ export async function getSale(id: number): Promise<SaleWithItems> {
  * @param currency_id Currency ID (optional)
  * @param exchange_rate Exchange rate
  * @param paid_amount Amount paid
- * @param additional_cost Additional cost
+ * @param additional_costs Array of additional costs
  * @param items Array of sale items
  * @returns Promise with Sale
  */
@@ -168,7 +187,7 @@ export async function updateSale(
     currency_id: number | null,
     exchange_rate: number,
     paid_amount: number,
-    additional_cost: number,
+    additional_costs: SaleAdditionalCostInput[],
     items: SaleItemInput[]
 ): Promise<Sale> {
     // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
@@ -179,6 +198,12 @@ export async function updateSale(
         item.amount,
     ]);
 
+    // Convert additional_costs to tuple format expected by Rust: (name, amount)
+    const additionalCostsTuple: [string, number][] = additional_costs.map(cost => [
+        cost.name,
+        cost.amount,
+    ]);
+
     return await invoke<Sale>("update_sale", {
         id,
         customerId: customer_id,
@@ -187,7 +212,7 @@ export async function updateSale(
         currencyId: currency_id,
         exchangeRate: exchange_rate,
         paidAmount: paid_amount,
-        additionalCost: additional_cost,
+        additionalCosts: additionalCostsTuple,
         items: itemsTuple,
     });
 }
@@ -313,4 +338,60 @@ export async function getSalePayments(sale_id: number): Promise<SalePayment[]> {
  */
 export async function deleteSalePayment(id: number): Promise<string> {
     return await invoke<string>("delete_sale_payment", { id });
+}
+
+/**
+ * Get sale additional costs
+ * @param sale_id Sale ID
+ * @returns Promise with array of SaleAdditionalCost
+ */
+export async function getSaleAdditionalCosts(sale_id: number): Promise<SaleAdditionalCost[]> {
+    return await invoke<SaleAdditionalCost[]>("get_sale_additional_costs", { saleId: sale_id });
+}
+
+/**
+ * Create a sale additional cost
+ * @param sale_id Sale ID
+ * @param name Cost name
+ * @param amount Cost amount
+ * @returns Promise with SaleAdditionalCost
+ */
+export async function createSaleAdditionalCost(
+    sale_id: number,
+    name: string,
+    amount: number
+): Promise<SaleAdditionalCost> {
+    return await invoke<SaleAdditionalCost>("create_sale_additional_cost", {
+        saleId: sale_id,
+        name,
+        amount,
+    });
+}
+
+/**
+ * Update a sale additional cost
+ * @param id Additional cost ID
+ * @param name Cost name
+ * @param amount Cost amount
+ * @returns Promise with SaleAdditionalCost
+ */
+export async function updateSaleAdditionalCost(
+    id: number,
+    name: string,
+    amount: number
+): Promise<SaleAdditionalCost> {
+    return await invoke<SaleAdditionalCost>("update_sale_additional_cost", {
+        id,
+        name,
+        amount,
+    });
+}
+
+/**
+ * Delete a sale additional cost
+ * @param id Additional cost ID
+ * @returns Promise with success message
+ */
+export async function deleteSaleAdditionalCost(id: number): Promise<string> {
+    return await invoke<string>("delete_sale_additional_cost", { id });
 }

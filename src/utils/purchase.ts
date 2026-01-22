@@ -6,7 +6,6 @@ export interface Purchase {
   date: string;
   notes?: string | null;
   total_amount: number;
-  additional_cost: number;
   created_at: string;
   updated_at: string;
 }
@@ -22,15 +21,29 @@ export interface PurchaseItem {
   created_at: string;
 }
 
+export interface PurchaseAdditionalCost {
+  id: number;
+  purchase_id: number;
+  name: string;
+  amount: number;
+  created_at: string;
+}
+
 export interface PurchaseWithItems {
   purchase: Purchase;
   items: PurchaseItem[];
+  additional_costs?: PurchaseAdditionalCost[];
 }
 
 export interface PurchaseItemInput {
   product_id: number;
   unit_id: number;
   per_price: number;
+  amount: number;
+}
+
+export interface PurchaseAdditionalCostInput {
+  name: string;
   amount: number;
 }
 
@@ -55,6 +68,7 @@ export async function initPurchasesTable(): Promise<string> {
  * @param supplier_id Supplier ID
  * @param date Purchase date
  * @param notes Optional notes
+ * @param additional_costs Array of additional costs
  * @param items Array of purchase items
  * @returns Promise with Purchase
  */
@@ -62,7 +76,7 @@ export async function createPurchase(
   supplier_id: number,
   date: string,
   notes: string | null,
-  additional_cost: number,
+  additional_costs: PurchaseAdditionalCostInput[],
   items: PurchaseItemInput[]
 ): Promise<Purchase> {
   // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
@@ -73,11 +87,17 @@ export async function createPurchase(
     item.amount,
   ]);
 
+  // Convert additional_costs to tuple format expected by Rust: (name, amount)
+  const additionalCostsTuple: [string, number][] = additional_costs.map(cost => [
+    cost.name,
+    cost.amount,
+  ]);
+
   return await invoke<Purchase>("create_purchase", {
     supplierId: supplier_id,
     date,
     notes: notes || null,
-    additionalCost: additional_cost,
+    additionalCosts: additionalCostsTuple,
     items: itemsTuple,
   });
 }
@@ -126,6 +146,7 @@ export async function getPurchase(id: number): Promise<PurchaseWithItems> {
  * @param supplier_id Supplier ID
  * @param date Purchase date
  * @param notes Optional notes
+ * @param additional_costs Array of additional costs
  * @param items Array of purchase items
  * @returns Promise with Purchase
  */
@@ -134,7 +155,7 @@ export async function updatePurchase(
   supplier_id: number,
   date: string,
   notes: string | null,
-  additional_cost: number,
+  additional_costs: PurchaseAdditionalCostInput[],
   items: PurchaseItemInput[]
 ): Promise<Purchase> {
   // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
@@ -145,12 +166,18 @@ export async function updatePurchase(
     item.amount,
   ]);
 
+  // Convert additional_costs to tuple format expected by Rust: (name, amount)
+  const additionalCostsTuple: [string, number][] = additional_costs.map(cost => [
+    cost.name,
+    cost.amount,
+  ]);
+
   return await invoke<Purchase>("update_purchase", {
     id,
     supplierId: supplier_id,
     date,
     notes: notes || null,
-    additionalCost: additional_cost,
+    additionalCosts: additionalCostsTuple,
     items: itemsTuple,
   });
 }
@@ -230,4 +257,60 @@ export async function updatePurchaseItem(
  */
 export async function deletePurchaseItem(id: number): Promise<string> {
   return await invoke<string>("delete_purchase_item", { id });
+}
+
+/**
+ * Get purchase additional costs
+ * @param purchase_id Purchase ID
+ * @returns Promise with array of PurchaseAdditionalCost
+ */
+export async function getPurchaseAdditionalCosts(purchase_id: number): Promise<PurchaseAdditionalCost[]> {
+  return await invoke<PurchaseAdditionalCost[]>("get_purchase_additional_costs", { purchaseId: purchase_id });
+}
+
+/**
+ * Create a purchase additional cost
+ * @param purchase_id Purchase ID
+ * @param name Cost name
+ * @param amount Cost amount
+ * @returns Promise with PurchaseAdditionalCost
+ */
+export async function createPurchaseAdditionalCost(
+  purchase_id: number,
+  name: string,
+  amount: number
+): Promise<PurchaseAdditionalCost> {
+  return await invoke<PurchaseAdditionalCost>("create_purchase_additional_cost", {
+    purchaseId: purchase_id,
+    name,
+    amount,
+  });
+}
+
+/**
+ * Update a purchase additional cost
+ * @param id Additional cost ID
+ * @param name Cost name
+ * @param amount Cost amount
+ * @returns Promise with PurchaseAdditionalCost
+ */
+export async function updatePurchaseAdditionalCost(
+  id: number,
+  name: string,
+  amount: number
+): Promise<PurchaseAdditionalCost> {
+  return await invoke<PurchaseAdditionalCost>("update_purchase_additional_cost", {
+    id,
+    name,
+    amount,
+  });
+}
+
+/**
+ * Delete a purchase additional cost
+ * @param id Additional cost ID
+ * @returns Promise with success message
+ */
+export async function deletePurchaseAdditionalCost(id: number): Promise<string> {
+  return await invoke<string>("delete_purchase_additional_cost", { id });
 }

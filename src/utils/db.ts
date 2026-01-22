@@ -50,6 +50,15 @@ export async function backupDatabase(): Promise<string> {
 }
 
 /**
+ * Restore database from backup file
+ * @param backupPath Path to the backup database file
+ * @returns Promise with success message
+ */
+export async function restoreDatabase(backupPath: string): Promise<string> {
+  return await invoke<string>("restore_database", { backupPath });
+}
+
+/**
  * Close the current database connection
  * @returns Promise with success message
  */

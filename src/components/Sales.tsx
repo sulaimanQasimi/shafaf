@@ -11,10 +11,12 @@ import {
     createSalePayment,
     getSalePayments,
     deleteSalePayment,
+    getSaleAdditionalCosts,
     type Sale,
     type SaleItemInput,
     type SaleWithItems,
     type SalePayment,
+    type SaleAdditionalCost,
 } from "../utils/sales";
 import { getCustomers, type Customer } from "../utils/customer";
 import { getProducts, type Product } from "../utils/product";
@@ -118,7 +120,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
         exchange_rate: 1,
         notes: "",
         paid_amount: 0,
-        additional_cost: 0,
+        additional_costs: [] as Array<{ name: string; amount: number }>,
         items: [] as SaleItemInput[],
     });
     const [payments, setPayments] = useState<SalePayment[]>([]);
@@ -227,6 +229,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
     const loadSaleDetails = async (id: number) => {
         try {
             const saleData = await getSale(id);
+            const additionalCosts = await getSaleAdditionalCosts(id);
             setEditingSale(saleData.sale);
             setFormData({
                 customer_id: saleData.sale.customer_id,
@@ -235,7 +238,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                 exchange_rate: saleData.sale.exchange_rate || 1,
                 notes: saleData.sale.notes || "",
                 paid_amount: saleData.sale.paid_amount,
-                additional_cost: saleData.sale.additional_cost || 0,
+                additional_costs: additionalCosts.map(cost => ({ name: cost.name, amount: cost.amount })),
                 items: saleData.items.map(item => ({
                     product_id: item.product_id,
                     unit_id: item.unit_id,
@@ -295,7 +298,13 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             await loadPayments(viewingSale.sale.id);
             await loadData();
             const updatedSale = await getSale(viewingSale.sale.id);
-            setViewingSale(updatedSale);
+            // Fetch additional costs
+            const additionalCosts = await getSaleAdditionalCosts(viewingSale.sale.id);
+            const saleWithCosts = {
+                ...updatedSale,
+                additional_costs: additionalCosts,
+            };
+            setViewingSale(saleWithCosts);
         } catch (error) {
             console.error("Error adding payment:", error);
             toast.error("خطا در ثبت پرداخت");
@@ -316,7 +325,13 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             await loadPayments(viewingSale.sale.id);
             await loadData();
             const updatedSale = await getSale(viewingSale.sale.id);
-            setViewingSale(updatedSale);
+            // Fetch additional costs
+            const additionalCosts = await getSaleAdditionalCosts(viewingSale.sale.id);
+            const saleWithCosts = {
+                ...updatedSale,
+                additional_costs: additionalCosts,
+            };
+            setViewingSale(saleWithCosts);
         } catch (error) {
             console.error("Error deleting payment:", error);
             toast.error("خطا در حذف پرداخت");
@@ -337,7 +352,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                 exchange_rate: 1,
                 notes: "",
                 paid_amount: 0,
-                additional_cost: 0,
+                additional_costs: [],
                 items: [],
             });
         }
@@ -354,7 +369,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             exchange_rate: 1,
             notes: "",
             paid_amount: 0,
-            additional_cost: 0,
+            additional_costs: [],
             items: [],
         });
     };
@@ -372,7 +387,13 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
     const handleViewSale = async (sale: Sale) => {
         try {
             const saleData = await getSale(sale.id);
-            setViewingSale(saleData);
+            // Fetch additional costs
+            const additionalCosts = await getSaleAdditionalCosts(sale.id);
+            const saleWithCosts = {
+                ...saleData,
+                additional_costs: additionalCosts,
+            };
+            setViewingSale(saleWithCosts);
             await loadPayments(sale.id);
             setIsViewModalOpen(true);
         } catch (error: any) {
@@ -416,7 +437,8 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
 
     const calculateTotal = () => {
         const itemsTotal = formData.items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-        return itemsTotal + (formData.additional_cost || 0);
+        const additionalCostsTotal = formData.additional_costs.reduce((sum, cost) => sum + (cost.amount || 0), 0);
+        return itemsTotal + additionalCostsTotal;
     };
 
     const calculateRemaining = () => {
@@ -461,7 +483,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                     formData.currency_id ? parseInt(formData.currency_id) : null,
                     formData.exchange_rate ? parseFloat(formData.exchange_rate.toString()) : 1,
                     formData.paid_amount,
-                    formData.additional_cost || 0,
+                    formData.additional_costs,
                     formData.items
                 );
                 toast.success(translations.success.updated);
@@ -473,7 +495,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                     formData.currency_id ? parseInt(formData.currency_id) : null,
                     formData.exchange_rate ? parseFloat(formData.exchange_rate.toString()) : 1,
                     formData.paid_amount,
-                    formData.additional_cost || 0,
+                    formData.additional_costs,
                     formData.items
                 );
                 toast.success(translations.success.created);
@@ -1095,7 +1117,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                             {(viewingSale.sale.total_amount - viewingSale.sale.paid_amount).toLocaleString('en-US')}
                                         </p>
                                     </motion.div>
-                                    {viewingSale.sale.additional_cost > 0 && (
+                                    {viewingSale.additional_costs && viewingSale.additional_costs.length > 0 && (
                                         <motion.div
                                             whileHover={{ scale: 1.02 }}
                                             className="p-5 bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-900/20 dark:to-violet-900/20 rounded-2xl border border-indigo-200/50 dark:border-indigo-700/30">
@@ -1104,12 +1126,25 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
                                                 <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                                                    هزینه اضافی
+                                                    هزینه‌های اضافی
                                                 </label>
                                             </div>
-                                            <p className="text-lg font-semibold text-gray-900 dark:text-white mr-8">
-                                                {viewingSale.sale.additional_cost.toLocaleString('en-US')} افغانی
-                                            </p>
+                                            <div className="space-y-2 mr-8">
+                                                {viewingSale.additional_costs.map((cost, idx) => (
+                                                    <div key={cost.id || idx} className="flex justify-between items-center">
+                                                        <span className="text-gray-700 dark:text-gray-300">{cost.name}:</span>
+                                                        <span className="text-lg font-semibold text-gray-900 dark:text-white">
+                                                            {cost.amount.toLocaleString('en-US')} افغانی
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                                <div className="pt-2 border-t border-indigo-200 dark:border-indigo-700 flex justify-between items-center">
+                                                    <span className="font-bold text-gray-900 dark:text-white">مجموع:</span>
+                                                    <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+                                                        {viewingSale.additional_costs.reduce((sum, cost) => sum + cost.amount, 0).toLocaleString('en-US')} افغانی
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </motion.div>
                                     )}
                                 </div>
@@ -1138,40 +1173,48 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                             ))}
                                         </tbody>
                                         <tfoot>
-                                            {viewingSale.sale.additional_cost > 0 && (
-                                                <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-                                                    <td colSpan={4} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                            مجموع آیتم‌ها:
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-3 text-left">
-                                                        <span className="inline-block px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-semibold rounded-lg">
-                                                            {(viewingSale.sale.total_amount - viewingSale.sale.additional_cost).toLocaleString('en-US')} افغانی
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                            {viewingSale.sale.additional_cost > 0 && (
-                                                <tr className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-                                                    <td colSpan={4} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                            هزینه اضافی:
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-3 text-left">
-                                                        <span className="inline-block px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-semibold rounded-lg">
-                                                            {viewingSale.sale.additional_cost.toLocaleString('en-US')} افغانی
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            )}
+                                            {(() => {
+                                                const itemsTotal = viewingSale.items.reduce((sum, item) => sum + item.total, 0);
+                                                const additionalCostsTotal = viewingSale.additional_costs?.reduce((sum, cost) => sum + cost.amount, 0) || 0;
+                                                return (
+                                                    <>
+                                                        {additionalCostsTotal > 0 && (
+                                                            <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
+                                                                <td colSpan={4} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
+                                                                    <div className="flex items-center justify-end gap-2">
+                                                                        <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                        </svg>
+                                                                        مجموع آیتم‌ها:
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-3 text-left">
+                                                                    <span className="inline-block px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-semibold rounded-lg">
+                                                                        {itemsTotal.toLocaleString('en-US')} افغانی
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                        {viewingSale.additional_costs && viewingSale.additional_costs.length > 0 && viewingSale.additional_costs.map((cost, idx) => (
+                                                            <tr key={cost.id || idx} className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
+                                                                <td colSpan={4} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
+                                                                    <div className="flex items-center justify-end gap-2">
+                                                                        <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                        </svg>
+                                                                        {cost.name}:
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-3 text-left">
+                                                                    <span className="inline-block px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-semibold rounded-lg">
+                                                                        {cost.amount.toLocaleString('en-US')} افغانی
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </>
+                                                );
+                                            })()}
                                             <tr className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/40 dark:to-blue-900/40">
                                                 <td colSpan={4} className="px-6 py-5 text-right font-bold text-gray-900 dark:text-white text-lg">
                                                     <div className="flex items-center justify-end gap-2">

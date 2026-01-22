@@ -2104,14 +2104,12 @@ fn get_purchase(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result
 
     // Calculate additional_cost from purchase_additional_costs table
     let additional_costs_sql = "SELECT COALESCE(SUM(amount), 0) FROM purchase_additional_costs WHERE purchase_id = ?";
-    let additional_cost: f64 = db.with_connection(|conn| {
-        conn.query_row(additional_costs_sql, &[&id as &dyn rusqlite::ToSql], |row| {
-            row.get::<_, f64>(0)
+    let additional_cost_results: Vec<f64> = db
+        .query(additional_costs_sql, &[&id as &dyn rusqlite::ToSql], |row| {
+            Ok(row.get::<_, f64>(0)?)
         })
-        .map_err(|e| anyhow::anyhow!("{}", e))
-    })
-    .map_err(|e| format!("Failed to calculate additional cost: {}", e))
-    .unwrap_or(0.0);
+        .map_err(|e| format!("Failed to calculate additional cost: {}", e))?;
+    let additional_cost = additional_cost_results.first().copied().unwrap_or(0.0);
     purchase.additional_cost = additional_cost;
 
     // Get purchase items

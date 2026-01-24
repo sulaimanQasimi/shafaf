@@ -783,6 +783,50 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                         </div>
                                     </div>
 
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                                ارز
+                                            </label>
+                                            <select
+                                                value={formData.currency_id}
+                                                onChange={(e) => {
+                                                    const selectedCurrencyId = e.target.value;
+                                                    const selectedCurrency = currencies.find(c => c.id.toString() === selectedCurrencyId);
+                                                    setFormData({ 
+                                                        ...formData, 
+                                                        currency_id: selectedCurrencyId,
+                                                        exchange_rate: selectedCurrency ? selectedCurrency.rate : 1
+                                                    });
+                                                }}
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                                dir="rtl"
+                                            >
+                                                <option value="">انتخاب ارز</option>
+                                                {currencies.map((currency) => (
+                                                    <option key={currency.id} value={currency.id}>
+                                                        {currency.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                                نرخ تبدیل
+                                            </label>
+                                            <input
+                                                type="number"
+                                                step="0.0001"
+                                                min="0"
+                                                value={formData.exchange_rate}
+                                                onChange={(e) => setFormData({ ...formData, exchange_rate: parseFloat(e.target.value) || 1 })}
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                                                placeholder="1.0"
+                                                dir="ltr"
+                                            />
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                                             {translations.notes}
@@ -1378,9 +1422,12 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                                 <select
                                                     value={newPayment.currency_id}
                                                     onChange={(e) => {
+                                                        const selectedCurrencyId = e.target.value;
+                                                        const selectedCurrency = currencies.find(c => c.id.toString() === selectedCurrencyId);
                                                         setNewPayment({ 
                                                             ...newPayment, 
-                                                            currency_id: e.target.value,
+                                                            currency_id: selectedCurrencyId,
+                                                            exchange_rate: selectedCurrency ? selectedCurrency.rate : 1,
                                                             account_id: "" // Reset account when currency changes
                                                         });
                                                     }}

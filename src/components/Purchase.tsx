@@ -1477,9 +1477,12 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                       <select
                         value={paymentFormData.currency}
                         onChange={(e) => {
+                          const selectedCurrencyName = e.target.value;
+                          const selectedCurrency = currencies.find(c => c.name === selectedCurrencyName);
                           setPaymentFormData({ 
                             ...paymentFormData, 
-                            currency: e.target.value,
+                            currency: selectedCurrencyName,
+                            rate: selectedCurrency ? selectedCurrency.rate.toString() : "1",
                             account_id: "" // Reset account when currency changes
                           });
                         }}

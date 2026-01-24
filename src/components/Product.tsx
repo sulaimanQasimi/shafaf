@@ -366,9 +366,12 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
     {
       key: "name", label: translations.name, sortable: true,
       render: (p: Product) => (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           {p.image_path ? (
-            <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+            <motion.div
+              whileHover={{ scale: 1.1, rotate: 5 }}
+              className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 shadow-lg border-2 border-white dark:border-gray-700"
+            >
               <img
                 src={p.image_path}
                 alt={p.name}
@@ -378,20 +381,31 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
                   target.style.display = "none";
                   const parent = target.parentElement;
                   if (parent) {
-                    parent.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm">${p.name.charAt(0)}</div>`;
+                    parent.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg">${p.name.charAt(0)}</div>`;
                   }
                 }}
               />
-            </div>
+            </motion.div>
           ) : (
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm">
+            <motion.div
+              whileHover={{ scale: 1.1, rotate: 5 }}
+              className="w-14 h-14 bg-gradient-to-br from-purple-500 via-blue-500 to-indigo-500 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg"
+            >
               {p.name.charAt(0)}
-            </div>
+            </motion.div>
           )}
-          <div>
-            <div className="font-medium text-gray-900 dark:text-white">{p.name}</div>
-            {p.description && <div className="text-xs text-gray-500 truncate max-w-[150px]">{p.description}</div>}
-            {p.bar_code && <div className="text-xs text-gray-400 truncate max-w-[150px]">بارکد: {p.bar_code}</div>}
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-gray-900 dark:text-white text-base mb-1">{p.name}</div>
+            {p.description && (
+              <div className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[200px] mb-1">
+                {p.description}
+              </div>
+            )}
+            {p.bar_code && (
+              <div className="text-xs text-gray-500 dark:text-gray-500 font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-lg inline-block">
+                🏷️ {p.bar_code}
+              </div>
+            )}
           </div>
         </div>
       )
@@ -399,18 +413,36 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
     {
       key: "price", label: translations.price, sortable: true,
       render: (p: Product) => p.price ? (
-        <span className="font-medium text-gray-900 dark:text-white">
-          {p.price.toLocaleString('en-US')} <span className="text-xs text-gray-500">{getCurrencyName(p.currency_id)}</span>
-        </span>
-      ) : <span className="text-gray-400">-</span>
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-lg text-gray-900 dark:text-white">
+            {p.price.toLocaleString('en-US')}
+          </span>
+          {getCurrencyName(p.currency_id) && (
+            <span className="text-xs font-semibold px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-lg">
+              {getCurrencyName(p.currency_id)}
+            </span>
+          )}
+        </div>
+      ) : (
+        <span className="text-gray-400 dark:text-gray-600">-</span>
+      )
     },
     {
       key: "stock_quantity", label: translations.stockQuantity, sortable: true,
       render: (p: Product) => p.stock_quantity ? (
-        <span className="font-medium text-gray-900 dark:text-white">
-          {p.stock_quantity.toLocaleString('en-US')} <span className="text-xs text-gray-500">{p.unit}</span>
-        </span>
-      ) : <span className="text-gray-400">-</span>
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-lg text-gray-900 dark:text-white">
+            {p.stock_quantity.toLocaleString('en-US')}
+          </span>
+          {p.unit && (
+            <span className="text-xs font-semibold px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg">
+              {p.unit}
+            </span>
+          )}
+        </div>
+      ) : (
+        <span className="text-gray-400 dark:text-gray-600">-</span>
+      )
     },
     {
       key: "supplier_id", label: translations.supplier, sortable: false,
@@ -429,8 +461,15 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6" dir="rtl">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 relative overflow-hidden" dir="rtl">
+      {/* Animated background elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-300 dark:bg-purple-900 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-20 animate-blob"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-300 dark:bg-blue-900 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-indigo-300 dark:bg-indigo-900 rounded-full mix-blend-multiply dark:mix-blend-soft-light filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+      </div>
+
+      <div className="relative max-w-7xl mx-auto p-6 z-10">
         <PageHeader
           title={translations.title}
           onBack={onBack}
@@ -444,87 +483,100 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
           ]}
         />
 
-          {/* Search Bar */}
-          <div className="relative max-w-md w-full">
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-              <Search className="h-5 w-5 text-gray-400" />
-            </div>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="block w-full pr-10 pl-3 py-3 border border-gray-200 dark:border-gray-700 rounded-xl leading-5 bg-white dark:bg-gray-800 placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 sm:text-sm transition-all shadow-sm hover:shadow-md"
-              placeholder="جستجو بر اساس نام..."
-            />
+        {/* Enhanced Search Bar */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="relative max-w-md w-full mb-6"
+        >
+          <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none z-10">
+            <Search className="h-5 w-5 text-gray-400 dark:text-gray-500" />
           </div>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="block w-full pr-12 pl-4 py-4 border-2 border-gray-200 dark:border-gray-700 rounded-2xl leading-5 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:placeholder-gray-400 focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 sm:text-sm transition-all shadow-lg hover:shadow-xl"
+            placeholder="جستجو بر اساس نام، بارکد یا توضیحات..."
+          />
+        </motion.div>
 
-        <Table
-          data={products}
-          columns={columns}
-          total={totalItems}
-          page={page}
-          perPage={perPage}
-          onPageChange={setPage}
-          onPerPageChange={setPerPage}
-          onSort={(key, dir) => {
-            setSortBy(key);
-            setSortOrder(dir);
-          }}
-          sortBy={sortBy}
-          sortOrder={sortOrder}
-          loading={loading}
-          actions={(product) => (
-            <div className="flex items-center gap-2">
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => handleOpenModal(product)}
-                className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-                title={translations.edit}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setBarcodeModalOpen(product)}
-                className="p-2 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
-                title={translations.generateBarcode}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setQrCodeModalOpen(product)}
-                className="p-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
-                title={translations.generateQRCode}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                </svg>
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setDeleteConfirm(product.id)}
-                className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-                title={translations.delete}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </motion.button>
-            </div>
-          )}
-        />
+        {/* Enhanced Table Container */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="bg-white/70 dark:bg-gray-900/70 backdrop-blur-xl rounded-3xl shadow-2xl border border-purple-100/50 dark:border-purple-900/30 overflow-hidden"
+        >
+          <Table
+            data={products}
+            columns={columns}
+            total={totalItems}
+            page={page}
+            perPage={perPage}
+            onPageChange={setPage}
+            onPerPageChange={setPerPage}
+            onSort={(key, dir) => {
+              setSortBy(key);
+              setSortOrder(dir);
+            }}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            loading={loading}
+            actions={(product) => (
+              <div className="flex items-center gap-2">
+                <motion.button
+                  whileHover={{ scale: 1.15, rotate: 5 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => handleOpenModal(product)}
+                  className="p-2.5 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg"
+                  title={translations.edit}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.15, rotate: -5 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setBarcodeModalOpen(product)}
+                  className="p-2.5 bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg"
+                  title={translations.generateBarcode}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.15, rotate: 5 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setQrCodeModalOpen(product)}
+                  className="p-2.5 bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-xl hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg"
+                  title={translations.generateQRCode}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                  </svg>
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.15, rotate: -5 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setDeleteConfirm(product.id)}
+                  className="p-2.5 bg-gradient-to-br from-red-500 to-pink-600 text-white rounded-xl hover:from-red-600 hover:to-pink-700 transition-all duration-200 shadow-md hover:shadow-lg"
+                  title={translations.delete}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </motion.button>
+              </div>
+            )}
+          />
+        </motion.div>
 
         {/* Modal for Add/Edit */}
         <AnimatePresence>
@@ -533,212 +585,327 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 overflow-y-auto"
               onClick={handleCloseModal}
             >
               <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
+                initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+                className="relative bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-5xl my-8 overflow-hidden border border-purple-100/50 dark:border-purple-900/30"
               >
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                  {editingProduct ? translations.edit : translations.addNew}
-                </h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      {translations.name} <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      required
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                      placeholder={translations.placeholders.name}
-                      dir="rtl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      {translations.description}
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={3}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200 resize-none"
-                      placeholder={translations.placeholders.description}
-                      dir="rtl"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                        {translations.price}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={formData.price}
-                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                        placeholder={translations.placeholders.price}
-                        dir="ltr"
-                      />
+                {/* Header with gradient */}
+                <div className="relative bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 p-8 pb-6">
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/90 via-blue-600/90 to-indigo-600/90"></div>
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/30">
+                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h2 className="text-3xl font-extrabold text-white mb-1">
+                          {editingProduct ? translations.edit : translations.addNew}
+                        </h2>
+                        <p className="text-purple-100 text-sm">
+                          {editingProduct ? "ویرایش اطلاعات جنس" : "افزودن جنس جدید به سیستم"}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                        {translations.currency}
-                      </label>
-                      <select
-                        value={formData.currency_id}
-                        onChange={(e) => setFormData({ ...formData, currency_id: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                        dir="rtl"
-                      >
-                        <option value="">{translations.noCurrency}</option>
-                        {currencies.map((currency) => (
-                          <option key={currency.id} value={currency.id}>
-                            {currency.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                        {translations.stockQuantity}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={formData.stock_quantity}
-                        onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                        placeholder={translations.placeholders.stockQuantity}
-                        dir="ltr"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                        {translations.unit}
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.unit}
-                        onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                        placeholder={translations.placeholders.unit}
-                        dir="rtl"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      {translations.supplier}
-                    </label>
-                    <select
-                      value={formData.supplier_id}
-                      onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                      dir="rtl"
+                    <motion.button
+                      whileHover={{ scale: 1.1, rotate: 90 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={handleCloseModal}
+                      className="w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-xl rounded-xl flex items-center justify-center text-white transition-all duration-200 border border-white/30"
                     >
-                      <option value="">{translations.noSupplier}</option>
-                      {suppliers.map((supplier) => (
-                        <option key={supplier.id} value={supplier.id}>
-                          {supplier.full_name}
-                        </option>
-                      ))}
-                    </select>
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </motion.button>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      {translations.barCode}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.bar_code}
-                      onChange={(e) => setFormData({ ...formData, bar_code: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                      placeholder="بارکد را وارد کنید (اختیاری)"
-                      dir="ltr"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      {translations.image}
-                    </label>
-                    <div className="space-y-3">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleSelectImage}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                      />
-                      {imagePreview && (
-                        <div className="relative">
-                          <div className="w-32 h-32 border-2 border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-700 flex items-center justify-center">
-                            <img
-                              src={imagePreview}
-                              alt="Preview"
-                              className="w-full h-full object-contain"
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = "none";
-                                const parent = target.parentElement;
-                                if (parent) {
-                                  parent.innerHTML = '<p class="text-gray-400 text-sm">خطا در بارگذاری تصویر</p>';
-                                }
-                              }}
+                </div>
+
+                {/* Form Content */}
+                <div className="p-8 max-h-[calc(100vh-200px)] overflow-y-auto">
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Main Info Section */}
+                    <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-gray-800/50 dark:to-gray-700/50 rounded-2xl p-6 border border-purple-100 dark:border-purple-900/30">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        اطلاعات اصلی
+                      </h3>
+                      <div className="space-y-5">
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                            {translations.name} <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            required
+                            className="w-full px-5 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200 text-lg"
+                            placeholder={translations.placeholders.name}
+                            dir="rtl"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                            {translations.description}
+                          </label>
+                          <textarea
+                            value={formData.description}
+                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            rows={4}
+                            className="w-full px-5 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200 resize-none"
+                            placeholder={translations.placeholders.description}
+                            dir="rtl"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Price & Stock Section */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Price & Currency Card */}
+                      <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl p-6 border border-amber-200 dark:border-amber-800/30">
+                        <h4 className="text-base font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                          <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          قیمت و ارز
+                        </h4>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              {translations.price}
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={formData.price}
+                              onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                              className="w-full px-5 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-amber-500 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 text-lg"
+                              placeholder={translations.placeholders.price}
+                              dir="ltr"
                             />
                           </div>
-                          <button
-                            type="button"
-                            onClick={handleRemoveImage}
-                            className="mt-2 px-3 py-1 text-sm bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/30 transition-colors"
-                          >
-                            {translations.removeImage}
-                          </button>
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              {translations.currency}
+                            </label>
+                            <select
+                              value={formData.currency_id}
+                              onChange={(e) => setFormData({ ...formData, currency_id: e.target.value })}
+                              className="w-full px-5 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-amber-500 dark:focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all duration-200"
+                              dir="rtl"
+                            >
+                              <option value="">{translations.noCurrency}</option>
+                              {currencies.map((currency) => (
+                                <option key={currency.id} value={currency.id}>
+                                  {currency.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
-                      )}
+                      </div>
+
+                      {/* Stock & Unit Card */}
+                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-2xl p-6 border border-green-200 dark:border-green-800/30">
+                        <h4 className="text-base font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                          <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                          </svg>
+                          موجودی و واحد
+                        </h4>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              {translations.stockQuantity}
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={formData.stock_quantity}
+                              onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                              className="w-full px-5 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-green-500 dark:focus:border-green-400 focus:ring-2 focus:ring-green-500/20 transition-all duration-200 text-lg"
+                              placeholder={translations.placeholders.stockQuantity}
+                              dir="ltr"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              {translations.unit}
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.unit}
+                              onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                              className="w-full px-5 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-green-500 dark:focus:border-green-400 focus:ring-2 focus:ring-green-500/20 transition-all duration-200"
+                              placeholder={translations.placeholders.unit}
+                              dir="rtl"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <motion.button
-                      type="button"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={handleCloseModal}
-                      className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-colors"
-                    >
-                      {translations.cancel}
-                    </motion.button>
-                    <motion.button
-                      type="submit"
-                      disabled={loading}
-                      whileHover={{ scale: loading ? 1 : 1.05 }}
-                      whileTap={{ scale: loading ? 1 : 0.95 }}
-                      className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {loading ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <motion.div
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                            className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+
+                    {/* Supplier & Barcode Section */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-2xl p-6 border border-blue-200 dark:border-blue-800/30">
+                        <h4 className="text-base font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          تمویل کننده
+                        </h4>
+                        <select
+                          value={formData.supplier_id}
+                          onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
+                          className="w-full px-5 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
+                          dir="rtl"
+                        >
+                          <option value="">{translations.noSupplier}</option>
+                          {suppliers.map((supplier) => (
+                            <option key={supplier.id} value={supplier.id}>
+                              {supplier.full_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-2xl p-6 border border-purple-200 dark:border-purple-800/30">
+                        <h4 className="text-base font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                          <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          بارکد
+                        </h4>
+                        <input
+                          type="text"
+                          value={formData.bar_code}
+                          onChange={(e) => setFormData({ ...formData, bar_code: e.target.value })}
+                          className="w-full px-5 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200 font-mono text-lg"
+                          placeholder="بارکد را وارد کنید (اختیاری)"
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Image Upload Section */}
+                    <div className="bg-gradient-to-br from-cyan-50 to-teal-50 dark:from-cyan-900/20 dark:to-teal-900/20 rounded-2xl p-6 border border-cyan-200 dark:border-cyan-800/30">
+                      <h4 className="text-base font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <svg className="w-5 h-5 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {translations.image}
+                      </h4>
+                      <div className="space-y-4">
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleSelectImage}
+                            className="w-full px-5 py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-cyan-500 dark:focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 transition-all duration-200 cursor-pointer hover:border-cyan-400 dark:hover:border-cyan-500"
                           />
-                          {translations.save}
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="text-center">
+                              <svg className="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                              </svg>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">{translations.selectImage}</p>
+                            </div>
+                          </div>
+                        </div>
+                        {imagePreview && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="relative inline-block"
+                          >
+                            <div className="relative w-48 h-48 border-4 border-white dark:border-gray-700 rounded-2xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 shadow-xl flex items-center justify-center group">
+                              <img
+                                src={imagePreview}
+                                alt="Preview"
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = "none";
+                                  const parent = target.parentElement;
+                                  if (parent) {
+                                    parent.innerHTML = '<p class="text-gray-400 text-sm">خطا در بارگذاری تصویر</p>';
+                                  }
+                                }}
+                              />
+                              <motion.button
+                                type="button"
+                                onClick={handleRemoveImage}
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                className="absolute top-2 left-2 w-10 h-10 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </motion.button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </div>
+                    </div>
+                    {/* Action Buttons */}
+                    <div className="flex gap-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+                      <motion.button
+                        type="button"
+                        whileHover={{ scale: 1.02, x: -2 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleCloseModal}
+                        className="flex-1 px-6 py-4 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-bold rounded-xl transition-all duration-200 border-2 border-gray-200 dark:border-gray-700 shadow-md hover:shadow-lg"
+                      >
+                        <span className="flex items-center justify-center gap-2">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          {translations.cancel}
                         </span>
-                      ) : (
-                        translations.save
-                      )}
-                    </motion.button>
-                  </div>
-                </form>
+                      </motion.button>
+                      <motion.button
+                        type="submit"
+                        disabled={loading}
+                        whileHover={{ scale: loading ? 1 : 1.02, x: 2 }}
+                        whileTap={{ scale: loading ? 1 : 0.98 }}
+                        className="flex-1 px-6 py-4 bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 hover:from-purple-700 hover:via-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl relative overflow-hidden group"
+                      >
+                        <span className="relative z-10 flex items-center justify-center gap-2">
+                          {loading ? (
+                            <>
+                              <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+                              />
+                              {translations.save}
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              {translations.save}
+                            </>
+                          )}
+                        </span>
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
+                      </motion.button>
+                    </div>
+                  </form>
+                </div>
               </motion.div>
             </motion.div>
           )}
@@ -839,56 +1006,88 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4"
               onClick={() => setBarcodeModalOpen(null)}
             >
               <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
+                initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-md"
+                className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-green-200/50 dark:border-green-900/30"
               >
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
-                  {translations.barcode} - {barcodeModalOpen.name}
-                </h2>
-                <div className="flex flex-col items-center gap-4 mb-6">
-                  <canvas
-                    ref={barcodeCanvasRef}
-                    className="bg-white p-4 rounded-lg border-2 border-gray-200 dark:border-gray-600"
-                  />
-                  {!barcodeModalOpen.bar_code && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-                      بارکد برای این جنس تنظیم نشده است. لطفاً ابتدا بارکد را در فرم ویرایش تنظیم کنید.
-                    </p>
-                  )}
+                {/* Header */}
+                <div className="bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center border border-white/30">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-white">{translations.barcode}</h2>
+                        <p className="text-green-100 text-sm">{barcodeModalOpen.name}</p>
+                      </div>
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.1, rotate: 90 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => setBarcodeModalOpen(null)}
+                      className="w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-xl rounded-xl flex items-center justify-center text-white transition-all duration-200"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </motion.button>
+                  </div>
                 </div>
-                <div className="flex gap-3">
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setBarcodeModalOpen(null)}
-                    className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-colors"
-                  >
-                    {translations.cancel}
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      if (barcodeCanvasRef.current) {
-                        const link = document.createElement('a');
-                        link.download = `barcode-${barcodeModalOpen.name}-${barcodeModalOpen.bar_code || 'no-code'}.png`;
-                        link.href = barcodeCanvasRef.current.toDataURL();
-                        link.click();
-                        toast.success("بارکد با موفقیت دانلود شد");
-                      }
-                    }}
-                    disabled={!barcodeModalOpen.bar_code}
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {translations.downloadBarcode}
-                  </motion.button>
+
+                {/* Content */}
+                <div className="p-8">
+                  <div className="flex flex-col items-center gap-6 mb-6">
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border-2 border-gray-200 dark:border-gray-700 shadow-lg">
+                      <canvas
+                        ref={barcodeCanvasRef}
+                        className="bg-white"
+                      />
+                    </div>
+                    {!barcodeModalOpen.bar_code && (
+                      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-center">
+                        <p className="text-sm text-amber-700 dark:text-amber-400">
+                          بارکد برای این جنس تنظیم نشده است. لطفاً ابتدا بارکد را در فرم ویرایش تنظیم کنید.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-3">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setBarcodeModalOpen(null)}
+                      className="flex-1 px-6 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-bold rounded-xl transition-all duration-200 border-2 border-gray-200 dark:border-gray-700"
+                    >
+                      {translations.cancel}
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        if (barcodeCanvasRef.current) {
+                          const link = document.createElement('a');
+                          link.download = `barcode-${barcodeModalOpen.name}-${barcodeModalOpen.bar_code || 'no-code'}.png`;
+                          link.href = barcodeCanvasRef.current.toDataURL();
+                          link.click();
+                          toast.success("بارکد با موفقیت دانلود شد");
+                        }
+                      }}
+                      disabled={!barcodeModalOpen.bar_code}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                    >
+                      {translations.downloadBarcode}
+                    </motion.button>
+                  </div>
                 </div>
               </motion.div>
             </motion.div>
@@ -902,50 +1101,80 @@ export default function ProductManagement({ onBack }: ProductManagementProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+              className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4"
               onClick={() => setQrCodeModalOpen(null)}
             >
               <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
+                initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-md"
+                className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-purple-200/50 dark:border-purple-900/30"
               >
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
-                  {translations.qrCode} - {qrCodeModalOpen.name}
-                </h2>
-                <div className="flex flex-col items-center gap-4 mb-6">
-                  <canvas
-                    ref={qrCodeCanvasRef}
-                    className="bg-white p-4 rounded-lg border-2 border-gray-200 dark:border-gray-600"
-                  />
+                {/* Header */}
+                <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-white/20 backdrop-blur-xl rounded-xl flex items-center justify-center border border-white/30">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-white">{translations.qrCode}</h2>
+                        <p className="text-purple-100 text-sm">{qrCodeModalOpen.name}</p>
+                      </div>
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.1, rotate: 90 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => setQrCodeModalOpen(null)}
+                      className="w-10 h-10 bg-white/20 hover:bg-white/30 backdrop-blur-xl rounded-xl flex items-center justify-center text-white transition-all duration-200"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </motion.button>
+                  </div>
                 </div>
-                <div className="flex gap-3">
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setQrCodeModalOpen(null)}
-                    className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl transition-colors"
-                  >
-                    {translations.cancel}
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      if (qrCodeCanvasRef.current) {
-                        const link = document.createElement('a');
-                        link.download = `qrcode-${qrCodeModalOpen.name}-${qrCodeModalOpen.id}.png`;
-                        link.href = qrCodeCanvasRef.current.toDataURL();
-                        link.click();
-                        toast.success("QR Code با موفقیت دانلود شد");
-                      }
-                    }}
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-xl transition-all duration-200"
-                  >
-                    {translations.downloadQRCode}
-                  </motion.button>
+
+                {/* Content */}
+                <div className="p-8">
+                  <div className="flex flex-col items-center gap-6 mb-6">
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border-2 border-gray-200 dark:border-gray-700 shadow-lg">
+                      <canvas
+                        ref={qrCodeCanvasRef}
+                        className="bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setQrCodeModalOpen(null)}
+                      className="flex-1 px-6 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-bold rounded-xl transition-all duration-200 border-2 border-gray-200 dark:border-gray-700"
+                    >
+                      {translations.cancel}
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        if (qrCodeCanvasRef.current) {
+                          const link = document.createElement('a');
+                          link.download = `qrcode-${qrCodeModalOpen.name}-${qrCodeModalOpen.id}.png`;
+                          link.href = qrCodeCanvasRef.current.toDataURL();
+                          link.click();
+                          toast.success("QR Code با موفقیت دانلود شد");
+                        }
+                      }}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-700 hover:via-indigo-700 hover:to-blue-700 text-white font-bold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl"
+                    >
+                      {translations.downloadQRCode}
+                    </motion.button>
+                  </div>
                 </div>
               </motion.div>
             </motion.div>

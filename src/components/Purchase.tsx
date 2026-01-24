@@ -12,6 +12,7 @@ import {
   type Purchase,
   type PurchaseItemInput,
   type PurchaseWithItems,
+  type PurchaseAdditionalCost,
 } from "../utils/purchase";
 import { getSuppliers, type Supplier } from "../utils/supplier";
 import { getProducts, type Product } from "../utils/product";

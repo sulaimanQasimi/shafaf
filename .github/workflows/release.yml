@@ -9,6 +9,8 @@ jobs:
   build-windows:
     name: Build Windows
     runs-on: windows-latest
+    permissions:
+      contents: write   # Required for tauri-action to create the GitHub release
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -54,9 +56,15 @@ jobs:
           prerelease: false
           args: '--bundles nsis'
 
+      - name: Release link
+        run: echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+
   build-android:
     name: Build Android
     runs-on: ubuntu-latest
+    needs: [build-windows]   # Run after Windows so we add APK/AAB to the same release
+    permissions:
+      contents: write   # Required for action-gh-release to upload to the release
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -131,3 +139,6 @@ jobs:
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release link
+        run: echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"

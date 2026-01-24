@@ -123,11 +123,23 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Create CI keystore for Android release signing
+        run: |
+          mkdir -p src-tauri/gen/android
+          keytool -genkeypair -v -keystore src-tauri/gen/android/ci.keystore \
+            -keyalg RSA -keysize 2048 -validity 10000 -alias shafaf \
+            -storepass android -keypass android \
+            -dname "CN=CI, OU=CI, O=CI, L=CI, S=CI, C=US"
+
       - name: Build Tauri app for Android
         run: npm run tauri android build
         env:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_ROOT }}
+          KEYSTORE_PATH: ${{ github.workspace }}/src-tauri/gen/android/ci.keystore
+          KEYSTORE_PASSWORD: android
+          KEY_ALIAS: shafaf
+          KEY_PASSWORD: android
 
       - name: Upload Android APK to Release
         uses: softprops/action-gh-release@v1

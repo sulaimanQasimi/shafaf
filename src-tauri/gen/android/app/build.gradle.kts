@@ -65,7 +65,12 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = true
-            signingConfig = signingConfigs.getByName("release")
+            // Use release keystore when available; otherwise use debug (e.g. in CI without secrets)
+            signingConfig = if (signingConfigs.getByName("release").storeFile != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
                     .plus(getDefaultProguardFile("proguard-android-optimize.txt"))

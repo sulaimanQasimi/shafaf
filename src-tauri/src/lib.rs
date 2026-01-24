@@ -2849,6 +2849,16 @@ pub struct SalePayment {
     pub created_at: String,
 }
 
+// SaleAdditionalCost Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SaleAdditionalCost {
+    pub id: i64,
+    pub sale_id: i64,
+    pub name: String,
+    pub amount: f64,
+    pub created_at: String,
+}
+
 /// Initialize sales table schema
 #[tauri::command]
 fn init_sales_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
@@ -2940,7 +2950,21 @@ fn init_sales_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
         let _ = db.execute(alter_sql, &[]);
     }
 
-    Ok("Sales, sale_items, and sale_payments tables initialized successfully".to_string())
+    let create_additional_costs_table_sql = "
+        CREATE TABLE IF NOT EXISTS sale_additional_costs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            amount REAL NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+        )
+    ";
+
+    db.execute(create_additional_costs_table_sql, &[])
+        .map_err(|e| format!("Failed to create sale_additional_costs table: {}", e))?;
+
+    Ok("Sales, sale_items, sale_payments, and sale_additional_costs tables initialized successfully".to_string())
 }
 
 /// Create a new sale with items
@@ -2953,18 +2977,19 @@ fn create_sale(
     currency_id: Option<i64>,
     exchange_rate: f64,
     paid_amount: f64,
-    additional_cost: f64,
+    additional_costs: Vec<(String, f64)>, // (name, amount)
     items: Vec<(i64, i64, f64, f64)>, // (product_id, unit_id, per_price, amount)
 ) -> Result<Sale, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    // Calculate total amount from items + additional_cost
+    // Calculate total amount from items + additional costs
     let items_total: f64 = items.iter().map(|(_, _, per_price, amount)| per_price * amount).sum();
-    let total_amount = items_total + additional_cost;
+    let additional_costs_total: f64 = additional_costs.iter().map(|(_, amount)| amount).sum();
+    let total_amount = items_total + additional_costs_total;
     let base_amount = total_amount * exchange_rate;
 
-    // Insert sale
+    // Insert sale (keep additional_cost column for backward compatibility - sum of all additional costs)
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
     let insert_sql = "INSERT INTO sales (customer_id, date, notes, currency_id, exchange_rate, total_amount, base_amount, paid_amount, additional_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
@@ -2976,7 +3001,7 @@ fn create_sale(
         &total_amount as &dyn rusqlite::ToSql,
         &base_amount as &dyn rusqlite::ToSql,
         &paid_amount as &dyn rusqlite::ToSql,
-        &additional_cost as &dyn rusqlite::ToSql,
+        &additional_costs_total as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to insert sale: {}", e))?;
 
@@ -3053,6 +3078,17 @@ fn create_sale(
             &total as &dyn rusqlite::ToSql,
         ])
             .map_err(|e| format!("Failed to insert sale item: {}", e))?;
+    }
+
+    // Insert additional costs
+    for (name, amount) in additional_costs {
+        let insert_cost_sql = "INSERT INTO sale_additional_costs (sale_id, name, amount) VALUES (?, ?, ?)";
+        db.execute(insert_cost_sql, &[
+            sale_id as &dyn rusqlite::ToSql,
+            &name as &dyn rusqlite::ToSql,
+            &amount as &dyn rusqlite::ToSql,
+        ])
+            .map_err(|e| format!("Failed to insert sale additional cost: {}", e))?;
     }
 
     // Get the created sale
@@ -3240,6 +3276,28 @@ fn get_sale(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<(Sa
     Ok((sale.clone(), items))
 }
 
+/// Get sale additional costs
+#[tauri::command]
+fn get_sale_additional_costs(db_state: State<'_, Mutex<Option<Database>>>, sale_id: i64) -> Result<Vec<SaleAdditionalCost>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, sale_id, name, amount, created_at FROM sale_additional_costs WHERE sale_id = ? ORDER BY id";
+    let costs = db
+        .query(sql, &[&sale_id as &dyn rusqlite::ToSql], |row| {
+            Ok(SaleAdditionalCost {
+                id: row.get(0)?,
+                sale_id: row.get(1)?,
+                name: row.get(2)?,
+                amount: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch sale additional costs: {}", e))?;
+
+    Ok(costs)
+}
+
 /// Update a sale
 #[tauri::command]
 fn update_sale(
@@ -3251,18 +3309,19 @@ fn update_sale(
     currency_id: Option<i64>,
     exchange_rate: f64,
     _paid_amount: f64, // Ignored, handled by payments table
-    additional_cost: f64,
+    additional_costs: Vec<(String, f64)>, // (name, amount)
     items: Vec<(i64, i64, f64, f64)>, // (product_id, unit_id, per_price, amount)
 ) -> Result<Sale, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    // Calculate total amount from items + additional_cost
+    // Calculate total amount from items + additional costs
     let items_total: f64 = items.iter().map(|(_, _, per_price, amount)| per_price * amount).sum();
-    let total_amount = items_total + additional_cost;
+    let additional_costs_total: f64 = additional_costs.iter().map(|(_, amount)| amount).sum();
+    let total_amount = items_total + additional_costs_total;
     let base_amount = total_amount * exchange_rate;
 
-    // Update sale (excluding paid_amount)
+    // Update sale (excluding paid_amount, keep additional_cost column for backward compatibility)
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
     let update_sql = "UPDATE sales SET customer_id = ?, date = ?, notes = ?, currency_id = ?, exchange_rate = ?, total_amount = ?, base_amount = ?, additional_cost = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     db.execute(update_sql, &[
@@ -3273,7 +3332,7 @@ fn update_sale(
         &exchange_rate as &dyn rusqlite::ToSql,
         &total_amount as &dyn rusqlite::ToSql,
         &base_amount as &dyn rusqlite::ToSql,
-        &additional_cost as &dyn rusqlite::ToSql,
+        &additional_costs_total as &dyn rusqlite::ToSql,
         &id as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to update sale: {}", e))?;
@@ -3296,6 +3355,22 @@ fn update_sale(
             &total as &dyn rusqlite::ToSql,
         ])
             .map_err(|e| format!("Failed to insert sale item: {}", e))?;
+    }
+
+    // Delete existing additional costs
+    let delete_costs_sql = "DELETE FROM sale_additional_costs WHERE sale_id = ?";
+    db.execute(delete_costs_sql, &[&id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete sale additional costs: {}", e))?;
+
+    // Insert new additional costs
+    for (name, amount) in additional_costs {
+        let insert_cost_sql = "INSERT INTO sale_additional_costs (sale_id, name, amount) VALUES (?, ?, ?)";
+        db.execute(insert_cost_sql, &[
+            &id as &dyn rusqlite::ToSql,
+            &name as &dyn rusqlite::ToSql,
+            &amount as &dyn rusqlite::ToSql,
+        ])
+            .map_err(|e| format!("Failed to insert sale additional cost: {}", e))?;
     }
 
     // Get the updated sale
@@ -7249,6 +7324,7 @@ pub fn run() {
             create_sale_payment,
             get_sale_payments,
             delete_sale_payment,
+            get_sale_additional_costs,
             init_expense_types_table,
             create_expense_type,
             get_expense_types,

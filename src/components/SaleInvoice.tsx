@@ -65,6 +65,19 @@ export default function SaleInvoice({
         }
     }, [saleData, customer]);
 
+    // Auto-download PDF when component mounts
+    useEffect(() => {
+        // Small delay to ensure QR code and content are rendered
+        const timer = setTimeout(() => {
+            if (printRef.current && !isExporting) {
+                handleExportPDF(true); // Pass true to auto-close after download
+            }
+        }, 1500); // Wait for QR code to be generated
+
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [qrCodeDataUrl]); // Trigger when QR code is ready
+
     const formatDate = (dateString: string) => {
         return formatPersianDateLong(dateString);
     };
@@ -83,7 +96,7 @@ export default function SaleInvoice({
         return unit?.name || "نامشخص";
     };
 
-    const handleExportPDF = async () => {
+    const handleExportPDF = async (autoClose = false) => {
         if (!printRef.current) {
             toast.error("خطا در تولید PDF");
             return;
@@ -91,15 +104,168 @@ export default function SaleInvoice({
 
         try {
             setIsExporting(true);
+
             const actionButtons = document.querySelector('.no-print');
             if (actionButtons) (actionButtons as HTMLElement).style.display = 'none';
 
-            const canvas = await html2canvas(printRef.current, {
-                scale: 3,
-                useCORS: true,
-                logging: false,
-                backgroundColor: '#ffffff',
+            // Inject CSS override to prevent oklch parsing errors
+            const styleId = 'pdf-export-oklch-fix';
+            let styleElement = document.getElementById(styleId) as HTMLStyleElement;
+            if (!styleElement) {
+                styleElement = document.createElement('style');
+                styleElement.id = styleId;
+                styleElement.textContent = `
+                    * {
+                        background-image: none !important;
+                    }
+                    [class*="gradient"],
+                    [class*="from-"],
+                    [class*="to-"] {
+                        background: #3b82f6 !important;
+                        background-color: #3b82f6 !important;
+                        background-image: none !important;
+                    }
+                `;
+                document.head.appendChild(styleElement);
+            }
+
+            // Temporarily replace gradient classes with solid colors
+            const elementsToFix: Array<{ element: HTMLElement; originalClasses: string; originalStyle: string }> = [];
+            if (printRef.current) {
+                const allElements = printRef.current.querySelectorAll('*');
+                allElements.forEach((el) => {
+                    const htmlEl = el as HTMLElement;
+                    const computedStyle = window.getComputedStyle(htmlEl);
+                    const bg = computedStyle.background || computedStyle.backgroundColor || '';
+                    
+                    // Check if element has oklch in computed styles
+                    if (bg.includes('oklch') || htmlEl.className.includes('gradient') || htmlEl.className.includes('from-') || htmlEl.className.includes('to-')) {
+                        const originalClasses = htmlEl.className;
+                        const originalStyle = htmlEl.style.cssText;
+                        
+                        // Force solid color
+                        htmlEl.style.background = '#3b82f6';
+                        htmlEl.style.backgroundColor = '#3b82f6';
+                        htmlEl.style.backgroundImage = 'none';
+                        
+                        // Remove gradient classes
+                        htmlEl.className = originalClasses
+                            .split(' ')
+                            .filter(cls => !cls.includes('gradient') && !cls.includes('from-') && !cls.includes('to-') && !cls.includes('hover:from-') && !cls.includes('hover:to-'))
+                            .join(' ');
+                        
+                        elementsToFix.push({ element: htmlEl, originalClasses, originalStyle });
+                    }
+                });
+            }
+
+            // Wait for styles to apply
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            let canvas;
+            try {
+                canvas = await html2canvas(printRef.current, {
+                    scale: 3,
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#ffffff',
+                    onclone: (clonedDoc) => {
+                        // Remove all stylesheets that might contain oklch
+                        const styleSheets = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]');
+                        styleSheets.forEach((style) => {
+                            if (style.textContent?.includes('oklch') || (style as HTMLLinkElement).href?.includes('tailwind')) {
+                                style.remove();
+                            }
+                        });
+
+                        // Traverse all elements and fix computed styles
+                        const allElements = clonedDoc.querySelectorAll('*');
+                        allElements.forEach((el) => {
+                            const htmlEl = el as HTMLElement;
+                            
+                            // Get computed styles and replace oklch
+                            try {
+                                const computedStyle = window.getComputedStyle(htmlEl);
+                                
+                                // Check and fix background
+                                const bg = computedStyle.background || computedStyle.backgroundColor || '';
+                                if (bg.includes('oklch')) {
+                                    htmlEl.style.background = '#3b82f6';
+                                    htmlEl.style.backgroundColor = '#3b82f6';
+                                    htmlEl.style.backgroundImage = 'none';
+                                }
+                                
+                                // Check and fix color
+                                const color = computedStyle.color || '';
+                                if (color.includes('oklch')) {
+                                    htmlEl.style.color = '#1e293b';
+                                }
+                                
+                                // Check and fix border
+                                const border = computedStyle.borderColor || computedStyle.borderTopColor || '';
+                                if (border.includes('oklch')) {
+                                    htmlEl.style.borderColor = '#e2e8f0';
+                                }
+                                
+                                // Remove gradient classes
+                                if (htmlEl.className) {
+                                    htmlEl.className = htmlEl.className
+                                        .split(' ')
+                                        .filter(cls => !cls.includes('gradient') && !cls.includes('from-') && !cls.includes('to-'))
+                                        .join(' ');
+                                }
+                            } catch (e) {
+                                // Ignore errors for individual elements
+                            }
+                        });
+                    },
+                });
+            } catch (error) {
+                // If still fails, try with even simpler approach - clone and simplify
+                console.warn('First attempt failed, trying simpler rendering...', error);
+                
+                // Create a simplified clone
+                const clone = printRef.current.cloneNode(true) as HTMLElement;
+                clone.style.position = 'absolute';
+                clone.style.left = '-9999px';
+                clone.style.top = '0';
+                document.body.appendChild(clone);
+                
+                // Remove all problematic classes and styles
+                const allElements = clone.querySelectorAll('*');
+                allElements.forEach((el) => {
+                    const htmlEl = el as HTMLElement;
+                    htmlEl.className = htmlEl.className
+                        .split(' ')
+                        .filter(cls => !cls.includes('gradient') && !cls.includes('from-') && !cls.includes('to-') && !cls.includes('hover'))
+                        .join(' ');
+                    htmlEl.style.background = htmlEl.style.background?.replace(/oklch\([^)]+\)/g, '#3b82f6') || '';
+                    htmlEl.style.backgroundColor = htmlEl.style.backgroundColor?.replace(/oklch\([^)]+\)/g, '#3b82f6') || '';
+                    htmlEl.style.color = htmlEl.style.color?.replace(/oklch\([^)]+\)/g, '#1e293b') || '';
+                });
+                
+                try {
+                    canvas = await html2canvas(clone, {
+                        scale: 2,
+                        useCORS: true,
+                        logging: false,
+                        backgroundColor: '#ffffff',
+                    });
+                } finally {
+                    document.body.removeChild(clone);
+                }
+            }
+
+            // Restore original classes and styles
+            elementsToFix.forEach(({ element, originalClasses, originalStyle }) => {
+                element.className = originalClasses;
+                element.style.cssText = originalStyle;
             });
+
+            // Remove injected style
+            if (styleElement && styleElement.parentNode) {
+                styleElement.parentNode.removeChild(styleElement);
+            }
 
             if (actionButtons) (actionButtons as HTMLElement).style.display = '';
 
@@ -113,6 +279,13 @@ export default function SaleInvoice({
             pdf.save(fileName);
 
             toast.success("PDF با موفقیت دانلود شد");
+            
+            // Auto-close modal after download if requested
+            if (autoClose && onClose) {
+                setTimeout(() => {
+                    onClose();
+                }, 500);
+            }
         } catch (error) {
             console.error("Error exporting PDF:", error);
             toast.error("خطا در تولید PDF");
@@ -387,7 +560,7 @@ export default function SaleInvoice({
                         <h2 className="text-white text-xl font-bold">پیش‌نمایش فاکتور فروش</h2>
                         <div className="flex gap-3">
                             <button
-                                onClick={handleExportPDF}
+                                onClick={() => handleExportPDF(false)}
                                 disabled={isExporting}
                                 className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl shadow-lg shadow-blue-900/20 transition-all font-bold flex items-center gap-2 disabled:opacity-50"
                             >
@@ -401,7 +574,7 @@ export default function SaleInvoice({
                                 )}
                             </button>
                             <button
-                                onClick={handleExportPDF}
+                                onClick={() => handleExportPDF(false)}
                                 disabled={isExporting}
                                 className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-900/20 transition-all font-bold flex items-center gap-2 disabled:opacity-50"
                             >

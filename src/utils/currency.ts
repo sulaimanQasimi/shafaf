@@ -4,6 +4,7 @@ export interface Currency {
   id: number;
   name: string;
   base: boolean;
+  rate: number;
   created_at: string;
   updated_at: string;
 }
@@ -29,15 +30,18 @@ export async function initCurrenciesTable(): Promise<string> {
  * Create a new currency
  * @param name Currency name (in Persian/Dari)
  * @param base Whether this is the base currency
+ * @param rate Exchange rate (default: 1.0)
  * @returns Promise with Currency
  */
 export async function createCurrency(
   name: string,
-  base: boolean
+  base: boolean,
+  rate: number = 1.0
 ): Promise<Currency> {
   return await invoke<Currency>("create_currency", {
     name,
     base,
+    rate,
   });
 }
 
@@ -54,17 +58,20 @@ export async function getCurrencies(): Promise<Currency[]> {
  * @param id Currency ID
  * @param name Currency name (in Persian/Dari)
  * @param base Whether this is the base currency
+ * @param rate Exchange rate
  * @returns Promise with Currency
  */
 export async function updateCurrency(
   id: number,
   name: string,
-  base: boolean
+  base: boolean,
+  rate: number
 ): Promise<Currency> {
   return await invoke<Currency>("update_currency", {
     id,
     name,
     base,
+    rate,
   });
 }
 

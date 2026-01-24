@@ -57,7 +57,7 @@ export default function CurrencyManagement({ onBack }: CurrencyManagementProps) 
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCurrency, setEditingCurrency] = useState<Currency | null>(null);
-  const [formData, setFormData] = useState({ name: "", base: false });
+  const [formData, setFormData] = useState({ name: "", base: false, rate: "1.0" });
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   useEffect(() => {
@@ -91,10 +91,10 @@ export default function CurrencyManagement({ onBack }: CurrencyManagementProps) 
   const handleOpenModal = (currency?: Currency) => {
     if (currency) {
       setEditingCurrency(currency);
-      setFormData({ name: currency.name, base: currency.base });
+      setFormData({ name: currency.name, base: currency.base, rate: currency.rate.toString() });
     } else {
       setEditingCurrency(null);
-      setFormData({ name: "", base: false });
+      setFormData({ name: "", base: false, rate: "1.0" });
     }
     setIsModalOpen(true);
   };
@@ -102,7 +102,7 @@ export default function CurrencyManagement({ onBack }: CurrencyManagementProps) 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingCurrency(null);
-    setFormData({ name: "", base: false });
+    setFormData({ name: "", base: false, rate: "1.0" });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -115,11 +115,12 @@ export default function CurrencyManagement({ onBack }: CurrencyManagementProps) 
 
     try {
       setLoading(true);
+      const rate = parseFloat(formData.rate) || 1.0;
       if (editingCurrency) {
-        await updateCurrency(editingCurrency.id, formData.name, formData.base);
+        await updateCurrency(editingCurrency.id, formData.name, formData.base, rate);
         toast.success(translations.success.updated);
       } else {
-        await createCurrency(formData.name, formData.base);
+        await createCurrency(formData.name, formData.base, rate);
         toast.success(translations.success.created);
       }
       handleCloseModal();
@@ -243,6 +244,12 @@ export default function CurrencyManagement({ onBack }: CurrencyManagementProps) 
                             </svg>
                             <span>{new Date(currency.created_at).toLocaleDateString('fa-IR')}</span>
                           </div>
+                          <div className="flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg font-semibold">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                            </svg>
+                            <span>نرخ: {currency.rate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -310,6 +317,23 @@ export default function CurrencyManagement({ onBack }: CurrencyManagementProps) 
                       className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
                       placeholder={translations.placeholders.name}
                       dir="rtl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      {translations.rate}
+                      <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">({translations.rateTooltip})</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      value={formData.rate}
+                      onChange={(e) => setFormData({ ...formData, rate: e.target.value })}
+                      required
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                      placeholder="1.0"
+                      dir="ltr"
                     />
                   </div>
                   <div className="flex items-center gap-3">

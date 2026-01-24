@@ -651,6 +651,7 @@ pub struct Currency {
     pub id: i64,
     pub name: String,
     pub base: bool,
+    pub rate: f64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -666,6 +667,7 @@ fn init_currencies_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             base INTEGER NOT NULL DEFAULT 0,
+            rate REAL NOT NULL DEFAULT 1.0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -673,6 +675,10 @@ fn init_currencies_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result
 
     db.execute(create_table_sql, &[])
         .map_err(|e| format!("Failed to create currencies table: {}", e))?;
+
+    // Add rate column if it doesn't exist (for existing databases)
+    let alter_sql = "ALTER TABLE currencies ADD COLUMN rate REAL NOT NULL DEFAULT 1.0";
+    let _ = db.execute(alter_sql, &[]);
 
     Ok("Currencies table initialized successfully".to_string())
 }
@@ -683,6 +689,7 @@ fn create_currency(
     db_state: State<'_, Mutex<Option<Database>>>,
     name: String,
     base: bool,
+    rate: f64,
 ) -> Result<Currency, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
@@ -695,21 +702,22 @@ fn create_currency(
     }
 
     // Insert new currency
-    let insert_sql = "INSERT INTO currencies (name, base) VALUES (?, ?)";
+    let insert_sql = "INSERT INTO currencies (name, base, rate) VALUES (?, ?, ?)";
     let base_int = if base { 1 } else { 0 };
-    db.execute(insert_sql, &[&name as &dyn rusqlite::ToSql, &base_int as &dyn rusqlite::ToSql])
+    db.execute(insert_sql, &[&name as &dyn rusqlite::ToSql, &base_int as &dyn rusqlite::ToSql, &rate as &dyn rusqlite::ToSql])
         .map_err(|e| format!("Failed to insert currency: {}", e))?;
 
     // Get the created currency
-    let currency_sql = "SELECT id, name, base, created_at, updated_at FROM currencies WHERE name = ?";
+    let currency_sql = "SELECT id, name, base, rate, created_at, updated_at FROM currencies WHERE name = ?";
     let currencies = db
         .query(currency_sql, &[&name as &dyn rusqlite::ToSql], |row| {
             Ok(Currency {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 base: row.get::<_, i64>(2)? != 0,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
+                rate: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
             })
         })
         .map_err(|e| format!("Failed to fetch currency: {}", e))?;
@@ -727,15 +735,16 @@ fn get_currencies(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Cu
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, name, base, created_at, updated_at FROM currencies ORDER BY base DESC, name ASC";
+    let sql = "SELECT id, name, base, rate, created_at, updated_at FROM currencies ORDER BY base DESC, name ASC";
     let currencies = db
         .query(sql, &[], |row| {
             Ok(Currency {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 base: row.get::<_, i64>(2)? != 0,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
+                rate: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
             })
         })
         .map_err(|e| format!("Failed to fetch currencies: {}", e))?;
@@ -750,6 +759,7 @@ fn update_currency(
     id: i64,
     name: String,
     base: bool,
+    rate: f64,
 ) -> Result<Currency, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
@@ -763,20 +773,21 @@ fn update_currency(
 
     // Update currency
     let base_int = if base { 1 } else { 0 };
-    let update_sql = "UPDATE currencies SET name = ?, base = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
-    db.execute(update_sql, &[&name as &dyn rusqlite::ToSql, &base_int as &dyn rusqlite::ToSql, &id as &dyn rusqlite::ToSql])
+    let update_sql = "UPDATE currencies SET name = ?, base = ?, rate = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_sql, &[&name as &dyn rusqlite::ToSql, &base_int as &dyn rusqlite::ToSql, &rate as &dyn rusqlite::ToSql, &id as &dyn rusqlite::ToSql])
         .map_err(|e| format!("Failed to update currency: {}", e))?;
 
     // Get the updated currency
-    let currency_sql = "SELECT id, name, base, created_at, updated_at FROM currencies WHERE id = ?";
+    let currency_sql = "SELECT id, name, base, rate, created_at, updated_at FROM currencies WHERE id = ?";
     let currencies = db
         .query(currency_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Currency {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 base: row.get::<_, i64>(2)? != 0,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
+                rate: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
             })
         })
         .map_err(|e| format!("Failed to fetch currency: {}", e))?;

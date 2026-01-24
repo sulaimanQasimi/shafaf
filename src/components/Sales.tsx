@@ -16,7 +16,6 @@ import {
     type SaleItemInput,
     type SaleWithItems,
     type SalePayment,
-    type SaleAdditionalCost,
 } from "../utils/sales";
 import { getCustomers, type Customer } from "../utils/customer";
 import { getProducts, type Product } from "../utils/product";
@@ -794,21 +793,6 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                             className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200 resize-none"
                                             placeholder={translations.placeholders.notes}
                                             dir="rtl"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                            هزینه اضافی
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            value={formData.additional_cost || ''}
-                                            onChange={(e) => setFormData({ ...formData, additional_cost: parseFloat(e.target.value) || 0 })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                                            placeholder="0"
-                                            dir="ltr"
                                         />
                                     </div>
 

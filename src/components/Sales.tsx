@@ -798,18 +798,91 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                            هزینه اضافی
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            value={formData.additional_cost || ''}
-                                            onChange={(e) => setFormData({ ...formData, additional_cost: parseFloat(e.target.value) || 0 })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
-                                            placeholder="0"
-                                            dir="ltr"
-                                        />
+                                        <div className="flex justify-between items-center mb-4">
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                هزینه‌های اضافی
+                                            </label>
+                                            <motion.button
+                                                type="button"
+                                                whileHover={{ scale: 1.05 }}
+                                                whileTap={{ scale: 0.95 }}
+                                                onClick={() => setFormData({
+                                                    ...formData,
+                                                    additional_costs: [...formData.additional_costs, { name: "", amount: 0 }]
+                                                })}
+                                                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm"
+                                            >
+                                                افزودن هزینه اضافی
+                                            </motion.button>
+                                        </div>
+
+                                        <div className="space-y-3 max-h-48 overflow-y-auto">
+                                            {formData.additional_costs.map((cost, index) => (
+                                                <motion.div
+                                                    key={index}
+                                                    initial={{ opacity: 0, y: -10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border-2 border-gray-200 dark:border-gray-600"
+                                                >
+                                                    <div className="grid grid-cols-12 gap-3 items-end">
+                                                        <div className="col-span-5">
+                                                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                                                نام هزینه
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                value={cost.name}
+                                                                onChange={(e) => {
+                                                                    const newCosts = [...formData.additional_costs];
+                                                                    newCosts[index].name = e.target.value;
+                                                                    setFormData({ ...formData, additional_costs: newCosts });
+                                                                }}
+                                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                                                placeholder="مثال: حمل و نقل"
+                                                                dir="rtl"
+                                                            />
+                                                        </div>
+                                                        <div className="col-span-5">
+                                                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                                                مبلغ
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                step="0.01"
+                                                                value={cost.amount || ''}
+                                                                onChange={(e) => {
+                                                                    const newCosts = [...formData.additional_costs];
+                                                                    newCosts[index].amount = parseFloat(e.target.value) || 0;
+                                                                    setFormData({ ...formData, additional_costs: newCosts });
+                                                                }}
+                                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                                                                placeholder="0"
+                                                                dir="ltr"
+                                                            />
+                                                        </div>
+                                                        <div className="col-span-2">
+                                                            <motion.button
+                                                                type="button"
+                                                                whileHover={{ scale: 1.1 }}
+                                                                whileTap={{ scale: 0.9 }}
+                                                                onClick={() => {
+                                                                    const newCosts = formData.additional_costs.filter((_, i) => i !== index);
+                                                                    setFormData({ ...formData, additional_costs: newCosts });
+                                                                }}
+                                                                className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm"
+                                                            >
+                                                                حذف
+                                                            </motion.button>
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                            {formData.additional_costs.length === 0 && (
+                                                <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                                                    هیچ هزینه اضافی اضافه نشده است
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     <div>

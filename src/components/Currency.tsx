@@ -24,6 +24,8 @@ const translations = {
   name: "نام ارز",
   base: "ارز پایه",
   baseTooltip: "ارز پایه برای محاسبات استفاده می‌شود",
+  rate: "نرخ تبدیل",
+  rateTooltip: "نرخ تبدیل این ارز نسبت به ارز پایه",
   actions: "عملیات",
   createdAt: "تاریخ ایجاد",
   updatedAt: "آخرین بروزرسانی",

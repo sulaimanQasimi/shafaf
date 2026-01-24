@@ -212,7 +212,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
   const loadPurchaseDetails = async (id: number) => {
     try {
       const purchaseData = await getPurchase(id);
-      const additionalCosts = await getPurchaseAdditionalCosts(id);
+      const additionalCosts: PurchaseAdditionalCost[] = await getPurchaseAdditionalCosts(id);
       setEditingPurchase(purchaseData.purchase);
       setFormData({
         supplier_id: purchaseData.purchase.supplier_id,

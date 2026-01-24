@@ -229,7 +229,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
     const loadSaleDetails = async (id: number) => {
         try {
             const saleData = await getSale(id);
-            const additionalCosts = await getSaleAdditionalCosts(id);
+            const additionalCosts: SaleAdditionalCost[] = await getSaleAdditionalCosts(id);
             setEditingSale(saleData.sale);
             setFormData({
                 customer_id: saleData.sale.customer_id,

@@ -153,6 +153,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Release link
+      - name: Release and APK links
         run: |
-          echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          echo "### Release page"
+          echo "https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          echo ""
+          echo "### APK (direct download)"
+          for f in src-tauri/target/android/apk/release/*.apk; do
+            [ -f "$f" ] && echo "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$f")"
+          done
+          echo ""
+          echo "### AAB (Play Store)"
+          for f in src-tauri/target/android/aab/release/*.aab; do
+            [ -f "$f" ] && echo "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$f")"
+          done

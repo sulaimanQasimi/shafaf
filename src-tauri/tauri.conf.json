@@ -15,7 +15,8 @@
         "title": "شفاف",
         "width": 800,
         "height": 600,
-        "fullscreen": false
+        "fullscreen": false,
+        "additionalBrowserArgs": "--disable-popup-blocking --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
       }
     ],
     "security": {

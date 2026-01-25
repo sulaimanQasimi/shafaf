@@ -34,6 +34,7 @@ import SaleInvoice from "./components/SaleInvoice";
 import AccountManagement from "./components/Account";
 import PurchasePaymentManagement from "./components/PurchasePayment";
 import SalesPaymentManagement from "./components/SalesPayment";
+import AiReport from "./components/AiReport";
 import Footer from "./components/Footer";
 import "./App.css";
 import { SaleWithItems, SalePayment } from "./utils/sales";
@@ -47,7 +48,7 @@ interface User {
   email: string;
 }
 
-type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice" | "company" | "account" | "purchasePayment" | "salesPayment";
+type Page = "dashboard" | "currency" | "supplier" | "product" | "purchase" | "sales" | "unit" | "customer" | "expense" | "employee" | "salary" | "deduction" | "users" | "profile" | "invoice" | "company" | "account" | "purchasePayment" | "salesPayment" | "aiReport";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -460,6 +461,13 @@ function App() {
     );
   }
 
+  // Show AI report page if selected
+  if (currentPage === "aiReport") {
+    return (
+      <AiReport onBack={() => setCurrentPage("dashboard")} />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 relative overflow-hidden" dir="rtl">
       {/* Animated background elements */}
@@ -817,6 +825,13 @@ function App() {
                 icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
                 color: "from-blue-500 to-indigo-500",
                 page: "salesPayment" as Page,
+              },
+              {
+                title: "گزارش هوشمند (AI)",
+                description: "تولید گزارش جدول و نمودار بر اساس درخواست متنی",
+                icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z",
+                color: "from-violet-500 to-fuchsia-500",
+                page: "aiReport" as Page,
               },
             ].map((item, index) => (
               <motion.button

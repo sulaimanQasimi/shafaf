@@ -23,7 +23,9 @@
     "lucide-react": "^0.562.0",
     "moment-jalaali": "^0.10.4",
     "qrcode": "^1.5.4",
+    "apexcharts": "^4.0.0",
     "react": "^19.1.0",
+    "react-apexcharts": "^1.4.1",
     "react-dom": "^19.1.0",
     "react-hot-toast": "^2.6.0"
   },

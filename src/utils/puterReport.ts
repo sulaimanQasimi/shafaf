@@ -10,10 +10,6 @@ declare global {
           options?: { tools?: unknown[]; model?: string }
         ) => Promise<{ message?: { content?: string; tool_calls?: PuterToolCall[] }; text?: string }>;
       };
-      auth?: {
-        isSignedIn: () => boolean;
-        signIn: (opts?: { attempt_temp_user_creation?: boolean }) => Promise<unknown>;
-      };
     };
   }
 }
@@ -147,10 +143,7 @@ export function isPuterAvailable(): boolean {
 export async function generateReport(userPrompt: string): Promise<ReportJson> {
   const puter = (typeof window !== "undefined" && window.puter) || undefined;
   if (!puter?.ai?.chat) {
-    throw new Error("Puter SDK not loaded. Check network and script in index.html.");
-  }
-  if (!puter?.auth?.isSignedIn?.()) {
-    throw new Error("برای ارسال درخواست و تولید گزارش، ابتدا در puter.com وارد شوید.");
+    throw new Error("Puter SDK بارگذاری نشده. شناسه اپ و توکن Puter را وارد کرده و «اعمال» بزنید.");
   }
 
   const messages: { role: string; content: string }[] = [

@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import ReactApexChart from "react-apexcharts";
 import type { ApexOptions } from "apexcharts";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { generateReport, type ReportJson, type ReportSection } from "../utils/puterReport";
 import { formatPersianNumber } from "../utils/dashboard";
 
@@ -85,123 +84,70 @@ function ChartSection({ section, index }: { section: ReportSection; index: numbe
   );
 }
 
+const PUTER_SCRIPT_BASE = "https://js.puter.com/v2/";
+
 export default function AiReport({ onBack }: AiReportProps) {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportJson | null>(null);
   const [puterLoaded, setPuterLoaded] = useState(false);
-  const [signedIn, setSignedIn] = useState(false);
-  const [signingIn, setSigningIn] = useState(false);
+  const [appId, setAppId] = useState("");
+  const [authToken, setAuthToken] = useState("");
+  const [applying, setApplying] = useState(false);
 
-  // Load Puter script on mount so it is ready when user clicks. signIn() must run in the same user gesture as the click;
-  // if we loaded the script on click and called signIn in onload, the gesture would be lost and the popup would be blocked.
-  useEffect(() => {
+  const puter = typeof window !== "undefined" ? (window as Window & { puter?: { ai?: { chat: unknown } } }).puter : undefined;
+  const puterOk = puterLoaded && !!puter?.ai?.chat;
+
+  const loadPuterWithCreds = useCallback((id: string, token: string) => {
     if (typeof window === "undefined") return;
-
-    // In Tauri, window.open often returns null (popup blocked). Puter's signIn() then does popup.closed
-    // and throws. Polyfill: when open returns null for Puter URLs, create a WebviewWindow with that URL
-    // so the Puter login can open. Requires webview:allow-create-webview-window. Fallback: dummy so SDK doesn't crash.
-    const isTauri = !!(window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-    const win = window as Window & { __puterOpenPatched?: boolean };
-    if (!win.__puterOpenPatched) {
-      win.__puterOpenPatched = true;
-      const orig = window.open;
-      window.open = function (
-        url?: string | URL,
-        _target?: string,
-        _features?: string
-      ): Window | null {
-        const w = orig.call(window, url as string, _target, _features);
-        if (w != null) return w;
-        const u = (url != null ? String(url) : "").trim();
-        if (!u || !/puter\.com|api\.puter\.com/i.test(u)) return null;
-        if (isTauri) {
-          try {
-            const label = "puter-auth-" + Date.now();
-            const authUrl = "https://puter.com/?embedded_in_popup=true&request_auth=true";
-            const wv = new WebviewWindow(label, { url: authUrl, width: 500, height: 600 });
-            let closed = false;
-            // Do not use wv.once("tauri://close-requested") — it triggers plugin:event|listen and CORS in dev.
-            return {
-              get closed() { return closed; },
-              close() { try { wv.close(); } catch { /* ignore */ } closed = true; },
-            } as unknown as Window;
-          } catch {
-            /* fall through to dummy */
-          }
-        }
-        return { get closed() { return true; }, close() {} } as unknown as Window;
-      };
-    }
-
-    const w = window as Window & { puter?: { auth?: { isSignedIn?: () => boolean }; ai?: { chat: unknown } } };
-    if (w.puter) {
+    const w = window as Window & { puter?: { ai?: { chat: unknown } } };
+    if (w.puter?.ai?.chat) {
       setPuterLoaded(true);
-      setSignedIn(!!w.puter?.auth?.isSignedIn?.());
+      setApplying(false);
       return;
     }
-    const src = "https://js.puter.com/v2/";
-    if (document.querySelector(`script[src="${src}"]`)) return;
+    const existing = document.querySelector(`script[src^="${PUTER_SCRIPT_BASE}"]`);
+    if (existing) existing.remove();
+    (window as Window & { __puterAppId?: string; __puterAuthToken?: string }).__puterAppId = id;
+    (window as Window & { __puterAppId?: string; __puterAuthToken?: string }).__puterAuthToken = token;
+    const params = new URLSearchParams({ appId: id, authToken: token });
+    const src = `${PUTER_SCRIPT_BASE}?${params.toString()}`;
     const s = document.createElement("script");
     s.src = src;
     s.async = true;
     s.onload = () => {
-      const pw = window as Window & { puter?: { auth?: { isSignedIn?: () => boolean } } };
-      setPuterLoaded(true);
-      setSignedIn(!!pw.puter?.auth?.isSignedIn?.());
+      setApplying(false);
+      const pw = window as Window & { puter?: { ai?: { chat: unknown } } };
+      setPuterLoaded(!!pw.puter?.ai?.chat);
+      if (!pw.puter?.ai?.chat) setError("Puter SDK بارگذاری شد ولی ai.chat در دسترس نیست.");
     };
-    s.onerror = () => setError("بارگذاری Puter ناموفق بود. اتصال شبکه را بررسی کنید.");
+    s.onerror = () => {
+      setApplying(false);
+      setError("بارگذاری Puter ناموفق بود. اتصال شبکه و مقدارهای وارد شده را بررسی کنید.");
+      setPuterLoaded(false);
+    };
     document.body.appendChild(s);
   }, []);
 
-  const puter = typeof window !== "undefined" ? (window as Window & { puter?: { ai?: { chat: unknown }; auth?: { isSignedIn?: () => boolean; signIn?: (o?: unknown) => Promise<unknown> } } }).puter : undefined;
-  const puterOk = puterLoaded && !!puter?.ai?.chat;
-
-  // Poll isSignedIn while sign-in block is shown (catches auth done in iframe or popup).
-  useEffect(() => {
-    if (!puterOk || signedIn) return;
-    const id = setInterval(() => {
-      if ((window as Window & { puter?: { auth?: { isSignedIn?: () => boolean } } }).puter?.auth?.isSignedIn?.()) {
-        setSignedIn(true);
-      }
-    }, 2500);
-    return () => clearInterval(id);
-  }, [puterOk, signedIn]);
-
-  // Listen for postMessage from puter.com (embedded auth may signal success).
-  useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      if (e.origin !== "https://puter.com") return;
-      if ((window as Window & { puter?: { auth?: { isSignedIn?: () => boolean } } }).puter?.auth?.isSignedIn?.()) {
-        setSignedIn(true);
-      }
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, []);
-
-  const refreshSignedIn = () => {
-    setSignedIn(!!(window as Window & { puter?: { auth?: { isSignedIn?: () => boolean } } }).puter?.auth?.isSignedIn?.());
-  };
-
-  // Call signIn() synchronously in the click handler (no await before it) so the popup is allowed. Puter requires a user gesture.
-  const handleSignIn = () => {
-    const p = (window as Window & { puter?: { auth?: { signIn: (o?: unknown) => Promise<unknown> } } }).puter;
-    if (!p?.auth?.signIn) {
-      setError("ورود با Puter در این نسخه پشتیبانی نمی‌شود.");
+  const handleApply = () => {
+    const id = appId.trim();
+    const token = authToken.trim();
+    if (!id || !token) {
+      setError("هر دو فیلد «شناسه اپ Puter» و «توکن احراز هویت Puter» را وارد کنید.");
       return;
     }
     setError(null);
-    setSigningIn(true);
-    p.auth.signIn({ attempt_temp_user_creation: true })
-      .then(() => setSignedIn(true))
-      .catch(() => {
-        setError("ورود لغو شد یا خطا در احراز هویت.");
-        setSignedIn(false);
-      })
-      .finally(() => setSigningIn(false));
+    setApplying(true);
+    setPuterLoaded(false);
+    loadPuterWithCreds(id, token);
   };
+
+  useEffect(() => {
+    if (puterLoaded) return;
+    const w = window as Window & { puter?: { ai?: { chat: unknown } } };
+    if (w.puter?.ai?.chat) setPuterLoaded(true);
+  }, [puterLoaded]);
 
   const handleSubmit = async () => {
     const q = prompt.trim();
@@ -213,11 +159,7 @@ export default function AiReport({ onBack }: AiReportProps) {
       const r = await generateReport(q);
       setReport(r);
     } catch (e) {
-      const msg = (e as Error).message;
-      setError(msg);
-      if (/وارد شوید|401|unauthorized|auth|sign.?in/i.test(msg) || !puter?.auth?.isSignedIn?.()) {
-        setSignedIn(false);
-      }
+      setError((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -249,60 +191,46 @@ export default function AiReport({ onBack }: AiReportProps) {
             درخواست گزارش خود را به زبان طبیعی بنویسید (مثلاً: درآمد ماهانه ۶ ماه گذشته، تعداد فروش به تفکیک محصول).
           </p>
 
-          {!puterLoaded && (
-            <div className="mb-4 p-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-sm flex items-center gap-2">
-              <motion.span animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="inline-block w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full" />
-              در حال بارگذاری Puter…
-            </div>
-          )}
-
-          {puterLoaded && !puterOk && (
-            <div className="mb-4 p-3 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-sm">
-              Puter SDK بارگذاری نشده. اتصال شبکه را بررسی کنید.
-            </div>
-          )}
-
-          {puterOk && !signedIn && (
+          {!puterOk && (
             <div className="mb-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800">
-              <p className="mb-3 text-sm font-medium">برای ارسال درخواست و تولید گزارش، باید در puter.com وارد شوید.</p>
-              <div className="mb-3 rounded-lg overflow-hidden border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900" style={{ minHeight: 360 }}>
-                <iframe
-                  src="https://puter.com/?embedded_in_popup=true&request_auth=true"
-                  title="ورود Puter"
-                  className="w-full border-0"
-                  style={{ height: 360 }}
-                  sandbox="allow-scripts allow-same-origin allow-forms"
-                />
-              </div>
-              <p className="mb-2 text-xs text-blue-700 dark:text-blue-300">
-                پس از ورود در کادر بالا، روی «بروزرسانی وضعیت ورود» بزنید. یا از روش پنجره: «ورود با Puter» → Continue → ورود در puter.com.
-              </p>
-              <p className="mb-3 text-xs text-blue-600 dark:text-blue-400">
-                خطای ۴۰۱ از api.puter.com قبل از ورود طبیعی است.
-              </p>
-              <div className="flex flex-wrap gap-2">
+              <p className="mb-3 text-sm font-medium">برای استفاده از گزارش هوشمند، شناسه اپ و توکن احراز هویت Puter را وارد کنید.</p>
+              <div className="grid gap-3">
+                <label className="block">
+                  <span className="text-xs text-blue-700 dark:text-blue-300">شناسه اپ Puter (puter.app.id / appId)</span>
+                  <input
+                    type="text"
+                    value={appId}
+                    onChange={(e) => { setAppId(e.target.value); setError(null); }}
+                    placeholder="مثال: my-app-id"
+                    className="mt-1 w-full px-4 py-2 rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-500"
+                    disabled={applying}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-blue-700 dark:text-blue-300">توکن احراز هویت Puter (puter.auth.token / authToken)</span>
+                  <input
+                    type="password"
+                    value={authToken}
+                    onChange={(e) => { setAuthToken(e.target.value); setError(null); }}
+                    placeholder="توکن خود را وارد کنید"
+                    className="mt-1 w-full px-4 py-2 rounded-xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-500"
+                    disabled={applying}
+                  />
+                </label>
                 <motion.button
-                  onClick={refreshSignedIn}
-                  className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-xl"
+                  onClick={handleApply}
+                  disabled={applying || !appId.trim() || !authToken.trim()}
+                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-xl"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
-                  بروزرسانی وضعیت ورود
-                </motion.button>
-                <motion.button
-                  onClick={handleSignIn}
-                  disabled={signingIn}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded-xl"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  {signingIn ? "در حال ورود…" : "ورود با Puter (پنجره)"}
+                  {applying ? "در حال اعمال…" : "اعمال"}
                 </motion.button>
               </div>
             </div>
           )}
 
-          {puterOk && signedIn && (
+          {puterOk && (
             <>
               <textarea
                 value={prompt}

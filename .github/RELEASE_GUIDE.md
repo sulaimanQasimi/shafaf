@@ -76,3 +76,10 @@ Both jobs upload their artifacts to the same GitHub release.
 - Verify the tag format matches `v*`
 - Check that the tag was pushed to the remote repository
 - Review workflow logs in the Actions tab
+
+### "Resource not accessible by integration" when creating release
+The `GITHUB_TOKEN` cannot create releases if the repo uses read-only workflow permissions. Fix:
+
+1. Open **Settings → Actions → General**
+2. Under **Workflow permissions**, select **Read and write permissions**
+3. Save and re-run the release workflow (re-push the tag or re-run the failed job)

@@ -5,12 +5,16 @@ on:
     tags:
       - 'v*'  # Triggers on version tags like v6.3.2
 
+# Required for tauri-action and action-gh-release to create/update releases.
+# If you see "Resource not accessible by integration": set Settings → Actions →
+# General → Workflow permissions to "Read and write permissions".
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     name: Build Windows
     runs-on: windows-latest
-    permissions:
-      contents: write   # Required for tauri-action to create the GitHub release
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -58,14 +62,12 @@ jobs:
 
       - name: Release link
         run: |
-          echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          echo "::notice title=Release::https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
 
   build-android:
     name: Build Android
     runs-on: ubuntu-latest
     needs: [build-windows]   # Run after Windows so we add APK/AAB to the same release
-    permissions:
-      contents: write   # Required for action-gh-release to upload to the release
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -155,15 +157,10 @@ jobs:
 
       - name: Release and APK links
         run: |
-          echo "### Release page"
-          echo "https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
-          echo ""
-          echo "### APK (direct download)"
+          echo "::notice title=Release page::https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
           for f in src-tauri/target/android/apk/release/*.apk; do
-            [ -f "$f" ] && echo "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$f")"
+            [ -f "$f" ] && echo "::notice title=APK::https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$f")"
           done
-          echo ""
-          echo "### AAB (Play Store)"
           for f in src-tauri/target/android/aab/release/*.aab; do
-            [ -f "$f" ] && echo "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$f")"
+            [ -f "$f" ] && echo "::notice title=AAB (Play Store)::https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$f")"
           done

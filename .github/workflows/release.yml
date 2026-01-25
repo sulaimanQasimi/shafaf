@@ -144,13 +144,13 @@ jobs:
           KEY_ALIAS: shafaf
           KEY_PASSWORD: android
 
-      - name: Upload Android APK to Release
+      - name: Upload Android APK and AAB to Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
           files: |
-            src-tauri/target/android/apk/release/*.apk
-            src-tauri/target/android/aab/release/*.aab
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+            src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -158,9 +158,9 @@ jobs:
       - name: Release and APK links
         run: |
           echo "::notice title=Release page::https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
-          for f in src-tauri/target/android/apk/release/*.apk; do
+          for f in src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk; do
             [ -f "$f" ] && echo "::notice title=APK::https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$f")"
           done
-          for f in src-tauri/target/android/aab/release/*.aab; do
+          for f in src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab; do
             [ -f "$f" ] && echo "::notice title=AAB (Play Store)::https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$f")"
           done

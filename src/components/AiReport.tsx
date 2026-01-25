@@ -1,9 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import ReactApexChart from "react-apexcharts";
 import type { ApexOptions } from "apexcharts";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+import toast from "react-hot-toast";
+import * as XLSX from "xlsx";
 import { generateReport, type ReportJson, type ReportSection } from "../utils/puterReport";
 import { formatPersianNumber } from "../utils/dashboard";
+import { sanitizeFilename, sanitizeSheetName, formatCellForExcel } from "../utils/exportHelpers";
 
 interface AiReportProps {
   onBack: () => void;
@@ -95,6 +100,10 @@ export default function AiReport({ onBack }: AiReportProps) {
   const [appId, setAppId] = useState("");
   const [authToken, setAuthToken] = useState("");
   const [applying, setApplying] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const puter = typeof window !== "undefined" ? (window as Window & { puter?: { ai?: { chat: unknown } } }).puter : undefined;
   const puterOk = puterLoaded && !!puter?.ai?.chat;
@@ -148,6 +157,161 @@ export default function AiReport({ onBack }: AiReportProps) {
     const w = window as Window & { puter?: { ai?: { chat: unknown } } };
     if (w.puter?.ai?.chat) setPuterLoaded(true);
   }, [puterLoaded]);
+
+  const handleExportPDF = async () => {
+    if (!reportRef.current || !report) {
+      toast.error("خطا در تولید PDF");
+      return;
+    }
+    let actionButtons: Element | null = null;
+    let styleElement: HTMLStyleElement | null = null;
+    const elementsToFix: Array<{ element: HTMLElement; originalClasses: string; originalStyle: string }> = [];
+    try {
+      setIsExportingPdf(true);
+      actionButtons = document.querySelector(".no-print");
+      if (actionButtons) (actionButtons as HTMLElement).style.display = "none";
+
+      const styleId = "pdf-export-oklch-fix";
+      styleElement = document.getElementById(styleId) as HTMLStyleElement | null;
+      if (!styleElement) {
+        styleElement = document.createElement("style");
+        styleElement.id = styleId;
+        styleElement.textContent = `
+          * { background-image: none !important; }
+          [class*="gradient"], [class*="from-"], [class*="to-"] {
+            background: #3b82f6 !important; background-color: #3b82f6 !important; background-image: none !important;
+          }
+        `;
+        document.head.appendChild(styleElement);
+      }
+
+      if (reportRef.current) {
+        reportRef.current.querySelectorAll("*").forEach((el) => {
+          const htmlEl = el as HTMLElement;
+          const computedStyle = window.getComputedStyle(htmlEl);
+          const bg = computedStyle.background || computedStyle.backgroundColor || "";
+          if (bg.includes("oklch") || /gradient|from-|to-/.test(htmlEl.className || "")) {
+            elementsToFix.push({ element: htmlEl, originalClasses: htmlEl.className, originalStyle: htmlEl.style.cssText });
+            htmlEl.style.background = "#f8fafc";
+            htmlEl.style.backgroundColor = "#f8fafc";
+            htmlEl.style.backgroundImage = "none";
+            htmlEl.className = (htmlEl.className || "").split(" ").filter((c) => !/gradient|from-|to-|hover:(from|to)-/.test(c)).join(" ");
+          }
+        });
+      }
+
+      await new Promise((r) => setTimeout(r, 200));
+
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = await html2canvas(reportRef.current, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: "#ffffff",
+          onclone: (clonedDoc) => {
+            clonedDoc.querySelectorAll("style, link[rel='stylesheet']").forEach((s) => {
+              if (s.textContent?.includes("oklch") || (s as HTMLLinkElement).href?.includes("tailwind")) s.remove();
+            });
+            clonedDoc.querySelectorAll("*").forEach((el) => {
+              const htmlEl = el as HTMLElement;
+              try {
+                const bg = (htmlEl.style && htmlEl.style.background) || "";
+                if (bg.includes("oklch")) {
+                  htmlEl.style.background = "#f8fafc";
+                  htmlEl.style.backgroundColor = "#f8fafc";
+                  htmlEl.style.backgroundImage = "none";
+                }
+                if (htmlEl.className) {
+                  htmlEl.className = htmlEl.className.split(" ").filter((c) => !/gradient|from-|to-/.test(c)).join(" ");
+                }
+              } catch (_) {}
+            });
+          },
+        });
+      } catch (err) {
+        console.warn("html2canvas failed, trying simplified clone", err);
+        const clone = reportRef.current.cloneNode(true) as HTMLElement;
+        clone.style.position = "absolute";
+        clone.style.left = "-9999px";
+        document.body.appendChild(clone);
+        clone.querySelectorAll("*").forEach((el) => {
+          const htmlEl = el as HTMLElement;
+          htmlEl.className = (htmlEl.className || "").split(" ").filter((c) => !/gradient|from-|to-|hover/.test(c)).join(" ");
+        });
+        try {
+          canvas = await html2canvas(clone, { scale: 2, useCORS: true, logging: false, backgroundColor: "#ffffff" });
+        } finally {
+          document.body.removeChild(clone);
+        }
+      }
+
+      const imgWidthMm = 210;
+      const totalHeightMm = (canvas.height / canvas.width) * imgWidthMm;
+      const pageHeightMm = 297;
+      const numPages = Math.ceil(totalHeightMm / pageHeightMm);
+
+      const pdf = new jsPDF("p", "mm", "a4");
+      for (let i = 0; i < numPages; i++) {
+        if (i > 0) pdf.addPage();
+        const ySrc = (i * pageHeightMm / totalHeightMm) * canvas.height;
+        const hSrc = Math.min((pageHeightMm / totalHeightMm) * canvas.height, canvas.height - ySrc);
+        const temp = document.createElement("canvas");
+        temp.width = canvas.width;
+        temp.height = hSrc;
+        const ctx = temp.getContext("2d")!;
+        ctx.drawImage(canvas, 0, ySrc, canvas.width, hSrc, 0, 0, canvas.width, hSrc);
+        pdf.addImage(temp.toDataURL("image/png"), "PNG", 0, 0, imgWidthMm, pageHeightMm);
+      }
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      pdf.save(`گزارش-هوشمند-${sanitizeFilename(report.title)}-${dateStr}.pdf`);
+      toast.success("PDF با موفقیت دانلود شد");
+    } catch (err) {
+      console.error("Error exporting PDF:", err);
+      toast.error("خطا در تولید PDF");
+    } finally {
+      elementsToFix.forEach(({ element, originalClasses, originalStyle }) => {
+        element.className = originalClasses;
+        element.style.cssText = originalStyle;
+      });
+      if (styleElement?.parentNode) styleElement.parentNode.removeChild(styleElement);
+      if (actionButtons) (actionButtons as HTMLElement).style.display = "";
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handleExportTablesExcel = () => {
+    if (!report) return;
+    const tableSections = report.sections.filter(
+      (s) => s.type === "table" && s.table?.columns?.length && s.table?.rows
+    );
+    if (tableSections.length === 0) {
+      toast.error("این گزارش جدولی ندارد.");
+      return;
+    }
+    setIsExportingExcel(true);
+    try {
+      const wb = XLSX.utils.book_new();
+      tableSections.forEach((section, i) => {
+        const cols = section.table!.columns;
+        const rows = section.table!.rows;
+        const headerRow = cols.map((c) => c.label);
+        const dataRows = rows.map((row) => cols.map((c) => formatCellForExcel(row[c.key])));
+        const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
+        const base = sanitizeSheetName(section.title);
+        const sheetName = base || `Table ${i + 1}`;
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      });
+      const dateStr = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `گزارش-جدول-${sanitizeFilename(report.title)}-${dateStr}.xlsx`);
+      toast.success("فایل Excel دانلود شد");
+    } catch (e) {
+      toast.error("خطا در ذخیره Excel.");
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
 
   const handleSubmit = async () => {
     const q = prompt.trim();
@@ -279,26 +443,53 @@ export default function AiReport({ onBack }: AiReportProps) {
         )}
 
         {report && !loading && (
-          <motion.article
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-8"
-          >
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{report.title}</h2>
-              {report.summary && (
-                <p className="mt-2 text-gray-600 dark:text-gray-400">{report.summary}</p>
-              )}
+          <>
+            <div className="no-print flex flex-wrap gap-2 mb-4">
+              <motion.button
+                onClick={handleExportPDF}
+                disabled={isExportingPdf}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-medium"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {isExportingPdf ? "در حال آماده‌سازی…" : "خروجی PDF"}
+              </motion.button>
+              <motion.button
+                onClick={handleExportTablesExcel}
+                disabled={
+                  isExportingExcel ||
+                  report.sections.filter(
+                    (s) => s.type === "table" && s.table?.columns?.length && s.table?.rows
+                  ).length === 0
+                }
+                className="px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {isExportingExcel ? "در حال آماده‌سازی…" : "دانلود جدول (Excel)"}
+              </motion.button>
             </div>
-
-            {report.sections.map((sec, i) => (
-              <section key={i}>
-                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">{sec.title}</h3>
-                {sec.type === "table" && <TableSection section={sec} />}
-                {sec.type === "chart" && <ChartSection section={sec} index={i} />}
-              </section>
-            ))}
-          </motion.article>
+            <motion.article
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div ref={reportRef} className="space-y-8">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{report.title}</h2>
+                  {report.summary && (
+                    <p className="mt-2 text-gray-600 dark:text-gray-400">{report.summary}</p>
+                  )}
+                </div>
+                {report.sections.map((sec, i) => (
+                  <section key={i}>
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">{sec.title}</h3>
+                    {sec.type === "table" && <TableSection section={sec} />}
+                    {sec.type === "chart" && <ChartSection section={sec} index={i} />}
+                  </section>
+                ))}
+              </div>
+            </motion.article>
+          </>
         )}
       </div>
     </div>

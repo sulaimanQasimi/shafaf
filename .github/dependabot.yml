@@ -1,0 +1,76 @@
+# Dependabot – advanced config for Shafaf (Tauri + React)
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------
+  # npm (frontend: React, Vite, Tailwind, Tauri API, etc.)
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kabul"
+    open-pull-requests-limit: 8
+    rebase-strategy: "auto"
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+      - "npm"
+    # Group patch + minor into one PR to reduce noise; major stays separate for careful review
+    groups:
+      npm-patch-minor:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    versioning-strategy: increase
+    # Optional: ignore major bumps for specific deps (uncomment if needed)
+    # ignore:
+    #   - dependency-name: "react"
+    #     update-types: ["version-update:semver-major"]
+
+  # ---------------------------------------------------------------------------
+  # Cargo (Rust / Tauri backend)
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "cargo"
+    directory: "/src-tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kabul"
+    open-pull-requests-limit: 6
+    rebase-strategy: "auto"
+    commit-message:
+      prefix: "chore(deps-rust)"
+    labels:
+      - "dependencies"
+      - "rust"
+    groups:
+      rust-patch-minor:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # ---------------------------------------------------------------------------
+  # GitHub Actions (workflows)
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Kabul"
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    groups:
+      github-actions:
+        patterns: ["*"]

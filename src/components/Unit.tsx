@@ -67,6 +67,10 @@ const translations = {
     to: "به",
     result: "نتیجه",
     selectUnit: "واحد را انتخاب کنید",
+    multiply: "ضرب در",
+    divide: "تقسیم بر",
+    extraOp: "عملیات دستی",
+    none: "—",
   },
 };
 
@@ -93,6 +97,8 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
   const [converterAmount, setConverterAmount] = useState("");
   const [fromUnitId, setFromUnitId] = useState<number | "">("");
   const [toUnitId, setToUnitId] = useState<number | "">("");
+  const [manualOp, setManualOp] = useState<"" | "multiply" | "divide">("");
+  const [manualFactor, setManualFactor] = useState("");
 
   // Get units available for "to" (same group as "from")
   const fromUnit = units.find((u) => u.id === fromUnitId);
@@ -101,13 +107,27 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
     : units;
 
   // Conversion: value_in_B = value_in_A * (ratio_A / ratio_B)
-  const convertedValue = (() => {
+  const baseConverted = (() => {
     const amt = parseFloat(converterAmount);
     if (Number.isNaN(amt) || fromUnitId === "" || toUnitId === "") return null;
     const fromU = units.find((u) => u.id === fromUnitId);
     const toU = units.find((u) => u.id === toUnitId);
     if (!fromU || !toU || (fromU.ratio ?? 1) === 0) return null;
     return amt * ((fromU.ratio ?? 1) / (toU.ratio ?? 1));
+  })();
+
+  // Apply manual multiply/divide to the converted value
+  const convertedValue = (() => {
+    if (baseConverted == null) return null;
+    if (manualOp === "multiply") {
+      const f = parseFloat(manualFactor);
+      return baseConverted * (Number.isNaN(f) ? 1 : f);
+    }
+    if (manualOp === "divide") {
+      const f = parseFloat(manualFactor);
+      return f != null && !Number.isNaN(f) && f !== 0 ? baseConverted / f : baseConverted;
+    }
+    return baseConverted;
   })();
 
   useEffect(() => {
@@ -259,7 +279,7 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
             </svg>
             {translations.converter.title}
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{translations.converter.amount}</label>
               <input
@@ -305,7 +325,37 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
                 ))}
               </select>
             </div>
-            <div className="sm:col-span-2 lg:col-span-1">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{translations.converter.extraOp}</label>
+              <div className="flex gap-2">
+                <select
+                  value={manualOp}
+                  onChange={(e) => {
+                    const v = e.target.value as "" | "multiply" | "divide";
+                    setManualOp(v);
+                    if (!v) setManualFactor("");
+                  }}
+                  className="flex-1 min-w-0 px-4 py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400"
+                  dir="rtl"
+                >
+                  <option value="">{translations.converter.none}</option>
+                  <option value="multiply">{translations.converter.multiply}</option>
+                  <option value="divide">{translations.converter.divide}</option>
+                </select>
+                {(manualOp === "multiply" || manualOp === "divide") && (
+                  <input
+                    type="number"
+                    step="any"
+                    value={manualFactor}
+                    onChange={(e) => setManualFactor(e.target.value)}
+                    placeholder={manualOp === "multiply" ? "×" : "÷"}
+                    className="w-24 px-3 py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400"
+                    dir="rtl"
+                  />
+                )}
+              </div>
+            </div>
+            <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{translations.converter.result}</label>
               <div
                 className="w-full px-4 py-2.5 rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/20 text-gray-900 dark:text-white font-semibold min-h-[42px] flex items-center justify-end"

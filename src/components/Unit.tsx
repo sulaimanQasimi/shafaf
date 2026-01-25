@@ -60,6 +60,14 @@ const translations = {
     nameRequired: "نام واحد الزامی است",
     groupCreate: "خطا در ایجاد گروه",
   },
+  converter: {
+    title: "تبدیل واحد",
+    amount: "مقدار",
+    from: "از",
+    to: "به",
+    result: "نتیجه",
+    selectUnit: "واحد را انتخاب کنید",
+  },
 };
 
 interface UnitManagementProps {
@@ -81,6 +89,26 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
     is_base: boolean;
   }>({ name: "", group_id: null, ratio: "1", is_base: false });
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  // Unit converter state
+  const [converterAmount, setConverterAmount] = useState("");
+  const [fromUnitId, setFromUnitId] = useState<number | "">("");
+  const [toUnitId, setToUnitId] = useState<number | "">("");
+
+  // Get units available for "to" (same group as "from")
+  const fromUnit = units.find((u) => u.id === fromUnitId);
+  const toUnits = fromUnit?.group_id != null
+    ? units.filter((u) => u.group_id === fromUnit.group_id)
+    : units;
+
+  // Conversion: value_in_B = value_in_A * (ratio_A / ratio_B)
+  const convertedValue = (() => {
+    const amt = parseFloat(converterAmount);
+    if (Number.isNaN(amt) || fromUnitId === "" || toUnitId === "") return null;
+    const fromU = units.find((u) => u.id === fromUnitId);
+    const toU = units.find((u) => u.id === toUnitId);
+    if (!fromU || !toU || (fromU.ratio ?? 1) === 0) return null;
+    return amt * ((fromU.ratio ?? 1) / (toU.ratio ?? 1));
+  })();
 
   useEffect(() => {
     loadUnits();
@@ -218,6 +246,83 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
             }
           ]}
         />
+
+        {/* Unit Converter */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-lg border border-indigo-100 dark:border-indigo-900/30 p-6 mb-6"
+        >
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            {translations.converter.title}
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{translations.converter.amount}</label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={converterAmount}
+                onChange={(e) => setConverterAmount(e.target.value)}
+                placeholder="۰"
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400"
+                dir="rtl"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{translations.converter.from}</label>
+              <select
+                value={fromUnitId === "" ? "" : fromUnitId}
+                onChange={(e) => {
+                  const v = e.target.value === "" ? "" : Number(e.target.value);
+                  setFromUnitId(v);
+                  setToUnitId("");
+                }}
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400"
+                dir="rtl"
+              >
+                <option value="">{translations.converter.selectUnit}</option>
+                {units.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}{u.group_name ? ` (${u.group_name})` : ""}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{translations.converter.to}</label>
+              <select
+                value={toUnitId === "" ? "" : toUnitId}
+                onChange={(e) => setToUnitId(e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400"
+                dir="rtl"
+              >
+                <option value="">{translations.converter.selectUnit}</option>
+                {toUnits.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}{u.group_name ? ` (${u.group_name})` : ""}</option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{translations.converter.result}</label>
+              <div
+                className="w-full px-4 py-2.5 rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/20 text-gray-900 dark:text-white font-semibold min-h-[42px] flex items-center justify-end"
+                dir="rtl"
+              >
+                {convertedValue != null
+                  ? convertedValue.toLocaleString("fa-IR", { minimumFractionDigits: 0, maximumFractionDigits: 6 })
+                  : "—"}
+              </div>
+              {convertedValue != null && toUnitId !== "" && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-left">
+                  {units.find((u) => u.id === toUnitId)?.name}
+                </p>
+              )}
+            </div>
+          </div>
+        </motion.div>
 
         {loading && units.length === 0 ? (
           <div className="flex justify-center items-center h-64">

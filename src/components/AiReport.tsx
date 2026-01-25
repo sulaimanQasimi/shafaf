@@ -200,33 +200,37 @@ export default function AiReport({ onBack }: AiReportProps) {
         });
       }
 
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 250));
+
+      const PDF_STYLE = `
+        * { background-image: none !important; box-sizing: border-box !important; }
+        [class*="gradient"], [class*="from-"], [class*="to-"] { background: #e5e7eb !important; background-color: #e5e7eb !important; }
+        html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; width: 210mm !important; overflow: visible !important; }
+        [data-pdf-root] { width: 210mm !important; max-width: 100% !important; margin: 0 auto !important; padding: 15mm !important; background: #fff !important; }
+        [data-pdf-root] h2 { font-size: 18pt !important; margin: 0 0 10px 0 !important; color: #111 !important; }
+        [data-pdf-root] h3 { font-size: 14pt !important; margin: 14px 0 8px 0 !important; color: #333 !important; }
+        [data-pdf-root] p { font-size: 11pt !important; margin: 0 0 8px 0 !important; color: #444 !important; line-height: 1.5 !important; }
+        [data-pdf-root] table { width: 100% !important; border-collapse: collapse !important; font-size: 10pt !important; table-layout: auto !important; }
+        [data-pdf-root] th, [data-pdf-root] td { border: 1px solid #ccc !important; padding: 8px 10px !important; text-align: right !important; color: #222 !important; }
+        [data-pdf-root] th { background: #f5f5f5 !important; font-weight: 600 !important; }
+        [data-pdf-root] [class*="overflow-x-auto"] { overflow: visible !important; }
+      `;
 
       let canvas: HTMLCanvasElement;
       try {
         canvas = await html2canvas(reportRef.current, {
-          scale: 2,
+          scale: 3,
           useCORS: true,
           logging: false,
           backgroundColor: "#ffffff",
           onclone: (clonedDoc) => {
-            clonedDoc.querySelectorAll("style, link[rel='stylesheet']").forEach((s) => {
-              if (s.textContent?.includes("oklch") || (s as HTMLLinkElement).href?.includes("tailwind")) s.remove();
+            clonedDoc.querySelectorAll("style").forEach((s) => {
+              if (s.textContent?.includes("oklch")) s.remove();
             });
-            clonedDoc.querySelectorAll("*").forEach((el) => {
-              const htmlEl = el as HTMLElement;
-              try {
-                const bg = (htmlEl.style && htmlEl.style.background) || "";
-                if (bg.includes("oklch")) {
-                  htmlEl.style.background = "#f8fafc";
-                  htmlEl.style.backgroundColor = "#f8fafc";
-                  htmlEl.style.backgroundImage = "none";
-                }
-                if (htmlEl.className) {
-                  htmlEl.className = htmlEl.className.split(" ").filter((c) => !/gradient|from-|to-/.test(c)).join(" ");
-                }
-              } catch (_) {}
-            });
+            const pdfStyle = clonedDoc.createElement("style");
+            pdfStyle.textContent = PDF_STYLE;
+            const target = clonedDoc.head || clonedDoc.documentElement;
+            if (target) target.insertBefore(pdfStyle, target.firstChild);
           },
         });
       } catch (err) {
@@ -234,15 +238,29 @@ export default function AiReport({ onBack }: AiReportProps) {
         const clone = reportRef.current.cloneNode(true) as HTMLElement;
         clone.style.position = "absolute";
         clone.style.left = "-9999px";
-        document.body.appendChild(clone);
+        clone.style.top = "0";
+        clone.style.width = "210mm";
+        clone.style.background = "#fff";
         clone.querySelectorAll("*").forEach((el) => {
           const htmlEl = el as HTMLElement;
-          htmlEl.className = (htmlEl.className || "").split(" ").filter((c) => !/gradient|from-|to-|hover/.test(c)).join(" ");
+          if (/gradient|from-|to-/.test(htmlEl.className || "")) {
+            htmlEl.className = (htmlEl.className || "").split(" ").filter((c) => !/gradient|from-|to-|hover/.test(c)).join(" ");
+            htmlEl.style.background = "#e5e7eb";
+            htmlEl.style.backgroundColor = "#e5e7eb";
+            htmlEl.style.backgroundImage = "none";
+          }
         });
+        document.body.appendChild(clone);
+        const override = document.createElement("style");
+        override.id = "pdf-fallback-override";
+        override.textContent = PDF_STYLE;
+        document.head.appendChild(override);
         try {
-          canvas = await html2canvas(clone, { scale: 2, useCORS: true, logging: false, backgroundColor: "#ffffff" });
+          canvas = await html2canvas(clone, { scale: 3, useCORS: true, logging: false, backgroundColor: "#ffffff" });
         } finally {
           document.body.removeChild(clone);
+          const o = document.getElementById("pdf-fallback-override");
+          if (o) o.remove();
         }
       }
 
@@ -256,12 +274,13 @@ export default function AiReport({ onBack }: AiReportProps) {
         if (i > 0) pdf.addPage();
         const ySrc = (i * pageHeightMm / totalHeightMm) * canvas.height;
         const hSrc = Math.min((pageHeightMm / totalHeightMm) * canvas.height, canvas.height - ySrc);
+        const imgHeightMm = Math.min(pageHeightMm, (hSrc / canvas.width) * imgWidthMm);
         const temp = document.createElement("canvas");
         temp.width = canvas.width;
         temp.height = hSrc;
         const ctx = temp.getContext("2d")!;
         ctx.drawImage(canvas, 0, ySrc, canvas.width, hSrc, 0, 0, canvas.width, hSrc);
-        pdf.addImage(temp.toDataURL("image/png"), "PNG", 0, 0, imgWidthMm, pageHeightMm);
+        pdf.addImage(temp.toDataURL("image/png"), "PNG", 0, 0, imgWidthMm, imgHeightMm);
       }
 
       const dateStr = new Date().toISOString().slice(0, 10);
@@ -473,7 +492,7 @@ export default function AiReport({ onBack }: AiReportProps) {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <div ref={reportRef} className="space-y-8">
+              <div ref={reportRef} className="space-y-8" data-pdf-root>
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{report.title}</h2>
                   {report.summary && (

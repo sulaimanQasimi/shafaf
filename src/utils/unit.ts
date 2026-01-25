@@ -3,6 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 export interface Unit {
   id: number;
   name: string;
+  group_id?: number | null;
+  ratio: number;
+  is_base: boolean;
+  group_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -18,11 +22,22 @@ export async function initUnitsTable(): Promise<string> {
 /**
  * Create a new unit
  * @param name Unit name (in Persian/Dari)
+ * @param groupId Optional unit group ID
+ * @param ratio Conversion ratio to base unit (default 1)
+ * @param isBase Whether this is the base unit in its group (default false)
  * @returns Promise with Unit
  */
-export async function createUnit(name: string): Promise<Unit> {
+export async function createUnit(
+  name: string,
+  groupId?: number | null,
+  ratio?: number,
+  isBase?: boolean
+): Promise<Unit> {
   return await invoke<Unit>("create_unit", {
     name,
+    groupId: groupId ?? null,
+    ratio: ratio ?? 1,
+    isBase: isBase ?? false,
   });
 }
 
@@ -38,12 +53,24 @@ export async function getUnits(): Promise<Unit[]> {
  * Update a unit
  * @param id Unit ID
  * @param name Unit name (in Persian/Dari)
+ * @param groupId Optional unit group ID
+ * @param ratio Conversion ratio to base unit (default 1)
+ * @param isBase Whether this is the base unit in its group (default false)
  * @returns Promise with Unit
  */
-export async function updateUnit(id: number, name: string): Promise<Unit> {
+export async function updateUnit(
+  id: number,
+  name: string,
+  groupId?: number | null,
+  ratio?: number,
+  isBase?: boolean
+): Promise<Unit> {
   return await invoke<Unit>("update_unit", {
     id,
     name,
+    groupId: groupId ?? null,
+    ratio: ratio ?? 1,
+    isBase: isBase ?? false,
   });
 }
 

@@ -9,6 +9,12 @@ import {
   deleteUnit,
   type Unit,
 } from "../utils/unit";
+import {
+  initUnitGroupsTable,
+  getUnitGroups,
+  createUnitGroup,
+  type UnitGroup,
+} from "../utils/unit_group";
 import { isDatabaseOpen, openDatabase } from "../utils/db";
 import Footer from "./Footer";
 import PageHeader from "./common/PageHeader";
@@ -28,11 +34,23 @@ const translations = {
   noUnits: "هیچ واحدی ثبت نشده است",
   confirmDelete: "آیا از حذف این واحد اطمینان دارید؟",
   backToDashboard: "بازگشت به داشبورد",
+  placeholders: {
+    name: "نام واحد را وارد کنید (مثال: کیلوگرم، متر، عدد)",
+    unitGroupName: "نام گروه (مثال: وزن، طول)",
+    ratio: "۱",
+  },
+  group: "گروه",
+  ratio: "نسبت",
+  isBase: "واحد پایه",
+  addGroup: "افزودن گروه",
+  baseBadge: "پایه",
+  noGroup: "—",
   success: {
     created: "واحد با موفقیت ایجاد شد",
     updated: "واحد با موفقیت بروزرسانی شد",
     deleted: "واحد با موفقیت حذف شد",
     tableInit: "جدول واحدها با موفقیت ایجاد شد",
+    groupCreated: "گروه با موفقیت اضافه شد",
   },
   errors: {
     create: "خطا در ایجاد واحد",
@@ -40,9 +58,7 @@ const translations = {
     delete: "خطا در حذف واحد",
     fetch: "خطا در دریافت واحدها",
     nameRequired: "نام واحد الزامی است",
-  },
-  placeholders: {
-    name: "نام واحد را وارد کنید (مثال: کیلوگرم، متر، عدد)",
+    groupCreate: "خطا در ایجاد گروه",
   },
 };
 
@@ -52,10 +68,18 @@ interface UnitManagementProps {
 
 export default function UnitManagement({ onBack }: UnitManagementProps) {
   const [units, setUnits] = useState<Unit[]>([]);
+  const [unitGroups, setUnitGroups] = useState<UnitGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAddGroupModalOpen, setIsAddGroupModalOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
-  const [formData, setFormData] = useState({ name: "" });
+  const [formData, setFormData] = useState<{
+    name: string;
+    group_id: number | null;
+    ratio: string;
+    is_base: boolean;
+  }>({ name: "", group_id: null, ratio: "1", is_base: false });
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   useEffect(() => {
@@ -71,13 +95,19 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
       }
 
       try {
+        await initUnitGroupsTable();
+      } catch (err) {
+        console.log("Unit groups table initialization:", err);
+      }
+      try {
         await initUnitsTable();
       } catch (err) {
-        console.log("Table initialization:", err);
+        console.log("Units table initialization:", err);
       }
 
-      const data = await getUnits();
-      setUnits(data);
+      const [unitsData, groupsData] = await Promise.all([getUnits(), getUnitGroups()]);
+      setUnits(unitsData);
+      setUnitGroups(groupsData);
     } catch (error: any) {
       toast.error(translations.errors.fetch);
       console.error("Error loading units:", error);
@@ -89,10 +119,15 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
   const handleOpenModal = (unit?: Unit) => {
     if (unit) {
       setEditingUnit(unit);
-      setFormData({ name: unit.name });
+      setFormData({
+        name: unit.name,
+        group_id: unit.group_id ?? null,
+        ratio: String(unit.ratio ?? 1),
+        is_base: unit.is_base ?? false,
+      });
     } else {
       setEditingUnit(null);
-      setFormData({ name: "" });
+      setFormData({ name: "", group_id: null, ratio: "1", is_base: false });
     }
     setIsModalOpen(true);
   };
@@ -100,7 +135,23 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingUnit(null);
-    setFormData({ name: "" });
+    setFormData({ name: "", group_id: null, ratio: "1", is_base: false });
+  };
+
+  const handleAddGroup = async () => {
+    if (!newGroupName.trim()) return;
+    try {
+      const g = await createUnitGroup(newGroupName.trim());
+      const groups = await getUnitGroups();
+      setUnitGroups(groups);
+      setFormData((prev) => ({ ...prev, group_id: g.id }));
+      setNewGroupName("");
+      setIsAddGroupModalOpen(false);
+      toast.success(translations.success.groupCreated);
+    } catch (e) {
+      toast.error(translations.errors.groupCreate);
+      console.error(e);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,11 +164,18 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
 
     try {
       setLoading(true);
+      const ratio = parseFloat(formData.ratio) || 1;
       if (editingUnit) {
-        await updateUnit(editingUnit.id, formData.name);
+        await updateUnit(
+          editingUnit.id,
+          formData.name,
+          formData.group_id,
+          ratio,
+          formData.is_base
+        );
         toast.success(translations.success.updated);
       } else {
-        await createUnit(formData.name);
+        await createUnit(formData.name, formData.group_id, ratio, formData.is_base);
         toast.success(translations.success.created);
       }
       handleCloseModal();
@@ -220,10 +278,19 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
                         </svg>
                       </div>
                       <div>
-                        <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                          {unit.name}
-                        </h3>
-                        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-500">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+                            {unit.name}
+                          </h3>
+                          {(unit.is_base ?? false) && (
+                            <span className="px-2 py-0.5 text-xs font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 rounded-lg">
+                              {translations.baseBadge}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-500 mt-1 flex-wrap">
+                          <span>{unit.group_name ?? translations.noGroup}</span>
+                          <span>نسبت: {unit.ratio ?? 1}</span>
                           <div className="flex items-center gap-1">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -298,6 +365,72 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
                       placeholder={translations.placeholders.name}
                       dir="rtl"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      {translations.group}
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={formData.group_id ?? ""}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            group_id: e.target.value === "" ? null : Number(e.target.value),
+                          })
+                        }
+                        className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                        dir="rtl"
+                      >
+                        <option value="">{translations.noGroup}</option>
+                        {unitGroups.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))}
+                      </select>
+                      <motion.button
+                        type="button"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setIsAddGroupModalOpen(true)}
+                        className="px-4 py-3 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white rounded-xl font-semibold whitespace-nowrap"
+                      >
+                        + {translations.addGroup}
+                      </motion.button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      {translations.ratio}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={formData.ratio}
+                      onChange={(e) => setFormData({ ...formData, ratio: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                      placeholder={translations.placeholders.ratio}
+                      dir="rtl"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="unit-is-base"
+                      checked={formData.is_base}
+                      onChange={(e) =>
+                        setFormData({ ...formData, is_base: e.target.checked })
+                      }
+                      className="w-5 h-5 rounded border-2 border-gray-200 dark:border-gray-600 text-purple-600 focus:ring-purple-500"
+                    />
+                    <label
+                      htmlFor="unit-is-base"
+                      className="text-sm font-semibold text-gray-700 dark:text-gray-300"
+                    >
+                      {translations.isBase}
+                    </label>
                   </div>
                   <div className="flex gap-3 pt-4">
                     <motion.button
@@ -410,6 +543,60 @@ export default function UnitManagement({ onBack }: UnitManagementProps) {
                         {translations.delete}
                       </span>
                     )}
+                  </motion.button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Add Group Modal */}
+        <AnimatePresence>
+          {isAddGroupModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+              onClick={() => { setIsAddGroupModalOpen(false); setNewGroupName(""); }}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 w-full max-w-sm"
+              >
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                  {translations.addGroup}
+                </h2>
+                <input
+                  type="text"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder={translations.placeholders.unitGroupName}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 mb-6"
+                  dir="rtl"
+                />
+                <div className="flex gap-3">
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => { setIsAddGroupModalOpen(false); setNewGroupName(""); }}
+                    className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white font-bold rounded-xl"
+                  >
+                    {translations.cancel}
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleAddGroup}
+                    disabled={!newGroupName.trim()}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {translations.save}
                   </motion.button>
                 </div>
               </motion.div>

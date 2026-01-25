@@ -1325,11 +1325,98 @@ fn delete_customer(
     Ok("Customer deleted successfully".to_string())
 }
 
+// UnitGroup Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnitGroup {
+    pub id: i64,
+    pub name: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Initialize unit_groups table schema
+#[tauri::command]
+fn init_unit_groups_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let create_table_sql = "
+        CREATE TABLE IF NOT EXISTS unit_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ";
+
+    db.execute(create_table_sql, &[])
+        .map_err(|e| format!("Failed to create unit_groups table: {}", e))?;
+
+    Ok("Unit groups table initialized successfully".to_string())
+}
+
+/// Get all unit groups
+#[tauri::command]
+fn get_unit_groups(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<UnitGroup>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let sql = "SELECT id, name, created_at, updated_at FROM unit_groups ORDER BY name ASC";
+    let groups = db
+        .query(sql, &[], |row| {
+            Ok(UnitGroup {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch unit groups: {}", e))?;
+
+    Ok(groups)
+}
+
+/// Create a new unit group
+#[tauri::command]
+fn create_unit_group(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    name: String,
+) -> Result<UnitGroup, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    let insert_sql = "INSERT INTO unit_groups (name) VALUES (?)";
+    db.execute(insert_sql, &[&name as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to insert unit group: {}", e))?;
+
+    let group_sql = "SELECT id, name, created_at, updated_at FROM unit_groups WHERE name = ?";
+    let groups = db
+        .query(group_sql, &[&name as &dyn rusqlite::ToSql], |row| {
+            Ok(UnitGroup {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch unit group: {}", e))?;
+
+    if let Some(g) = groups.first() {
+        Ok(g.clone())
+    } else {
+        Err("Failed to retrieve created unit group".to_string())
+    }
+}
+
 // Unit Model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Unit {
     pub id: i64,
     pub name: String,
+    pub group_id: Option<i64>,
+    pub ratio: f64,
+    pub is_base: bool,
+    pub group_name: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -1344,6 +1431,9 @@ fn init_units_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
         CREATE TABLE IF NOT EXISTS units (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
+            group_id INTEGER REFERENCES unit_groups(id),
+            ratio REAL NOT NULL DEFAULT 1.0,
+            is_base INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -1351,6 +1441,16 @@ fn init_units_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
 
     db.execute(create_table_sql, &[])
         .map_err(|e| format!("Failed to create units table: {}", e))?;
+
+    // Add new columns for existing databases
+    let alter_sqls = vec![
+        "ALTER TABLE units ADD COLUMN group_id INTEGER",
+        "ALTER TABLE units ADD COLUMN ratio REAL NOT NULL DEFAULT 1.0",
+        "ALTER TABLE units ADD COLUMN is_base INTEGER NOT NULL DEFAULT 0",
+    ];
+    for alter_sql in alter_sqls {
+        let _ = db.execute(alter_sql, &[]);
+    }
 
     Ok("Units table initialized successfully".to_string())
 }
@@ -1360,17 +1460,27 @@ fn init_units_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
 fn create_unit(
     db_state: State<'_, Mutex<Option<Database>>>,
     name: String,
+    group_id: Option<i64>,
+    ratio: f64,
+    is_base: bool,
 ) -> Result<Unit, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    // Insert new unit
-    let insert_sql = "INSERT INTO units (name) VALUES (?)";
-    db.execute(insert_sql, &[&name as &dyn rusqlite::ToSql])
-        .map_err(|e| format!("Failed to insert unit: {}", e))?;
+    let is_base_int: i32 = if is_base { 1 } else { 0 };
+    let insert_sql = "INSERT INTO units (name, group_id, ratio, is_base) VALUES (?, ?, ?, ?)";
+    db.execute(
+        insert_sql,
+        &[
+            &name as &dyn rusqlite::ToSql,
+            &group_id as &dyn rusqlite::ToSql,
+            &ratio as &dyn rusqlite::ToSql,
+            &is_base_int as &dyn rusqlite::ToSql,
+        ],
+    )
+    .map_err(|e| format!("Failed to insert unit: {}", e))?;
 
-    // Get the created unit
-    let unit_sql = "SELECT id, name, created_at, updated_at FROM units WHERE name = ?";
+    let unit_sql = "SELECT u.id, u.name, u.created_at, u.updated_at, u.group_id, u.ratio, u.is_base, g.name FROM units u LEFT JOIN unit_groups g ON u.group_id = g.id WHERE u.name = ? ORDER BY u.id DESC LIMIT 1";
     let units = db
         .query(unit_sql, &[&name as &dyn rusqlite::ToSql], |row| {
             Ok(Unit {
@@ -1378,6 +1488,10 @@ fn create_unit(
                 name: row.get(1)?,
                 created_at: row.get(2)?,
                 updated_at: row.get(3)?,
+                group_id: row.get(4)?,
+                ratio: row.get(5)?,
+                is_base: row.get::<_, i32>(6)? != 0,
+                group_name: row.get(7)?,
             })
         })
         .map_err(|e| format!("Failed to fetch unit: {}", e))?;
@@ -1395,7 +1509,7 @@ fn get_units(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Unit>, 
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, name, created_at, updated_at FROM units ORDER BY name ASC";
+    let sql = "SELECT u.id, u.name, u.created_at, u.updated_at, u.group_id, u.ratio, u.is_base, g.name FROM units u LEFT JOIN unit_groups g ON u.group_id = g.id ORDER BY u.name ASC";
     let units = db
         .query(sql, &[], |row| {
             Ok(Unit {
@@ -1403,6 +1517,10 @@ fn get_units(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Vec<Unit>, 
                 name: row.get(1)?,
                 created_at: row.get(2)?,
                 updated_at: row.get(3)?,
+                group_id: row.get(4)?,
+                ratio: row.get(5)?,
+                is_base: row.get::<_, i32>(6)? != 0,
+                group_name: row.get(7)?,
             })
         })
         .map_err(|e| format!("Failed to fetch units: {}", e))?;
@@ -1416,17 +1534,28 @@ fn update_unit(
     db_state: State<'_, Mutex<Option<Database>>>,
     id: i64,
     name: String,
+    group_id: Option<i64>,
+    ratio: f64,
+    is_base: bool,
 ) -> Result<Unit, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    // Update unit
-    let update_sql = "UPDATE units SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
-    db.execute(update_sql, &[&name as &dyn rusqlite::ToSql, &id as &dyn rusqlite::ToSql])
-        .map_err(|e| format!("Failed to update unit: {}", e))?;
+    let is_base_int: i32 = if is_base { 1 } else { 0 };
+    let update_sql = "UPDATE units SET name = ?, group_id = ?, ratio = ?, is_base = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(
+        update_sql,
+        &[
+            &name as &dyn rusqlite::ToSql,
+            &group_id as &dyn rusqlite::ToSql,
+            &ratio as &dyn rusqlite::ToSql,
+            &is_base_int as &dyn rusqlite::ToSql,
+            &id as &dyn rusqlite::ToSql,
+        ],
+    )
+    .map_err(|e| format!("Failed to update unit: {}", e))?;
 
-    // Get the updated unit
-    let unit_sql = "SELECT id, name, created_at, updated_at FROM units WHERE id = ?";
+    let unit_sql = "SELECT u.id, u.name, u.created_at, u.updated_at, u.group_id, u.ratio, u.is_base, g.name FROM units u LEFT JOIN unit_groups g ON u.group_id = g.id WHERE u.id = ?";
     let units = db
         .query(unit_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Unit {
@@ -1434,6 +1563,10 @@ fn update_unit(
                 name: row.get(1)?,
                 created_at: row.get(2)?,
                 updated_at: row.get(3)?,
+                group_id: row.get(4)?,
+                ratio: row.get(5)?,
+                is_base: row.get::<_, i32>(6)? != 0,
+                group_name: row.get(7)?,
             })
         })
         .map_err(|e| format!("Failed to fetch unit: {}", e))?;
@@ -7312,6 +7445,9 @@ pub fn run() {
             update_purchase_item,
             delete_purchase_item,
             get_purchase_additional_costs,
+            init_unit_groups_table,
+            get_unit_groups,
+            create_unit_group,
             init_units_table,
             create_unit,
             get_units,

@@ -4,51 +4,26 @@ This guide explains how to complete the auto-updater setup after the initial con
 
 ## Prerequisites
 
-The auto-updater plugin has been configured in the codebase. You need to complete the following steps to enable automatic updates.
+The auto-updater plugin has been configured in the codebase. The signing keys have been generated and the public key has been added to `tauri.conf.json`.
 
-## Step 1: Generate Signing Keys
+## Step 1: Configure GitHub Secret
 
-The updater requires cryptographic signing keys for security. Generate them using:
+Your private key is stored in `TAURI_SIGNING_PRIVATE_KEY.txt` (this file is gitignored and should NOT be committed).
 
-```bash
-npm run tauri signer generate
-```
-
-This will:
-- Create a public key (add this to `src-tauri/tauri.conf.json` in the `updater.pubkey` field)
-- Create a private key (store this securely as a GitHub secret)
-
-**Important:** Keep the private key secure! If you lose it, you cannot publish updates to already-installed apps.
-
-## Step 2: Update tauri.conf.json
-
-After generating keys, update `src-tauri/tauri.conf.json`:
-
-1. Replace the placeholder `pubkey` value in the `updater` section with your actual public key
-2. The public key will be displayed after running `npm run tauri signer generate`
-
-Example:
-```json
-"updater": {
-  "active": true,
-  "endpoints": [
-    "https://github.com/sulaimanQasimi/shafaf/releases/latest/download/latest.json"
-  ],
-  "dialog": true,
-  "pubkey": "YOUR_ACTUAL_PUBLIC_KEY_HERE"
-}
-```
-
-## Step 3: Configure GitHub Secret
+To enable automatic signing in GitHub Actions:
 
 1. Go to your GitHub repository: https://github.com/sulaimanQasimi/shafaf
 2. Navigate to **Settings** → **Secrets and variables** → **Actions**
 3. Click **New repository secret**
 4. Name: `TAURI_SIGNING_PRIVATE_KEY`
-5. Value: Paste your private key (from step 1)
+5. Value: Copy the entire key from `TAURI_SIGNING_PRIVATE_KEY.txt` (the base64 encoded string)
 6. Click **Add secret**
 
-## Step 4: Test the Setup
+**Note:** If you set a password when generating the key, also add:
+- Name: `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+- Value: Your password
+
+## Step 2: Test the Setup
 
 1. Create a test release by pushing a version tag:
    ```bash
@@ -95,16 +70,22 @@ if (updateInfo?.available) {
 await installUpdate();
 ```
 
+## Key Files
+
+- **Public Key**: Already configured in `src-tauri/tauri.conf.json` under `updater.pubkey`
+- **Private Key**: Stored in `TAURI_SIGNING_PRIVATE_KEY.txt` (gitignored, do not commit!)
+
 ## Troubleshooting
 
 ### Updates not detected
 - Verify `latest.json` is in the release assets
-- Check that the `pubkey` in `tauri.conf.json` matches your public key
+- Check that the `pubkey` in `tauri.conf.json` is correct (already configured)
 - Ensure the version in `latest.json` is newer than the installed version
 
 ### Signing errors
-- Verify `TAURI_SIGNING_PRIVATE_KEY` secret is set correctly
-- Ensure the private key matches the public key in `tauri.conf.json`
+- Verify `TAURI_SIGNING_PRIVATE_KEY` secret is set correctly in GitHub
+- Ensure the private key in GitHub secret matches the one in `TAURI_SIGNING_PRIVATE_KEY.txt`
+- If you set a password, ensure `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secret is also configured
 
 ### Workflow fails
 - Check GitHub Actions logs for specific errors

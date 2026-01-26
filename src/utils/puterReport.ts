@@ -54,12 +54,45 @@ export interface ReportJson {
   sections: ReportSection[];
 }
 
-const SYSTEM_PROMPT = `You are a report generator for a Persian/English finance and inventory app. Use ONLY the run_query tool to fetch data. SQL must be SELECT only. Use SUM, COUNT, AVG, GROUP BY, JOIN across the tables as needed. Prefer LIMIT 500 for large listing queries.
+export interface GenerateReportOptions {
+  model?: string;
+  previousMessages?: { role: string; content: string }[];
+  refinementText?: string;
+}
+
+export interface GenerateReportResult {
+  report: ReportJson;
+  messages: { role: string; content: string }[];
+}
+
+const TABLE_WHITELIST = new Set([
+  "users", "currencies", "suppliers", "customers", "unit_groups", "units", "products",
+  "purchases", "purchase_items", "purchase_additional_costs", "purchase_payments",
+  "sales", "sale_items", "sale_payments", "sale_additional_costs", "expense_types", "expenses",
+  "employees", "salaries", "deductions", "company_settings", "coa_categories",
+  "account_currency_balances", "journal_entries", "journal_entry_lines", "currency_exchange_rates",
+  "accounts", "account_transactions"
+]);
+
+const SYSTEM_PROMPT = `You are a report generator for a Persian/English finance and inventory app.
+
+Tools:
+- Use describe_table when unsure about a table's columns before writing SQL.
+- Use run_query to fetch data. SQL must be SELECT only. If run_query returns an error, try a simpler or corrected query.
+- Use SUM, COUNT, AVG, GROUP BY, JOIN across tables. Prefer LIMIT 500 for large listings.
+
+Common joins: sales + sale_items + products (sale_items.sale_id=sales.id, sale_items.product_id=products.id); purchases + purchase_items + products; expenses + expense_types. For comparable amounts across currencies, prefer base_amount or total in base currency.
+
+Chart types: use "line" for time series, "bar" for categories, "pie"/"donut" for composition shares.
+
+If a query returns no rows, still return valid JSON: use empty rows [] and add a short summary like "در این بازه داده‌ای ثبت نشده."
+
+Privacy: do not include full_name, email, or phone in report rows unless the user explicitly asks.
 
 Database schema:
 ${REPORT_SCHEMA}
 
-Your final response must be ONLY a valid JSON object (no markdown, no \`\`\`json, no extra text) with this exact structure:
+Your final response must be ONLY a valid JSON object (no markdown, no \`\`\`json, no extra text):
 {
   "title": "string",
   "summary": "string or omit",
@@ -84,9 +117,9 @@ Your final response must be ONLY a valid JSON object (no markdown, no \`\`\`json
     }
   ]
 }
-- For table: convert query result columns/rows into columns (key=column name, label=human label) and rows as objects keyed by column.
-- For line/bar/area: categories = x-axis, series = [{name, data}].
-- For pie/donut: series[0].data = values, labels = slice labels.
+- Table: key=column name, label=human label, rows as objects keyed by column.
+- line/bar/area: categories=x-axis, series=[{name, data}]. Ensure series[0].data.length === categories.length.
+- pie/donut: series[0].data = values, labels = slice labels. Ensure labels.length === series[0].data.length.
 Respond ONLY with the JSON object.`;
 
 const RUN_QUERY_TOOL = {
@@ -102,6 +135,19 @@ const RUN_QUERY_TOOL = {
         params: { type: "string", description: "JSON array of parameters" }
       },
       required: ["sql"] as const
+    }
+  }
+};
+
+const DESCRIBE_TABLE_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "describe_table",
+    description: "Get column names and types for a table. Use when unsure about a table's schema before writing SQL.",
+    parameters: {
+      type: "object",
+      properties: { table: { type: "string", description: "Table name" } },
+      required: ["table"] as const
     }
   }
 };
@@ -130,6 +176,22 @@ async function handleRunQuery(args: { sql?: string; params?: string }): Promise<
   return JSON.stringify({ columns: res.columns, rows: res.rows });
 }
 
+async function handleDescribeTable(args: { table?: string }): Promise<string> {
+  const table = args?.table && String(args.table).trim().toLowerCase();
+  if (!table || !TABLE_WHITELIST.has(table)) {
+    return JSON.stringify({ error: "Unknown or disallowed table. Use one of: " + [...TABLE_WHITELIST].slice(0, 10).join(", ") + ", ..." });
+  }
+  try {
+    const res = await queryDatabase(`PRAGMA table_info(${table})`, []);
+    const nameIdx = res.columns.indexOf("name");
+    const typeIdx = res.columns.indexOf("type");
+    const columns = res.rows.map((row) => ({ name: nameIdx >= 0 ? row[nameIdx] : null, type: typeIdx >= 0 ? row[typeIdx] : null }));
+    return JSON.stringify({ columns });
+  } catch {
+    return JSON.stringify({ error: `Could not get schema for table: ${table}. Refer to the system schema.` });
+  }
+}
+
 function extractJson(text: string): string {
   const m = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (m) return m[1].trim();
@@ -140,19 +202,34 @@ export function isPuterAvailable(): boolean {
   return typeof window !== "undefined" && !!window.puter?.ai?.chat;
 }
 
-export async function generateReport(userPrompt: string): Promise<ReportJson> {
+export async function generateReport(
+  userPrompt: string,
+  options?: GenerateReportOptions
+): Promise<GenerateReportResult> {
   const puter = (typeof window !== "undefined" && window.puter) || undefined;
   if (!puter?.ai?.chat) {
     throw new Error("Puter SDK بارگذاری نشده. شناسه اپ و توکن Puter را وارد کرده و «اعمال» بزنید.");
   }
 
-  const messages: { role: string; content: string }[] = [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: userPrompt }
-  ];
+  let messages: { role: string; content: string }[];
 
-  const tools = [RUN_QUERY_TOOL];
-  let response = await puter.ai.chat(messages, { tools });
+  if (options?.previousMessages?.length && options?.refinementText) {
+    messages = [
+      ...options.previousMessages,
+      { role: "user", content: `بر اساس گزارش قبلی، این تغییر را اعمال کن: ${options.refinementText}` }
+    ];
+  } else {
+    messages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: userPrompt }
+    ];
+  }
+
+  const tools = [RUN_QUERY_TOOL, DESCRIBE_TABLE_TOOL];
+  const chatOpts: { tools: unknown[]; model?: string } = { tools };
+  if (options?.model) chatOpts.model = options.model;
+
+  let response = await puter.ai.chat(messages, chatOpts);
 
   while (response?.message?.tool_calls?.length) {
     const msg = response.message;
@@ -161,18 +238,31 @@ export async function generateReport(userPrompt: string): Promise<ReportJson> {
     messages.push(assistantMsg as { role: string; content: string });
 
     for (const tc of msg.tool_calls ?? []) {
-      if (tc.function?.name !== "run_query") continue;
-      let args: { sql?: string; params?: string } = {};
-      try {
-        args = JSON.parse(tc.function.arguments || "{}");
-      } catch {
-        args = {};
+      const name = tc.function?.name;
+      let content: string;
+      if (name === "run_query") {
+        let args: { sql?: string; params?: string } = {};
+        try {
+          args = JSON.parse(tc.function.arguments || "{}");
+        } catch {
+          args = {};
+        }
+        content = await handleRunQuery(args);
+      } else if (name === "describe_table") {
+        let args: { table?: string } = {};
+        try {
+          args = JSON.parse(tc.function.arguments || "{}");
+        } catch {
+          args = {};
+        }
+        content = await handleDescribeTable(args);
+      } else {
+        content = JSON.stringify({ error: "Unknown tool: " + name });
       }
-      const content = await handleRunQuery(args);
       messages.push({ role: "tool", content, tool_call_id: tc.id } as { role: string; content: string; tool_call_id: string });
     }
 
-    response = await puter.ai.chat(messages, { tools });
+    response = await puter.ai.chat(messages, chatOpts);
   }
 
   const raw = (response?.message?.content ?? response?.text ?? "").trim();
@@ -180,15 +270,36 @@ export async function generateReport(userPrompt: string): Promise<ReportJson> {
 
   const jsonStr = extractJson(raw);
   let report: ReportJson;
+
+  function tryParse(): ReportJson {
+    const parsed = JSON.parse(jsonStr) as ReportJson;
+    if (!parsed || typeof parsed.title !== "string" || !Array.isArray(parsed.sections)) {
+      throw new Error("Report must have title and sections array.");
+    }
+    return parsed;
+  }
+
   try {
-    report = JSON.parse(jsonStr) as ReportJson;
+    report = tryParse();
+    messages.push({ role: "assistant", content: raw });
   } catch (e) {
-    throw new Error(`Invalid report JSON: ${(e as Error).message}. Raw: ${raw.slice(0, 500)}`);
+    // Retry once: ask for valid JSON only
+    messages.push({ role: "assistant", content: raw });
+    messages.push({ role: "user", content: "پاسخ قبلی JSON معتبر نبود. فقط آبجکت JSON را بدون markdown یا متن اضافه برگردان." });
+    const retry = await puter.ai.chat(messages, chatOpts);
+    const retryRaw = (retry?.message?.content ?? retry?.text ?? "").trim();
+    if (!retryRaw) throw new Error(`Invalid report JSON: ${(e as Error).message}. Raw: ${raw.slice(0, 500)}`);
+    const retryStr = extractJson(retryRaw);
+    try {
+      report = JSON.parse(retryStr) as ReportJson;
+      if (!report || typeof report.title !== "string" || !Array.isArray(report.sections)) {
+        throw new Error("Report must have title and sections array.");
+      }
+    } catch (e2) {
+      throw new Error(`Invalid report JSON after retry: ${(e2 as Error).message}. Raw: ${retryRaw.slice(0, 500)}`);
+    }
+    messages.push({ role: "assistant", content: retryRaw });
   }
 
-  if (!report || typeof report.title !== "string" || !Array.isArray(report.sections)) {
-    throw new Error("Report must have title and sections array.");
-  }
-
-  return report;
+  return { report, messages };
 }

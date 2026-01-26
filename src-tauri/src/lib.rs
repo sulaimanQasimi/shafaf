@@ -7411,12 +7411,24 @@ pub fn run() {
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
                 // Create a new Tokio runtime for the server
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    if let Err(e) = server::start_server(app_handle).await {
-                        eprintln!("Failed to start AI server: {}", e);
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        rt.block_on(async {
+                            match server::start_server(app_handle).await {
+                                Ok(_) => {
+                                    println!("✅ AI server started successfully");
+                                }
+                                Err(e) => {
+                                    eprintln!("❌ Failed to start AI server: {}", e);
+                                    eprintln!("   The server will not be available at http://127.0.0.1:5021/ai.html");
+                                }
+                            }
+                        });
                     }
-                });
+                    Err(e) => {
+                        eprintln!("❌ Failed to create Tokio runtime for AI server: {}", e);
+                    }
+                }
             });
             Ok(())
         })

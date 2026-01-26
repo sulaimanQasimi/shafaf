@@ -8,9 +8,13 @@ use axum::{
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
+// Embed ai.html content at compile time for production
+// In development, try to read from file first, fallback to embedded
+const EMBEDDED_AI_HTML: &str = include_str!("../../ai.html");
+
 /// Start the HTTP server on port 5021 to serve ai.html
 pub async fn start_server(app_handle: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    // Try to find ai.html in multiple locations
+    // Try to find ai.html in multiple locations (for development)
     let resource_dir = app_handle
         .path()
         .resource_dir()
@@ -33,27 +37,29 @@ pub async fn start_server(app_handle: AppHandle) -> Result<(), Box<dyn std::erro
         resource_dir.as_ref().map(|p| p.join("ai.html")),
         // Production: executable directory
         exe_dir.as_ref().map(|p| p.join("ai.html")),
-        // Fallback: current directory
-        Some(PathBuf::from("ai.html")),
+        // Production: resources subdirectory (Windows)
+        exe_dir.as_ref().map(|p| p.join("resources").join("ai.html")),
     ]
     .into_iter()
     .flatten()
     .collect();
 
-    let ai_html_path = possible_paths
+    // Try to read from file first (for development/hot-reload)
+    let ai_html_content = possible_paths
         .iter()
         .find(|p| p.exists())
-        .ok_or_else(|| {
-            let searched: Vec<String> = possible_paths.iter()
-                .map(|p| p.to_string_lossy().to_string())
-                .collect();
-            format!("ai.html not found. Searched: {:?}", searched)
-        })?;
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .unwrap_or_else(|| {
+            // Fallback to embedded content (for production)
+            println!("📄 Using embedded ai.html content");
+            EMBEDDED_AI_HTML.to_string()
+        });
 
-    let ai_html_content = std::fs::read_to_string(ai_html_path)
-        .map_err(|e| format!("Failed to read ai.html from {:?}: {}", ai_html_path, e))?;
-
-    println!("📄 Serving ai.html from: {:?}", ai_html_path);
+    if let Some(path) = possible_paths.iter().find(|p| p.exists()) {
+        println!("📄 Serving ai.html from file: {:?}", path);
+    } else {
+        println!("📄 Serving embedded ai.html content");
+    }
 
     // Create the router
     let app = Router::new()
@@ -62,11 +68,27 @@ pub async fn start_server(app_handle: AppHandle) -> Result<(), Box<dyn std::erro
         .with_state(ai_html_content.clone());
 
     // Bind to localhost:5021
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:5021").await?;
+    let bind_addr = "127.0.0.1:5021";
+    let listener = match tokio::net::TcpListener::bind(bind_addr).await {
+        Ok(listener) => {
+            println!("🚀 AI server started at http://{}/ai.html", bind_addr);
+            listener
+        }
+        Err(e) => {
+            eprintln!("❌ Failed to bind to {}: {}", bind_addr, e);
+            eprintln!("   This might be because:");
+            eprintln!("   - The port is already in use");
+            eprintln!("   - You don't have permission to bind to this port");
+            eprintln!("   - A firewall is blocking the connection");
+            return Err(Box::new(e));
+        }
+    };
     
-    println!("🚀 AI server started at http://127.0.0.1:5021/ai.html");
-    
-    axum::serve(listener, app).await?;
+    // Start serving
+    if let Err(e) = axum::serve(listener, app).await {
+        eprintln!("❌ Server error: {}", e);
+        return Err(Box::new(e));
+    }
     
     Ok(())
 }

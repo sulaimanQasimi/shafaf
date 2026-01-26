@@ -14,8 +14,7 @@ pub async fn start_server(app_handle: AppHandle) -> Result<(), Box<dyn std::erro
     let resource_dir = app_handle
         .path()
         .resource_dir()
-        .ok()
-        .flatten();
+        .ok();
     
     let current_dir = std::env::current_dir().ok();
     

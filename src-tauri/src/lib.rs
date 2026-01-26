@@ -7407,12 +7407,16 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_keychain::init())
         .setup(|app| {
-            // Start the AI server in a background task
+            // Start the AI server in a background thread with its own runtime
             let app_handle = app.handle().clone();
-            tokio::spawn(async move {
-                if let Err(e) = server::start_server(app_handle).await {
-                    eprintln!("Failed to start AI server: {}", e);
-                }
+            std::thread::spawn(move || {
+                // Create a new Tokio runtime for the server
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    if let Err(e) = server::start_server(app_handle).await {
+                        eprintln!("Failed to start AI server: {}", e);
+                    }
+                });
             });
             Ok(())
         })

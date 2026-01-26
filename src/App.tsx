@@ -35,6 +35,7 @@ import AccountManagement from "./components/Account";
 import PurchasePaymentManagement from "./components/PurchasePayment";
 import SalesPaymentManagement from "./components/SalesPayment";
 import AiReport from "./components/AiReport";
+import AiCreateUpdateModal from "./components/AiCreateUpdateModal";
 import Footer from "./components/Footer";
 import "./App.css";
 import { SaleWithItems, SalePayment } from "./utils/sales";
@@ -71,7 +72,8 @@ function App() {
     units: Unit[];
     payments: SalePayment[];
   } | null>(null);
-  
+  const [aiCreateUpdateOpen, setAiCreateUpdateOpen] = useState(false);
+
   // Theme state - initialize from localStorage or system preference
   const [isDark, setIsDark] = useState(() => {
     try {
@@ -891,6 +893,29 @@ function App() {
         {/* Footer */}
         <Footer className="mt-16" />
       </main>
+
+      {/* AI Create/Update FAB - dashboard only */}
+      <motion.button
+        onClick={() => setAiCreateUpdateOpen(true)}
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 px-4 py-3 rounded-2xl shadow-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white font-medium hover:shadow-2xl hover:scale-105 transition-all"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.98 }}
+        title="ایجاد و بروزرسانی با AI"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+        <span>ایجاد/بروزرسانی AI</span>
+      </motion.button>
+
+      <AiCreateUpdateModal
+        open={aiCreateUpdateOpen}
+        onClose={() => setAiCreateUpdateOpen(false)}
+        onSuccess={() => {
+          setAiCreateUpdateOpen(false);
+          getDashboardStats().then(setDashboardStats);
+        }}
+      />
     </div>
   );
 }

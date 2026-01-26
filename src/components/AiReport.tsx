@@ -10,14 +10,12 @@ import moment from "moment-jalaali";
 import { generateReport, type ReportJson, type ReportSection } from "../utils/puterReport";
 import { formatPersianNumber } from "../utils/dashboard";
 import { sanitizeFilename, sanitizeSheetName, formatCellForExcel } from "../utils/exportHelpers";
+import { loadPuter, isPuterAvailable, LS_PUTER_APP_ID, LS_PUTER_TOKEN, LS_PUTER_MODEL } from "../utils/puter";
 
 interface AiReportProps {
   onBack: () => void;
 }
 
-const LS_PUTER_APP_ID = "shafaf_puter_app_id";
-const LS_PUTER_TOKEN = "shafaf_puter_auth_token";
-const LS_PUTER_MODEL = "shafaf_puter_model";
 const LS_HISTORY = "shafaf_ai_report_history";
 const HISTORY_MAX = 5;
 
@@ -147,8 +145,6 @@ function ChartSection({ section, index }: { section: ReportSection; index: numbe
   );
 }
 
-const PUTER_SCRIPT_BASE = "https://js.puter.com/v2/";
-
 export default function AiReport({ onBack }: AiReportProps) {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -188,49 +184,7 @@ export default function AiReport({ onBack }: AiReportProps) {
     } catch (_) {}
   }, []);
 
-  const loadPuterWithCreds = useCallback((id: string, token: string) => {
-    if (typeof window === "undefined") return;
-    const w = window as Window & { puter?: { ai?: { chat: unknown } } };
-    if (w.puter?.ai?.chat) {
-      setPuterLoaded(true);
-      setApplying(false);
-      try {
-        localStorage.setItem(LS_PUTER_APP_ID, id);
-        localStorage.setItem(LS_PUTER_TOKEN, token);
-      } catch (_) {}
-      return;
-    }
-    const existing = document.querySelector(`script[src^="${PUTER_SCRIPT_BASE}"]`);
-    if (existing) existing.remove();
-    (window as Window & { __puterAppId?: string; __puterAuthToken?: string }).__puterAppId = id;
-    (window as Window & { __puterAuthToken?: string }).__puterAuthToken = token;
-    const params = new URLSearchParams({ appId: id, authToken: token });
-    const src = `${PUTER_SCRIPT_BASE}?${params.toString()}`;
-    const s = document.createElement("script");
-    s.src = src;
-    s.async = true;
-    s.onload = () => {
-      setApplying(false);
-      const pw = window as Window & { puter?: { ai?: { chat: unknown } } };
-      setPuterLoaded(!!pw.puter?.ai?.chat);
-      if (pw.puter?.ai?.chat) {
-        try {
-          localStorage.setItem(LS_PUTER_APP_ID, id);
-          localStorage.setItem(LS_PUTER_TOKEN, token);
-        } catch (_) {}
-      } else {
-        setError("Puter SDK بارگذاری شد ولی ai.chat در دسترس نیست.");
-      }
-    };
-    s.onerror = () => {
-      setApplying(false);
-      setError("بارگذاری Puter ناموفق بود. اتصال شبکه و مقدارهای وارد شده را بررسی کنید.");
-      setPuterLoaded(false);
-    };
-    document.body.appendChild(s);
-  }, []);
-
-  const handleApply = () => {
+  const handleApply = async () => {
     const id = appId.trim();
     const token = authToken.trim();
     if (!id || !token) {
@@ -240,13 +194,18 @@ export default function AiReport({ onBack }: AiReportProps) {
     setError(null);
     setApplying(true);
     setPuterLoaded(false);
-    loadPuterWithCreds(id, token);
+    const ok = await loadPuter(id, token);
+    setApplying(false);
+    if (ok) {
+      setPuterLoaded(true);
+    } else {
+      setError("بارگذاری Puter ناموفق بود یا ai.chat در دسترس نیست. اتصال شبکه و مقدارهای وارد شده را بررسی کنید.");
+    }
   };
 
   useEffect(() => {
     if (puterLoaded) return;
-    const w = window as Window & { puter?: { ai?: { chat: unknown } } };
-    if (w.puter?.ai?.chat) setPuterLoaded(true);
+    if (isPuterAvailable()) setPuterLoaded(true);
   }, [puterLoaded]);
 
   const persistHistory = useCallback((next: HistoryItem[]) => {

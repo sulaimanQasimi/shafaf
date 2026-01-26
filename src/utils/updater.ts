@@ -1,5 +1,4 @@
-import { check, onUpdaterEvent } from "@tauri-apps/plugin-updater";
-import { getCurrent } from "@tauri-apps/api/window";
+import { check } from "@tauri-apps/plugin-updater";
 
 /**
  * Check for updates and return update information
@@ -14,7 +13,7 @@ export async function checkForUpdates(): Promise<{
   try {
     const update = await check();
     
-    if (update?.available) {
+    if (update) {
       return {
         available: true,
         version: update.version,
@@ -40,34 +39,21 @@ export async function installUpdate(): Promise<void> {
   try {
     const update = await check();
     
-    if (!update?.available) {
+    if (!update) {
       throw new Error("No update available");
     }
     
-    // Listen to update events
-    await onUpdaterEvent(({ event, data }) => {
-      console.log("Updater event:", event, data);
-      
-      if (event === "ERROR") {
-        console.error("Update error:", data);
-      } else if (event === "UPTODATE") {
-        console.log("App is up to date");
-      } else if (event === "UPDATE_AVAILABLE") {
-        console.log("Update available:", data);
-      } else if (event === "DOWNLOAD_PROGRESS") {
-        console.log("Download progress:", data);
-      } else if (event === "DOWNLOADED") {
-        console.log("Update downloaded");
-      } else if (event === "INSTALLED") {
-        console.log("Update installed");
+    // Download and install the update with progress callback
+    // The app will automatically restart after installation
+    await update.downloadAndInstall((progress: { event: string; data?: any }) => {
+      if (progress.event === "Started") {
+        console.log("Update download started");
+      } else if (progress.event === "Progress") {
+        console.log(`Download progress: ${progress.data?.chunkLength || 0} bytes`);
+      } else if (progress.event === "Finished") {
+        console.log("Update downloaded and installed");
       }
     });
-    
-    // Download and install the update
-    await update.downloadAndInstall();
-    
-    // Restart the app
-    await update.installAndRestart();
   } catch (error) {
     console.error("Error installing update:", error);
     throw error;

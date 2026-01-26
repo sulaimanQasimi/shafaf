@@ -46,7 +46,7 @@ jobs:
 
       - name: Setup Tauri signing key
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Qi9WRVd0WUdmNitEcHhCL0E4MWk3SUdsbytIdzFZWHgxUXhNaVdlMmsrTUFBQkFBQUFBQUFBQUFBQUlBQUFBQTRWS2pyeTVyTkFwalFscDdPUWR1eEdqRHJWNmdQV2Rmb3dwN1NWV05ZYm9HUytsclhUelZKcUpHSWJNeDNVb1hVb21BMzJESnZkZ3ZpQ3hzcCtxQ20zRzBFWXhka3VyMEl2M3ZYY3FLNFhVVnNYVjgvMHVUZlRqU2FmYmpYMUR5WU1HL1M2QUtIN2s9Cg==' }}
+          TAURI_SIGNING_PRIVATE_KEY: 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Qi9WRVd0WUdmNitEcHhCL0E4MWk3SUdsbytIdzFZWHgxUXhNaVdlMmsrTUFBQkFBQUFBQUFBQUFBQUlBQUFBQTRWS2pyeTVyTkFwalFscDdPUWR1eEdqRHJWNmdQV2Rmb3dwN1NWV05ZYm9HUytsclhUelZKcUpHSWJNeDNVb1hVb21BMzJESnZkZ3ZpQ3hzcCtxQ20zRzBFWXhka3VyMEl2M3ZYY3FLNFhVVnNYVjgvMHVUZlRqU2FmYmpYMUR5WU1HL1M2QUtIN2s9Cg=='
         run: |
           echo "$TAURI_SIGNING_PRIVATE_KEY" > ${{ runner.temp }}/tauri-signing-key.key
           echo "Signing key configured"
@@ -58,7 +58,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Qi9WRVd0WUdmNitEcHhCL0E4MWk3SUdsbytIdzFZWHgxUXhNaVdlMmsrTUFBQkFBQUFBQUFBQUFBQUlBQUFBQTRWS2pyeTVyTkFwalFscDdPUWR1eEdqRHJWNmdQV2Rmb3dwN1NWV05ZYm9HUytsclhUelZKcUpHSWJNeDNVb1hVb21BMzJESnZkZ3ZpQ3hzcCtxQ20zRzBFWXhka3VyMEl2M3ZYY3FLNFhVVnNYVjgvMHVUZlRqU2FmYmpYMUR5WU1HL1M2QUtIN2s9Cg==' }}
+          TAURI_SIGNING_PRIVATE_KEY: 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Qi9WRVd0WUdmNitEcHhCL0E4MWk3SUdsbytIdzFZWHgxUXhNaVdlMmsrTUFBQkFBQUFBQUFBQUFBQUlBQUFBQTRWS2pyeTVyTkFwalFscDdPUWR1eEdqRHJWNmdQV2Rmb3dwN1NWV05ZYm9HUytsclhUelZKcUpHSWJNeDNVb1hVb21BMzJESnZkZ3ZpQ3hzcCtxQ20zRzBFWXhka3VyMEl2M3ZYY3FLNFhVVnNYVjgvMHVUZlRqU2FmYmpYMUR5WU1HL1M2QUtIN2s9Cg=='
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_name }}
@@ -70,9 +70,8 @@ jobs:
 
       - name: Sign installer and generate update manifest
         # SECURITY WARNING: Hardcoded private key in workflow file is a security risk!
-        # For production, use GitHub Secrets instead. This uses secret if available, otherwise falls back to hardcoded value.
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Qi9WRVd0WUdmNitEcHhCL0E4MWk3SUdsbytIdzFZWHgxUXhNaVdlMmsrTUFBQkFBQUFBQUFBQUFBQUlBQUFBQTRWS2pyeTVyTkFwalFscDdPUWR1eEdqRHJWNmdQV2Rmb3dwN1NWV05ZYm9HUytsclhUelZKcUpHSWJNeDNVb1hVb21BMzJESnZkZ3ZpQ3hzcCtxQ20zRzBFWXhka3VyMEl2M3ZYY3FLNFhVVnNYVjgvMHVUZlRqU2FmYmpYMUR5WU1HL1M2QUtIN2s9Cg==' }}
+          TAURI_SIGNING_PRIVATE_KEY_RAW: 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Qi9WRVd0WUdmNitEcHhCL0E4MWk3SUdsbytIdzFZWHgxUXhNaVdlMmsrTUFBQkFBQUFBQUFBQUFBQUlBQUFBQTRWS2pyeTVyTkFwalFscDdPUWR1eEdqRHJWNmdQV2Rmb3dwN1NWV05ZYm9HUytsclhUelZKcUpHSWJNeDNVb1hVb21BMzJESnZkZ3ZpQ3hzcCtxQ20zRzBFWXhka3VyMEl2M3ZYY3FLNFhVVnNYVjgvMHVUZlRqU2FmYmpYMUR5WU1HL1M2QUtIN2s9Cg=='
         run: |
           # Find the built installer
           $installer = Get-ChildItem -Path "src-tauri\target\release\bundle\nsis" -Filter "*.exe" | Select-Object -First 1
@@ -84,15 +83,24 @@ jobs:
           Write-Host "Found installer: $($installer.FullName)"
           
           # Verify the key is set
-          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
-            Write-Host "Error: TAURI_SIGNING_PRIVATE_KEY environment variable is not set"
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY_RAW) {
+            Write-Host "Error: TAURI_SIGNING_PRIVATE_KEY_RAW environment variable is not set"
             exit 1
           }
-          Write-Host "Private key is set (length: $($env:TAURI_SIGNING_PRIVATE_KEY.Length))"
           
           # Ensure key is trimmed and properly formatted
-          $keyContent = $env:TAURI_SIGNING_PRIVATE_KEY.Trim()
-          $env:TAURI_SIGNING_PRIVATE_KEY = $keyContent
+          $keyContent = $env:TAURI_SIGNING_PRIVATE_KEY_RAW.Trim()
+          Write-Host "Private key is set (length: $($keyContent.Length))"
+          
+          # Write key to a file (Tauri signer can read from file path or inline content)
+          $keyFilePath = "${{ runner.temp }}\tauri-signing-key.key"
+          $keyContent | Out-File -FilePath $keyFilePath -Encoding utf8 -NoNewline
+          Write-Host "Key written to file: $keyFilePath"
+          
+          # Set TAURI_SIGNING_PRIVATE_KEY to point to the file
+          # Tauri signer supports both file paths and inline content
+          $env:TAURI_SIGNING_PRIVATE_KEY = $keyFilePath
+          Write-Host "TAURI_SIGNING_PRIVATE_KEY set to file path: $keyFilePath"
           
           # Verify key format (should be base64)
           if ($keyContent.Length -lt 100) {
@@ -100,8 +108,8 @@ jobs:
           }
           
           # Sign the installer - Tauri signer reads from TAURI_SIGNING_PRIVATE_KEY env var
-          # The key should be base64-encoded content (which matches the secret format)
-          Write-Host "Signing installer with Tauri signer (key length: $($keyContent.Length))..."
+          # Can be either a file path or inline base64-encoded content
+          Write-Host "Signing installer with Tauri signer..."
           & npm run tauri signer sign "$($installer.FullName)"
           
           # Get version from tag (remove 'v' prefix)

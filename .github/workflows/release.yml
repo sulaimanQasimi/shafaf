@@ -3,11 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'  # Triggers on version tags like v6.3.2
+      - 'v*' # Triggers on version tags like v6.3.2
 
-# Required for tauri-action and action-gh-release to create/update releases.
-# If you see "Resource not accessible by integration": set Settings → Actions →
-# General → Workflow permissions to "Read and write permissions".
 permissions:
   contents: write
 
@@ -44,13 +41,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Setup Tauri signing key
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Qi9WRVd0WUdmNitEcHhCL0E4MWk3SUdsbytIdzFZWHgxUXhNaVdlMmsrTUFBQkFBQUFBQUFBQUFBQUlBQUFBQTRWS2pyeTVyTkFwalFscDdPUWR1eEdqRHJWNmdQV2Rmb3dwN1NWV05ZYm9HUytsclhUelZKcUpHSWJNeDNVb1hVb21BMzJESnZkZ3ZpQ3hzcCtxQ20zRzBFWXhka3VyMEl2M3ZYY3FLNFhVVnNYVjgvMHVUZlRqU2FmYmpYMUR5WU1HL1M2QUtIN2s9Cg=='
-        run: |
-          echo "$TAURI_SIGNING_PRIVATE_KEY" > ${{ runner.temp }}/tauri-signing-key.key
-          echo "Signing key configured"
-
       - name: Build frontend
         run: npm run build
 
@@ -58,113 +48,27 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Qi9WRVd0WUdmNitEcHhCL0E4MWk3SUdsbytIdzFZWHgxUXhNaVdlMmsrTUFBQkFBQUFBQUFBQUFBQUlBQUFBQTRWS2pyeTVyTkFwalFscDdPUWR1eEdqRHJWNmdQV2Rmb3dwN1NWV05ZYm9HUytsclhUelZKcUpHSWJNeDNVb1hVb21BMzJESnZkZ3ZpQ3hzcCtxQ20zRzBFWXhka3VyMEl2M3ZYY3FLNFhVVnNYVjgvMHVUZlRqU2FmYmpYMUR5WU1HL1M2QUtIN2s9Cg=='
+          # The Tauri CLI specifically looks for TAURI_PRIVATE_KEY for signing
+          TAURI_PRIVATE_KEY: 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Qi9WRVd0WUdmNitEcHhCL0E4MWk3SUdsbytIdzFZWHgxUXhNaVdlMmsrTUFBQkFBQUFBQUFBQUFBQUlBQUFBQTRWS2pyeTVyTkFwalFscDdPUWR1eEdqRHJWNmdQV2Rmb3dwN1NWV05ZYm9HUytsclhUelZKcUpHSWJNeDNVb1hVb21BMzJESnZkZ3ZpQ3hzcCtxQ20zRzBFWXhka3VyMEl2M3ZYY3FLNFhVVnNYVjgvMHVUZlRqU2FmYmpYMUR5WU1HL1M2QUtIN2s9Cg=='
+          TAURI_KEY_PASSWORD: "" 
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_name }}
-          releaseName: 'شفاف v${{ github.ref_name }}'
+          releaseName: 'شفاف ${{ github.ref_name }}'
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: false
           prerelease: false
+          # This creates the .sig files and latest.json automatically
+          includeUpdater: true
           args: '--bundles nsis'
 
-      - name: Sign installer and generate update manifest
-        # SECURITY WARNING: Hardcoded private key in workflow file is a security risk!
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: 'dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5ClJXUlRZMEl5Qi9WRVd0WUdmNitEcHhCL0E4MWk3SUdsbytIdzFZWHgxUXhNaVdlMmsrTUFBQkFBQUFBQUFBQUFBQUlBQUFBQTRWS2pyeTVyTkFwalFscDdPUWR1eEdqRHJWNmdQV2Rmb3dwN1NWV05ZYm9HUytsclhUelZKcUpHSWJNeDNVb1hVb21BMzJESnZkZ3ZpQ3hzcCtxQ20zRzBFWXhka3VyMEl2M3ZYY3FLNFhVVnNYVjgvMHVUZlRqU2FmYmpYMUR5WU1HL1M2QUtIN2s9Cg=='
-        run: |
-          # Find the built installer
-          $installer = Get-ChildItem -Path "src-tauri\target\release\bundle\nsis" -Filter "*.exe" | Select-Object -First 1
-          if (-not $installer) {
-            Write-Host "Installer not found"
-            exit 1
-          }
-          
-          Write-Host "Found installer: $($installer.FullName)"
-          
-          # Verify the key is set
-          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
-            Write-Host "Error: TAURI_SIGNING_PRIVATE_KEY environment variable is not set"
-            exit 1
-          }
-          
-          # Ensure key is trimmed and properly formatted
-          $keyContent = $env:TAURI_SIGNING_PRIVATE_KEY.Trim()
-          Write-Host "Private key is set (length: $($keyContent.Length))"
-          
-          # Verify key format (should be base64)
-          if ($keyContent.Length -lt 100) {
-            Write-Host "Warning: Key seems too short. Expected base64-encoded key."
-          }
-          
-          # Set the environment variable for child processes
-          # PowerShell sets env vars for current session, but we need to ensure npm inherits it
-          [Environment]::SetEnvironmentVariable("TAURI_SIGNING_PRIVATE_KEY", $keyContent, "Process")
-          
-          Write-Host "TAURI_SIGNING_PRIVATE_KEY configured (length: $($env:TAURI_SIGNING_PRIVATE_KEY.Length))"
-          
-          # Sign the installer - Tauri signer reads from TAURI_SIGNING_PRIVATE_KEY env var
-          # The env var should contain the base64-encoded key content directly
-          Write-Host "Signing installer with Tauri signer..."
-          npm run tauri signer sign "$($installer.FullName)"
-          
-          # Get version from tag (remove 'v' prefix)
-          $version = "${{ github.ref_name }}" -replace '^v', ''
-          
-          # Get installer filename
-          $installerName = $installer.Name
-          
-          # Generate signature file path
-          $sigFile = "$($installer.FullName).sig"
-          
-          # Read signature
-          $signature = ""
-          if (Test-Path $sigFile) {
-            $signature = Get-Content $sigFile -Raw
-            $signature = $signature.Trim()
-          }
-          
-          # Get download URL
-          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$installerName"
-          
-          # Get current date in ISO format
-          $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-          
-          # Create latest.json
-          $latestJson = @{
-            version = $version
-            notes = "See the assets to download this version and install."
-            pub_date = $pubDate
-            platforms = @{
-              "windows-x86_64" = @{
-                signature = $signature
-                url = $downloadUrl
-              }
-            }
-          } | ConvertTo-Json -Depth 10
-          
-          # Save latest.json
-          $latestJson | Out-File -FilePath "latest.json" -Encoding utf8
-          Write-Host "Generated latest.json"
-          Write-Host $latestJson
-
-      - name: Upload latest.json to release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: latest.json
-          fail_on_unmatched_files: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Release link
-        run: |
-          echo "::notice title=Release::https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+        run: echo "::notice title=Release::https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
 
   build-android:
     name: Build Android
     runs-on: ubuntu-latest
-    needs: [build-windows]   # Run after Windows so we add APK/AAB to the same release
+    needs: [build-windows]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -202,10 +106,10 @@ jobs:
 
       - name: Install Rust Android targets
         run: |
-          rustup target add aarch64-linux-android
-          rustup target add armv7-linux-androideabi
-          rustup target add i686-linux-android
-          rustup target add x86_64-linux-android
+          rustup target add aarch64-linux-android \
+                            armv7-linux-androideabi \
+                            i686-linux-android \
+                            x86_64-linux-android
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
@@ -213,17 +117,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Initialize Android project (if needed)
-        run: |
-          if [ ! -d "src-tauri/gen/android" ]; then
-            npm run tauri android init
-          fi
-        continue-on-error: true
-
       - name: Build frontend
         run: npm run build
 
-      - name: Create CI keystore for Android release signing
+      - name: Create CI keystore
         run: |
           mkdir -p src-tauri/gen/android
           keytool -genkeypair -v -keystore src-tauri/gen/android/ci.keystore \
@@ -241,23 +138,12 @@ jobs:
           KEY_ALIAS: shafaf
           KEY_PASSWORD: android
 
-      - name: Upload Android APK and AAB to Release
+      - name: Upload Android Assets
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
           files: |
             src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
             src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
-          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Release and APK links
-        run: |
-          echo "::notice title=Release page::https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
-          for f in src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk; do
-            [ -f "$f" ] && echo "::notice title=APK::https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$f")"
-          done
-          for f in src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab; do
-            [ -f "$f" ] && echo "::notice title=AAB (Play Store)::https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$(basename "$f")"
-          done

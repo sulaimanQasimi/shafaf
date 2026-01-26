@@ -83,9 +83,19 @@ jobs:
           
           Write-Host "Found installer: $($installer.FullName)"
           
-          # Sign the installer
-          $env:TAURI_SIGNING_PRIVATE_KEY = "$TAURI_SIGNING_PRIVATE_KEY"
-          npm run tauri signer sign "$($installer.FullName)"
+          # Verify the key is set
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            Write-Host "Error: TAURI_SIGNING_PRIVATE_KEY environment variable is not set"
+            exit 1
+          }
+          Write-Host "Private key is set (length: $($env:TAURI_SIGNING_PRIVATE_KEY.Length))"
+          
+          # Write key to file for more reliable access
+          $keyFile = "${{ runner.temp }}\tauri-signing-key.key"
+          [System.IO.File]::WriteAllText($keyFile, $env:TAURI_SIGNING_PRIVATE_KEY)
+          
+          # Sign the installer using key file
+          npx @tauri-apps/cli signer sign "$($installer.FullName)" --key-file "$keyFile"
           
           # Get version from tag (remove 'v' prefix)
           $version = "${{ github.ref_name }}" -replace '^v', ''

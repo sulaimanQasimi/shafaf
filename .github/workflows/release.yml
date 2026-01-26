@@ -44,6 +44,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Tauri signing key
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          echo "$TAURI_SIGNING_PRIVATE_KEY" > ${{ runner.temp }}/tauri-signing-key.key
+          echo "Signing key configured"
+
       - name: Build frontend
         run: npm run build
 
@@ -51,6 +59,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_name }}
@@ -59,6 +68,74 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: '--bundles nsis'
+
+      - name: Sign installer and generate update manifest
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          # Find the built installer
+          $installer = Get-ChildItem -Path "src-tauri\target\release\bundle\nsis" -Filter "*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            Write-Host "Installer not found"
+            exit 1
+          }
+          
+          Write-Host "Found installer: $($installer.FullName)"
+          
+          # Sign the installer
+          $env:TAURI_SIGNING_PRIVATE_KEY = "$TAURI_SIGNING_PRIVATE_KEY"
+          npm run tauri signer sign "$($installer.FullName)"
+          
+          # Get version from tag (remove 'v' prefix)
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          
+          # Get installer filename
+          $installerName = $installer.Name
+          
+          # Generate signature file path
+          $sigFile = "$($installer.FullName).sig"
+          
+          # Read signature
+          $signature = ""
+          if (Test-Path $sigFile) {
+            $signature = Get-Content $sigFile -Raw
+            $signature = $signature.Trim()
+          }
+          
+          # Get download URL
+          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/$installerName"
+          
+          # Get current date in ISO format
+          $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          
+          # Create latest.json
+          $latestJson = @{
+            version = $version
+            notes = "See the assets to download this version and install."
+            pub_date = $pubDate
+            platforms = @{
+              "windows-x86_64" = @{
+                signature = $signature
+                url = $downloadUrl
+              }
+            }
+          } | ConvertTo-Json -Depth 10
+          
+          # Save latest.json
+          $latestJson | Out-File -FilePath "latest.json" -Encoding utf8
+          Write-Host "Generated latest.json"
+          Write-Host $latestJson
+
+      - name: Upload latest.json to release
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: latest.json
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release link
         run: |

@@ -10,6 +10,7 @@
     "dialog:default",
     "fs:allow-read-file",
     "fs:allow-write-file",
-    "fs:scope-appdata"
+    "fs:scope-appdata",
+    "updater:default"
   ]
 }

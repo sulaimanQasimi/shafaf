@@ -26,6 +26,9 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "app", "dmg", "appimage"],
+    "resources": [
+      "../ai.html"
+    ],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",

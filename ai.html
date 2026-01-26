@@ -1,0 +1,19 @@
+<html>
+<body>
+<div>
+  <h1>
+    APP ID: <span id="app-id"></span>
+  </h1>
+  <h1>
+    APP TOKEN: <span id="app-token"></span>
+  </h1>
+</div>
+    <script src="https://js.puter.com/v2/"></script>
+    <script>
+        puter.ai.chat(`What is life?`, { model: "gpt-5-nano" }).then(puter.print);
+        document.getElementById('app-id').innerHTML = localStorage.getItem('puter.app.id');
+        document.getElementById('app-token').innerHTML = localStorage.getItem('puter.auth.token');
+    </script>
+
+</body>
+</html>

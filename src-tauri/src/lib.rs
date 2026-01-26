@@ -1,5 +1,6 @@
 mod db;
 mod license;
+mod server;
 
 use db::Database;
 use serde::{Deserialize, Serialize};
@@ -7405,6 +7406,16 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_keychain::init())
+        .setup(|app| {
+            // Start the AI server in a background task
+            let app_handle = app.handle().clone();
+            tokio::spawn(async move {
+                if let Err(e) = server::start_server(app_handle).await {
+                    eprintln!("Failed to start AI server: {}", e);
+                }
+            });
+            Ok(())
+        })
         .manage(Mutex::new(None::<Database>))
         .invoke_handler(tauri::generate_handler![
             db_create,

@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode (Tailwind v4: darkMode in tailwind.config is ignored; override dark variant) */
+@custom-variant dark (&&:where(.dark, .dark *));
+
 /* Animated blob background */
 @keyframes blob {
   0% {

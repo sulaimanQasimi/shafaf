@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 use std::path::PathBuf;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 /// Start the HTTP server on port 5021 to serve ai.html
 pub async fn start_server(app_handle: AppHandle) -> Result<(), Box<dyn std::error::Error>> {

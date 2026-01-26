@@ -14,6 +14,7 @@ import { playClickSound } from "./utils/sound";
 import { getCompanySettings, initCompanySettingsTable, type CompanySettings as CompanySettingsType } from "./utils/company";
 import { applyFont } from "./utils/fonts";
 import { isLicenseValid } from "./utils/license";
+import { checkForUpdatesOnStartup } from "./utils/updater";
 import Login from "./components/Login";
 import License from "./components/License";
 import CurrencyManagement from "./components/Currency";
@@ -114,6 +115,15 @@ function App() {
       return newValue;
     });
   };
+
+  // Check for updates on mount
+  useEffect(() => {
+    // Check for updates silently in the background
+    checkForUpdatesOnStartup().catch((error) => {
+      // Silently fail - updates are optional
+      console.log("Update check:", error);
+    });
+  }, []);
 
   // Check license validity on mount
   useEffect(() => {

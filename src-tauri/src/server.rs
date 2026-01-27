@@ -133,6 +133,19 @@ async fn store_credentials(
     // Store credentials in JSON file
     match serde_json::to_string_pretty(&credentials) {
         Ok(json) => {
+            // Ensure parent directory exists
+            if let Some(parent) = credentials_path.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    return Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .header("Content-Type", "application/json")
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body(Body::from(format!(r#"{{"error": "Failed to create directory: {}"}}"#, e)))
+                        .unwrap();
+                }
+            }
+            
+            // Write credentials file
             if let Err(e) = std::fs::write(&*credentials_path, json) {
                 return Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)

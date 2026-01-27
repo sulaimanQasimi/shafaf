@@ -14,7 +14,7 @@ import { playClickSound } from "./utils/sound";
 import { getCompanySettings, initCompanySettingsTable, type CompanySettings as CompanySettingsType } from "./utils/company";
 import { applyFont } from "./utils/fonts";
 import { isLicenseValid } from "./utils/license";
-import { checkForUpdatesOnStartup } from "./utils/updater";
+import { checkForUpdatesOnStartup, checkForUpdates, installUpdate } from "./utils/updater";
 import Login from "./components/Login";
 import License from "./components/License";
 import CurrencyManagement from "./components/Currency";
@@ -74,6 +74,13 @@ function App() {
     payments: SalePayment[];
   } | null>(null);
   const [aiCreateUpdateOpen, setAiCreateUpdateOpen] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    available: boolean;
+    version?: string;
+    date?: string;
+    body?: string;
+  } | null>(null);
 
   // Theme state - initialize from localStorage or system preference
   const [isDark, setIsDark] = useState(() => {
@@ -312,6 +319,46 @@ function App() {
       if (error.message && !error.message.includes("cancelled")) {
         toast.error("خطا در بازگردانی پایگاه داده");
       }
+    }
+  };
+
+  const handleCheckForUpdates = async () => {
+    try {
+      setCheckingUpdate(true);
+      const updateInfo = await checkForUpdates();
+      
+      if (updateInfo?.available) {
+        setUpdateInfo(updateInfo);
+        toast.success(
+          `بروزرسانی جدید موجود است! نسخه ${updateInfo.version}`,
+          {
+            duration: 5000,
+            action: {
+              label: "نصب",
+              onClick: handleInstallUpdate,
+            },
+          }
+        );
+      } else {
+        setUpdateInfo(null);
+        toast.success("شما از آخرین نسخه استفاده می‌کنید");
+      }
+    } catch (error: any) {
+      console.error("Error checking for updates:", error);
+      toast.error("خطا در بررسی بروزرسانی");
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    try {
+      toast.loading("در حال دانلود و نصب بروزرسانی...", { id: "update-install" });
+      await installUpdate();
+      toast.success("بروزرسانی با موفقیت نصب شد. برنامه در حال راه‌اندازی مجدد است...", { id: "update-install" });
+    } catch (error: any) {
+      console.error("Error installing update:", error);
+      toast.error("خطا در نصب بروزرسانی", { id: "update-install" });
     }
   };
 
@@ -577,6 +624,31 @@ function App() {
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleCheckForUpdates}
+                disabled={checkingUpdate}
+                className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:shadow-xl transition-all duration-200 group relative disabled:opacity-50 disabled:cursor-not-allowed"
+                title="بررسی بروزرسانی"
+              >
+                {checkingUpdate ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-6 h-6 border-2 border-white border-t-transparent rounded-full"
+                  />
+                ) : (
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
+                {updateInfo?.available && (
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                    <span className="text-white text-xs font-bold">!</span>
+                  </div>
+                )}
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.1 }}

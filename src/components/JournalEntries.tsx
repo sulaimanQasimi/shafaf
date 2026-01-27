@@ -444,16 +444,30 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
                                                             <input
                                                                 type="number"
                                                                 step="0.01"
-                                                                value={line.debit_amount || ''}
+                                                                min="0"
+                                                                value={line.debit_amount === 0 ? '' : line.debit_amount}
                                                                 onChange={(e) => {
-                                                                    const val = parseFloat(e.target.value) || 0;
-                                                                    updateLine(index, 'debit_amount', val);
-                                                                    if (val > 0) {
-                                                                        updateLine(index, 'credit_amount', 0);
+                                                                    const inputValue = e.target.value;
+                                                                    if (inputValue === '') {
+                                                                        updateLine(index, 'debit_amount', 0);
+                                                                    } else {
+                                                                        const val = parseFloat(inputValue);
+                                                                        if (!isNaN(val) && val >= 0) {
+                                                                            updateLine(index, 'debit_amount', val);
+                                                                            if (val > 0) {
+                                                                                updateLine(index, 'credit_amount', 0);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }}
+                                                                onBlur={(e) => {
+                                                                    if (e.target.value === '') {
+                                                                        updateLine(index, 'debit_amount', 0);
                                                                     }
                                                                 }}
                                                                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
                                                                 dir="ltr"
+                                                                placeholder="0"
                                                             />
                                                         </div>
                                                         <div className="col-span-2">
@@ -463,16 +477,30 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
                                                             <input
                                                                 type="number"
                                                                 step="0.01"
-                                                                value={line.credit_amount || ''}
+                                                                min="0"
+                                                                value={line.credit_amount === 0 ? '' : line.credit_amount}
                                                                 onChange={(e) => {
-                                                                    const val = parseFloat(e.target.value) || 0;
-                                                                    updateLine(index, 'credit_amount', val);
-                                                                    if (val > 0) {
-                                                                        updateLine(index, 'debit_amount', 0);
+                                                                    const inputValue = e.target.value;
+                                                                    if (inputValue === '') {
+                                                                        updateLine(index, 'credit_amount', 0);
+                                                                    } else {
+                                                                        const val = parseFloat(inputValue);
+                                                                        if (!isNaN(val) && val >= 0) {
+                                                                            updateLine(index, 'credit_amount', val);
+                                                                            if (val > 0) {
+                                                                                updateLine(index, 'debit_amount', 0);
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }}
+                                                                onBlur={(e) => {
+                                                                    if (e.target.value === '') {
+                                                                        updateLine(index, 'credit_amount', 0);
                                                                     }
                                                                 }}
                                                                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
                                                                 dir="ltr"
+                                                                placeholder="0"
                                                             />
                                                         </div>
                                                         <div className="col-span-2">

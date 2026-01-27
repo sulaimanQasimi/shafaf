@@ -1,6 +1,13 @@
 import { check } from "@tauri-apps/plugin-updater";
 
 /**
+ * Check if we're in development mode
+ */
+function isDevelopment(): boolean {
+  return import.meta.env.DEV || import.meta.env.MODE === "development";
+}
+
+/**
  * Check for updates and return update information
  * @returns Promise with update information or null if no update available
  */
@@ -10,6 +17,11 @@ export async function checkForUpdates(): Promise<{
   date?: string;
   body?: string;
 } | null> {
+  // Skip update check in development mode
+  if (isDevelopment()) {
+    return null;
+  }
+
   try {
     const update = await check();
     
@@ -25,7 +37,14 @@ export async function checkForUpdates(): Promise<{
     return {
       available: false,
     };
-  } catch (error) {
+  } catch (error: any) {
+    // Only log errors that aren't related to missing release files
+    const errorMessage = error?.message || String(error);
+    if (errorMessage.includes("Could not fetch") || errorMessage.includes("release JSON")) {
+      // Silently ignore - likely no releases available or network issue
+      return null;
+    }
+    // Log other errors
     console.error("Error checking for updates:", error);
     return null;
   }
@@ -65,6 +84,11 @@ export async function installUpdate(): Promise<void> {
  * This can be called from the main App component
  */
 export async function checkForUpdatesOnStartup(): Promise<void> {
+  // Skip update check in development mode
+  if (isDevelopment()) {
+    return;
+  }
+
   try {
     const updateInfo = await checkForUpdates();
     
@@ -75,7 +99,11 @@ export async function checkForUpdatesOnStartup(): Promise<void> {
       // Optionally show a notification to the user
       // This would require adding a notification system
     }
-  } catch (error) {
-    console.error("Error checking for updates on startup:", error);
+  } catch (error: any) {
+    // Only log errors that aren't related to missing release files
+    const errorMessage = error?.message || String(error);
+    if (!errorMessage.includes("Could not fetch") && !errorMessage.includes("release JSON")) {
+      console.error("Error checking for updates on startup:", error);
+    }
   }
 }

@@ -78,6 +78,7 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
         description: "",
         lines: [] as JournalEntryLineInput[],
     });
+    const [inputValues, setInputValues] = useState<{ [key: number]: { debit: string; credit: string } }>({});
 
     useEffect(() => {
         loadData();
@@ -132,6 +133,7 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
             toast.error("لطفا ابتدا ارز ایجاد کنید");
             return;
         }
+        const newIndex = formData.lines.length;
         setFormData({
             ...formData,
             lines: [
@@ -146,6 +148,10 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
                 },
             ],
         });
+        setInputValues({
+            ...inputValues,
+            [newIndex]: { debit: '', credit: '' }
+        });
     };
 
     const removeLine = (index: number) => {
@@ -153,6 +159,19 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
             ...formData,
             lines: formData.lines.filter((_, i) => i !== index),
         });
+        const newInputValues = { ...inputValues };
+        delete newInputValues[index];
+        // Reindex remaining inputs
+        const reindexed: { [key: number]: { debit: string; credit: string } } = {};
+        Object.keys(newInputValues).forEach((key) => {
+            const oldIndex = parseInt(key);
+            if (oldIndex > index) {
+                reindexed[oldIndex - 1] = newInputValues[oldIndex];
+            } else if (oldIndex < index) {
+                reindexed[oldIndex] = newInputValues[oldIndex];
+            }
+        });
+        setInputValues(reindexed);
     };
 
     const updateLine = (index: number, field: keyof JournalEntryLineInput, value: any) => {
@@ -216,6 +235,7 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
                 description: "",
                 lines: [],
             });
+            setInputValues({});
             await loadData();
         } catch (error: any) {
             toast.error(translations.errors.create);
@@ -442,27 +462,52 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
                                                                 {translations.debit}
                                                             </label>
                                                             <input
-                                                                type="number"
-                                                                step="0.01"
-                                                                min="0"
-                                                                value={line.debit_amount === 0 ? '' : line.debit_amount}
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={inputValues[index]?.debit !== undefined ? inputValues[index].debit : (line.debit_amount > 0 ? line.debit_amount.toString() : '')}
                                                                 onChange={(e) => {
                                                                     const inputValue = e.target.value;
-                                                                    if (inputValue === '') {
-                                                                        updateLine(index, 'debit_amount', 0);
-                                                                    } else {
-                                                                        const val = parseFloat(inputValue);
-                                                                        if (!isNaN(val) && val >= 0) {
-                                                                            updateLine(index, 'debit_amount', val);
-                                                                            if (val > 0) {
-                                                                                updateLine(index, 'credit_amount', 0);
+                                                                    // Allow empty string, numbers, and decimal point
+                                                                    if (inputValue === '' || /^\d*\.?\d*$/.test(inputValue)) {
+                                                                        setInputValues({
+                                                                            ...inputValues,
+                                                                            [index]: { ...inputValues[index], debit: inputValue, credit: inputValues[index]?.credit || '' }
+                                                                        });
+                                                                        
+                                                                        if (inputValue === '') {
+                                                                            updateLine(index, 'debit_amount', 0);
+                                                                        } else {
+                                                                            const val = parseFloat(inputValue);
+                                                                            if (!isNaN(val) && val >= 0) {
+                                                                                updateLine(index, 'debit_amount', val);
+                                                                                if (val > 0) {
+                                                                                    updateLine(index, 'credit_amount', 0);
+                                                                                    setInputValues({
+                                                                                        ...inputValues,
+                                                                                        [index]: { ...inputValues[index], debit: inputValue, credit: '' }
+                                                                                    });
+                                                                                }
                                                                             }
                                                                         }
                                                                     }
                                                                 }}
                                                                 onBlur={(e) => {
-                                                                    if (e.target.value === '') {
+                                                                    const inputValue = e.target.value.trim();
+                                                                    if (inputValue === '') {
                                                                         updateLine(index, 'debit_amount', 0);
+                                                                        setInputValues({
+                                                                            ...inputValues,
+                                                                            [index]: { ...inputValues[index], debit: '' }
+                                                                        });
+                                                                    } else {
+                                                                        const val = parseFloat(inputValue);
+                                                                        if (!isNaN(val) && val >= 0) {
+                                                                            updateLine(index, 'debit_amount', val);
+                                                                            setInputValues({
+                                                                                ...inputValues,
+                                                                                [index]: { ...inputValues[index], debit: val.toString() }
+                                                                            });
+                                                                        }
                                                                     }
                                                                 }}
                                                                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
@@ -475,27 +520,52 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
                                                                 {translations.credit}
                                                             </label>
                                                             <input
-                                                                type="number"
-                                                                step="0.01"
-                                                                min="0"
-                                                                value={line.credit_amount === 0 ? '' : line.credit_amount}
+                                                                type="text"
+                                                                inputMode="decimal"
+                                                                value={inputValues[index]?.credit !== undefined ? inputValues[index].credit : (line.credit_amount > 0 ? line.credit_amount.toString() : '')}
                                                                 onChange={(e) => {
                                                                     const inputValue = e.target.value;
-                                                                    if (inputValue === '') {
-                                                                        updateLine(index, 'credit_amount', 0);
-                                                                    } else {
-                                                                        const val = parseFloat(inputValue);
-                                                                        if (!isNaN(val) && val >= 0) {
-                                                                            updateLine(index, 'credit_amount', val);
-                                                                            if (val > 0) {
-                                                                                updateLine(index, 'debit_amount', 0);
+                                                                    // Allow empty string, numbers, and decimal point
+                                                                    if (inputValue === '' || /^\d*\.?\d*$/.test(inputValue)) {
+                                                                        setInputValues({
+                                                                            ...inputValues,
+                                                                            [index]: { ...inputValues[index], debit: inputValues[index]?.debit || '', credit: inputValue }
+                                                                        });
+                                                                        
+                                                                        if (inputValue === '') {
+                                                                            updateLine(index, 'credit_amount', 0);
+                                                                        } else {
+                                                                            const val = parseFloat(inputValue);
+                                                                            if (!isNaN(val) && val >= 0) {
+                                                                                updateLine(index, 'credit_amount', val);
+                                                                                if (val > 0) {
+                                                                                    updateLine(index, 'debit_amount', 0);
+                                                                                    setInputValues({
+                                                                                        ...inputValues,
+                                                                                        [index]: { ...inputValues[index], debit: '', credit: inputValue }
+                                                                                    });
+                                                                                }
                                                                             }
                                                                         }
                                                                     }
                                                                 }}
                                                                 onBlur={(e) => {
-                                                                    if (e.target.value === '') {
+                                                                    const inputValue = e.target.value.trim();
+                                                                    if (inputValue === '') {
                                                                         updateLine(index, 'credit_amount', 0);
+                                                                        setInputValues({
+                                                                            ...inputValues,
+                                                                            [index]: { ...inputValues[index], credit: '' }
+                                                                        });
+                                                                    } else {
+                                                                        const val = parseFloat(inputValue);
+                                                                        if (!isNaN(val) && val >= 0) {
+                                                                            updateLine(index, 'credit_amount', val);
+                                                                            setInputValues({
+                                                                                ...inputValues,
+                                                                                [index]: { ...inputValues[index], credit: val.toString() }
+                                                                            });
+                                                                        }
                                                                     }
                                                                 }}
                                                                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"

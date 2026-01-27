@@ -55,6 +55,12 @@ interface JournalEntriesProps {
     onBack?: () => void;
 }
 
+const getDefaultDate = () => {
+    const persianDate = getCurrentPersianDate();
+    const georgianDate = persianToGeorgian(persianDate);
+    return georgianDate || new Date().toISOString().split('T')[0];
+};
+
 export default function JournalEntries({ onBack }: JournalEntriesProps) {
     const [entries, setEntries] = useState<JournalEntry[]>([]);
     const [accounts, setAccounts] = useState<Account[]>([]);
@@ -66,8 +72,9 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
     const [page, setPage] = useState(1);
     const [perPage] = useState(10);
     const [totalItems, setTotalItems] = useState(0);
+
     const [formData, setFormData] = useState({
-        entry_date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+        entry_date: getDefaultDate(),
         description: "",
         lines: [] as JournalEntryLineInput[],
     });
@@ -121,13 +128,17 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
     };
 
     const addLine = () => {
+        if (currencies.length === 0) {
+            toast.error("لطفا ابتدا ارز ایجاد کنید");
+            return;
+        }
         setFormData({
             ...formData,
             lines: [
                 ...formData.lines,
                 {
                     account_id: 0,
-                    currency_id: currencies[0]?.id || 0,
+                    currency_id: currencies[0].id,
                     debit_amount: 0,
                     credit_amount: 0,
                     exchange_rate: 1,
@@ -166,8 +177,12 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
         // Validate all lines
         for (let i = 0; i < formData.lines.length; i++) {
             const line = formData.lines[i];
-            if (!line.account_id || !line.currency_id) {
-                toast.error(`خط ${i + 1} ناقص است`);
+            if (!line.account_id || line.account_id === 0) {
+                toast.error(`خط ${i + 1}: انتخاب حساب الزامی است`);
+                return;
+            }
+            if (!line.currency_id || line.currency_id === 0) {
+                toast.error(`خط ${i + 1}: انتخاب ارز الزامی است`);
                 return;
             }
             if (line.debit_amount === 0 && line.credit_amount === 0) {
@@ -197,7 +212,7 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
             toast.success(translations.success.created);
             setIsModalOpen(false);
             setFormData({
-                entry_date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
+                entry_date: getDefaultDate(),
                 description: "",
                 lines: [],
             });

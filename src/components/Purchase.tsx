@@ -118,6 +118,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
     supplier_id: 0,
     date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
     notes: "",
+    currency_id: 0,
     additional_costs: [] as Array<{ name: string; amount: number }>,
     items: [] as PurchaseItemInput[],
   });
@@ -187,6 +188,14 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
       setUnits(unitsData);
       setCurrencies(currenciesData);
       setAccounts(accountsData);
+      
+      // Initialize currency_id if not set and currencies are available
+      if (currenciesData.length > 0 && formData.currency_id === 0) {
+        setFormData(prev => ({
+          ...prev,
+          currency_id: currenciesData[0].id
+        }));
+      }
 
       // Load payments for all purchases
       const paymentsMap: Record<number, PurchasePayment[]> = {};
@@ -218,6 +227,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
         supplier_id: purchaseData.purchase.supplier_id,
         date: purchaseData.purchase.date,
         notes: purchaseData.purchase.notes || "",
+        currency_id: purchaseData.purchase.currency_id || 0,
         additional_costs: additionalCosts.map(cost => ({ name: cost.name, amount: cost.amount })),
         items: purchaseData.items.map(item => ({
           product_id: item.product_id,
@@ -241,6 +251,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
         supplier_id: 0,
         date: new Date().toISOString().split('T')[0],
         notes: "",
+        currency_id: currencies.length > 0 ? currencies[0].id : 0,
         additional_costs: [],
         items: [],
       });
@@ -255,6 +266,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
       supplier_id: 0,
       date: new Date().toISOString().split('T')[0],
       notes: "",
+      currency_id: currencies.length > 0 ? currencies[0].id : 0,
       additional_costs: [],
       items: [],
     });
@@ -355,6 +367,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
           formData.supplier_id,
           formData.date,
           formData.notes || null,
+          formData.currency_id || null,
           formData.additional_costs,
           formData.items
         );
@@ -364,6 +377,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
           formData.supplier_id,
           formData.date,
           formData.notes || null,
+          formData.currency_id || null,
           formData.additional_costs,
           formData.items
         );
@@ -739,7 +753,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                   {editingPurchase ? translations.edit : translations.addNew}
                 </h2>
                 <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                         {translations.supplier} <span className="text-red-500">*</span>
@@ -769,6 +783,24 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                         placeholder={translations.placeholders.date}
                         required
                       />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        ارز
+                      </label>
+                      <select
+                        value={formData.currency_id}
+                        onChange={(e) => setFormData({ ...formData, currency_id: parseInt(e.target.value) })}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 transition-all duration-200"
+                        dir="rtl"
+                      >
+                        <option value={0}>انتخاب ارز</option>
+                        {currencies.map((currency) => (
+                          <option key={currency.id} value={currency.id}>
+                            {currency.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 

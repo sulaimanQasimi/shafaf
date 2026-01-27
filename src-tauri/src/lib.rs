@@ -1979,6 +1979,7 @@ pub struct Purchase {
     pub supplier_id: i64,
     pub date: String,
     pub notes: Option<String>,
+    pub currency_id: Option<i64>,
     pub total_amount: f64,
     pub additional_cost: f64,
     pub created_at: String,
@@ -2020,11 +2021,13 @@ fn init_purchases_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<
             supplier_id INTEGER NOT NULL,
             date TEXT NOT NULL,
             notes TEXT,
+            currency_id INTEGER,
             total_amount REAL NOT NULL DEFAULT 0,
             additional_cost REAL NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+            FOREIGN KEY (currency_id) REFERENCES currencies(id)
         )
     ";
 
@@ -2034,6 +2037,10 @@ fn init_purchases_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<
     // Add additional_cost column if it doesn't exist (for existing databases)
     let alter_sql = "ALTER TABLE purchases ADD COLUMN additional_cost REAL NOT NULL DEFAULT 0";
     let _ = db.execute(alter_sql, &[]);
+    
+    // Add currency_id column if it doesn't exist (for existing databases)
+    let alter_currency_sql = "ALTER TABLE purchases ADD COLUMN currency_id INTEGER";
+    let _ = db.execute(alter_currency_sql, &[]);
 
     let create_items_table_sql = "
         CREATE TABLE IF NOT EXISTS purchase_items (
@@ -2079,6 +2086,7 @@ fn create_purchase(
     supplier_id: i64,
     date: String,
     notes: Option<String>,
+    currency_id: Option<i64>,
     additional_costs: Vec<(String, f64)>, // (name, amount)
     items: Vec<(i64, i64, f64, f64)>, // (product_id, unit_id, per_price, amount)
 ) -> Result<Purchase, String> {
@@ -2092,11 +2100,12 @@ fn create_purchase(
 
     // Insert purchase (without additional_cost column since we're using the table now)
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
-    let insert_sql = "INSERT INTO purchases (supplier_id, date, notes, total_amount) VALUES (?, ?, ?, ?)";
+    let insert_sql = "INSERT INTO purchases (supplier_id, date, notes, currency_id, total_amount) VALUES (?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
         &supplier_id as &dyn rusqlite::ToSql,
         &date as &dyn rusqlite::ToSql,
         &notes_str as &dyn rusqlite::ToSql,
+        &currency_id as &dyn rusqlite::ToSql,
         &total_amount as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to insert purchase: {}", e))?;
@@ -2138,7 +2147,7 @@ fn create_purchase(
     }
 
     // Get the created purchase (calculate additional_cost from the table for backward compatibility)
-    let purchase_sql = "SELECT id, supplier_id, date, notes, total_amount, created_at, updated_at FROM purchases WHERE id = ?";
+    let purchase_sql = "SELECT id, supplier_id, date, notes, currency_id, total_amount, created_at, updated_at FROM purchases WHERE id = ?";
     let purchases = db
         .query(purchase_sql, &[purchase_id as &dyn rusqlite::ToSql], |row| {
             Ok(Purchase {
@@ -2146,10 +2155,11 @@ fn create_purchase(
                 supplier_id: row.get(1)?,
                 date: row.get(2)?,
                 notes: row.get(3)?,
-                total_amount: row.get(4)?,
+                currency_id: row.get(4)?,
+                total_amount: row.get(5)?,
                 additional_cost: additional_costs_total, // Sum of all additional costs
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
             })
         })
         .map_err(|e| format!("Failed to fetch purchase: {}", e))?;
@@ -2218,7 +2228,7 @@ fn get_purchases(
         "ORDER BY p.date DESC, p.created_at DESC".to_string()
     };
 
-    let sql = format!("SELECT p.id, p.supplier_id, p.date, p.notes, p.total_amount, p.created_at, p.updated_at FROM purchases p {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
+    let sql = format!("SELECT p.id, p.supplier_id, p.date, p.notes, p.currency_id, p.total_amount, p.created_at, p.updated_at FROM purchases p {} {} LIMIT ? OFFSET ?", where_clause, order_clause);
     
     params.push(serde_json::Value::Number(serde_json::Number::from(per_page)));
     params.push(serde_json::Value::Number(serde_json::Number::from(offset)));
@@ -2239,10 +2249,11 @@ fn get_purchases(
                 supplier_id: row.get(1)?,
                 date: row.get(2)?,
                 notes: row.get(3)?,
-                total_amount: row.get(4)?,
+                currency_id: row.get(4)?,
+                total_amount: row.get(5)?,
                 additional_cost: 0.0, // Will be calculated from purchase_additional_costs table
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
             })
         }).map_err(|e| anyhow::anyhow!("{}", e))?;
 
@@ -2278,7 +2289,7 @@ fn get_purchase(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Get purchase
-    let purchase_sql = "SELECT id, supplier_id, date, notes, total_amount, created_at, updated_at FROM purchases WHERE id = ?";
+    let purchase_sql = "SELECT id, supplier_id, date, notes, currency_id, total_amount, created_at, updated_at FROM purchases WHERE id = ?";
     let purchases = db
         .query(purchase_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Purchase {
@@ -2286,10 +2297,11 @@ fn get_purchase(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result
                 supplier_id: row.get(1)?,
                 date: row.get(2)?,
                 notes: row.get(3)?,
-                total_amount: row.get(4)?,
+                currency_id: row.get(4)?,
+                total_amount: row.get(5)?,
                 additional_cost: 0.0, // Will be calculated from purchase_additional_costs table
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
             })
         })
         .map_err(|e| format!("Failed to fetch purchase: {}", e))?;
@@ -2334,6 +2346,7 @@ fn update_purchase(
     supplier_id: i64,
     date: String,
     notes: Option<String>,
+    currency_id: Option<i64>,
     additional_costs: Vec<(String, f64)>, // (name, amount)
     items: Vec<(i64, i64, f64, f64)>, // (product_id, unit_id, per_price, amount)
 ) -> Result<Purchase, String> {
@@ -2347,11 +2360,12 @@ fn update_purchase(
 
     // Update purchase
     let notes_str: Option<&str> = notes.as_ref().map(|s| s.as_str());
-    let update_sql = "UPDATE purchases SET supplier_id = ?, date = ?, notes = ?, total_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    let update_sql = "UPDATE purchases SET supplier_id = ?, date = ?, notes = ?, currency_id = ?, total_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
     db.execute(update_sql, &[
         &supplier_id as &dyn rusqlite::ToSql,
         &date as &dyn rusqlite::ToSql,
         &notes_str as &dyn rusqlite::ToSql,
+        &currency_id as &dyn rusqlite::ToSql,
         &total_amount as &dyn rusqlite::ToSql,
         &id as &dyn rusqlite::ToSql,
     ])
@@ -2394,7 +2408,7 @@ fn update_purchase(
     }
 
     // Get the updated purchase (calculate additional_cost from the table for backward compatibility)
-    let purchase_sql = "SELECT id, supplier_id, date, notes, total_amount, created_at, updated_at FROM purchases WHERE id = ?";
+    let purchase_sql = "SELECT id, supplier_id, date, notes, currency_id, total_amount, created_at, updated_at FROM purchases WHERE id = ?";
     let purchases = db
         .query(purchase_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(Purchase {
@@ -2402,10 +2416,11 @@ fn update_purchase(
                 supplier_id: row.get(1)?,
                 date: row.get(2)?,
                 notes: row.get(3)?,
-                total_amount: row.get(4)?,
+                currency_id: row.get(4)?,
+                total_amount: row.get(5)?,
                 additional_cost: additional_costs_total, // Sum of all additional costs
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
             })
         })
         .map_err(|e| format!("Failed to fetch purchase: {}", e))?;

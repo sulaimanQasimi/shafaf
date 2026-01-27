@@ -5,6 +5,7 @@ export interface Purchase {
   supplier_id: number;
   date: string;
   notes?: string | null;
+  currency_id?: number | null;
   total_amount: number;
   created_at: string;
   updated_at: string;
@@ -68,6 +69,7 @@ export async function initPurchasesTable(): Promise<string> {
  * @param supplier_id Supplier ID
  * @param date Purchase date
  * @param notes Optional notes
+ * @param currency_id Optional currency ID
  * @param additional_costs Array of additional costs
  * @param items Array of purchase items
  * @returns Promise with Purchase
@@ -76,6 +78,7 @@ export async function createPurchase(
   supplier_id: number,
   date: string,
   notes: string | null,
+  currency_id: number | null,
   additional_costs: PurchaseAdditionalCostInput[],
   items: PurchaseItemInput[]
 ): Promise<Purchase> {
@@ -97,6 +100,7 @@ export async function createPurchase(
     supplierId: supplier_id,
     date,
     notes: notes || null,
+    currencyId: currency_id || null,
     additionalCosts: additionalCostsTuple,
     items: itemsTuple,
   });
@@ -155,6 +159,7 @@ export async function updatePurchase(
   supplier_id: number,
   date: string,
   notes: string | null,
+  currency_id: number | null,
   additional_costs: PurchaseAdditionalCostInput[],
   items: PurchaseItemInput[]
 ): Promise<Purchase> {
@@ -177,6 +182,7 @@ export async function updatePurchase(
     supplierId: supplier_id,
     date,
     notes: notes || null,
+    currencyId: currency_id || null,
     additionalCosts: additionalCostsTuple,
     items: itemsTuple,
   });

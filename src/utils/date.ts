@@ -62,7 +62,7 @@ export function formatPersianDate(date: string): string {
 }
 
 /**
- * Format Persian date with Persian month names for display
+ * Format Persian date with Dari month names for display
  */
 export function formatPersianDateLong(georgianDate: string): string {
   if (!georgianDate) return '';
@@ -70,10 +70,20 @@ export function formatPersianDateLong(georgianDate: string): string {
   const date = moment(georgianDate, 'YYYY-MM-DD');
   if (!date.isValid()) return '';
   
-  // Get Persian month names
+  // Get Dari month names for Solar Hijri calendar
   const monthNames = [
-    'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
-    'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
+    'حمل',      // فروردین
+    'ثور',      // اردیبهشت
+    'جوزا',     // خرداد
+    'سرطان',    // تیر
+    'اسد',      // مرداد
+    'سنبله',    // شهریور
+    'میزان',    // مهر
+    'عقرب',     // آبان
+    'قوس',      // آذر
+    'جدی',      // دی
+    'دلو',      // بهمن
+    'حوت'       // اسفند
   ];
   
   const jYear = date.jYear();

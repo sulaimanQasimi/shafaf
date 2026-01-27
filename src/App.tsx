@@ -742,7 +742,7 @@ function App() {
             {[
               {
                 title: "مدیریت اجناس",
-                description: "افزودن، ویرایش و مدیریت اجناس و محصولات داروخانه",
+                description: "افزودن، ویرایش و مدیریت اجناس و محصولات",
                 icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
                 color: "from-indigo-500 to-violet-500",
                 page: "product" as Page,
@@ -791,7 +791,7 @@ function App() {
               },
               {
                 title: "مدیریت مصارف",
-                description: "ثبت و مدیریت مصارف و هزینه‌های داروخانه",
+                description: "ثبت و مدیریت مصارف و هزینه‌ها",
                 icon: "M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z",
                 color: "from-red-500 to-pink-500",
                 page: "expense" as Page,
@@ -833,7 +833,7 @@ function App() {
               },
               {
                 title: "بیلانس مشتریان",
-                description: "بیلانس مشتری ها و بیلانس مشتریان",
+                description: "بیلانس مشتری ها و بیلانس ان",
                 icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
                 color: "from-blue-500 to-indigo-500",
                 page: "salesPayment" as Page,

@@ -632,6 +632,45 @@ fn validate_license_key(entered_key: String) -> Result<bool, String> {
     license::validate_license_key(&entered_key)
 }
 
+/// Store Puter credentials in secure storage
+#[tauri::command]
+fn store_puter_credentials(app_id: String, auth_token: String) -> Result<(), String> {
+    use keyring::Entry;
+    
+    let app_id_entry = Entry::new("finance_app", "puter_app_id")
+        .map_err(|e| format!("Failed to create keyring entry for app_id: {}", e))?;
+    
+    let token_entry = Entry::new("finance_app", "puter_auth_token")
+        .map_err(|e| format!("Failed to create keyring entry for auth_token: {}", e))?;
+    
+    app_id_entry.set_password(&app_id)
+        .map_err(|e| format!("Failed to store Puter app ID: {}", e))?;
+    
+    token_entry.set_password(&auth_token)
+        .map_err(|e| format!("Failed to store Puter auth token: {}", e))?;
+    
+    Ok(())
+}
+
+/// Get Puter credentials from secure storage
+#[tauri::command]
+fn get_puter_credentials() -> Result<Option<(String, String)>, String> {
+    use keyring::Entry;
+    
+    let app_id_entry = Entry::new("finance_app", "puter_app_id")
+        .map_err(|e| format!("Failed to create keyring entry for app_id: {}", e))?;
+    
+    let token_entry = Entry::new("finance_app", "puter_auth_token")
+        .map_err(|e| format!("Failed to create keyring entry for auth_token: {}", e))?;
+    
+    match (app_id_entry.get_password(), token_entry.get_password()) {
+        (Ok(app_id), Ok(token)) => Ok(Some((app_id, token))),
+        (Err(keyring::Error::NoEntry), _) | (_, Err(keyring::Error::NoEntry)) => Ok(None),
+        (Err(e), _) => Err(format!("Failed to get Puter app ID: {}", e)),
+        (_, Err(e)) => Err(format!("Failed to get Puter auth token: {}", e)),
+    }
+}
+
 /// Hash a password using bcrypt
 #[tauri::command]
 fn hash_password(password: String) -> Result<String, String> {
@@ -7578,7 +7617,9 @@ pub fn run() {
             get_license_key,
             validate_license_key,
             hash_password,
-            verify_password
+            verify_password,
+            store_puter_credentials,
+            get_puter_credentials
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

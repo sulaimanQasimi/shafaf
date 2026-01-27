@@ -3,6 +3,64 @@ export const LS_PUTER_TOKEN = "shafaf_puter_auth_token";
 export const LS_PUTER_MODEL = "shafaf_puter_model";
 export const PUTER_SCRIPT_BASE = "https://js.puter.com/v2/";
 
+/**
+ * Load Puter credentials from the server-stored file and save to localStorage
+ * This is called when credentials are detected in ai.html
+ */
+export async function loadPuterCredentialsFromServer(): Promise<boolean> {
+  try {
+    const response = await fetch('http://127.0.0.1:5021/api/get-credentials');
+    if (!response.ok) {
+      return false;
+    }
+    
+    const data = await response.json();
+    if (data.app_id && data.auth_token) {
+      try {
+        localStorage.setItem(LS_PUTER_APP_ID, data.app_id);
+        localStorage.setItem(LS_PUTER_TOKEN, data.auth_token);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Periodically check for Puter credentials from the server
+ * This is useful when credentials are set in ai.html
+ */
+export function startCredentialSync(intervalMs: number = 5000): () => void {
+  let intervalId: NodeJS.Timeout | null = null;
+  
+  const checkCredentials = async () => {
+    // Only check if we don't already have credentials
+    const existingId = localStorage.getItem(LS_PUTER_APP_ID);
+    const existingToken = localStorage.getItem(LS_PUTER_TOKEN);
+    
+    if (!existingId || !existingToken) {
+      await loadPuterCredentialsFromServer();
+    }
+  };
+  
+  // Check immediately
+  checkCredentials();
+  
+  // Then check periodically
+  intervalId = setInterval(checkCredentials, intervalMs);
+  
+  // Return cleanup function
+  return () => {
+    if (intervalId) {
+      clearInterval(intervalId);
+    }
+  };
+}
+
 export function isPuterAvailable(): boolean {
   return typeof window !== "undefined" && !!(window as Window & { puter?: { ai?: { chat: unknown } } }).puter?.ai?.chat;
 }

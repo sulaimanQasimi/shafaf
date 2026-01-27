@@ -15,6 +15,7 @@ import { getCompanySettings, initCompanySettingsTable, type CompanySettings as C
 import { applyFont } from "./utils/fonts";
 import { isLicenseValid } from "./utils/license";
 import { checkForUpdatesOnStartup, checkForUpdates, installUpdate } from "./utils/updater";
+import { startCredentialSync } from "./utils/puter";
 import Login from "./components/Login";
 import License from "./components/License";
 import CurrencyManagement from "./components/Currency";
@@ -130,6 +131,12 @@ function App() {
       // Silently fail - updates are optional
       console.log("Update check:", error);
     });
+  }, []);
+
+  // Sync Puter credentials from ai.html
+  useEffect(() => {
+    const cleanup = startCredentialSync(5000); // Check every 5 seconds
+    return cleanup;
   }, []);
 
   // Check license validity on mount
@@ -333,12 +340,14 @@ function App() {
           `بروزرسانی جدید موجود است! نسخه ${updateInfo.version}`,
           {
             duration: 5000,
-            action: {
-              label: "نصب",
-              onClick: handleInstallUpdate,
-            },
           }
         );
+        // Show install button separately
+        setTimeout(() => {
+          if (window.confirm(`بروزرسانی نسخه ${updateInfo.version} موجود است. آیا می‌خواهید نصب کنید؟`)) {
+            handleInstallUpdate();
+          }
+        }, 100);
       } else {
         setUpdateInfo(null);
         toast.success("شما از آخرین نسخه استفاده می‌کنید");

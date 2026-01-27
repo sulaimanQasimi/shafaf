@@ -1,9 +1,8 @@
-export const LS_PUTER_APP_ID = "shafaf_puter_app_id";
-export const LS_PUTER_TOKEN = "shafaf_puter_auth_token";
+export const LS_PUTER_APP_ID = "puter.app.id";
+export const LS_PUTER_TOKEN = "puter.auth.token";
 export const LS_PUTER_MODEL = "shafaf_puter_model";
 export const PUTER_SCRIPT_BASE = "https://js.puter.com/v2/";
-
-/**
+/*
  * Load Puter credentials from the server-stored file and save to localStorage
  * This is called when credentials are detected in ai.html
  */
@@ -75,11 +74,15 @@ export function loadPuter(appId: string, authToken: string): Promise<boolean> {
       resolve(false);
       return;
     }
+    
     const w = window as Window & { puter?: { ai?: { chat: unknown } } };
     if (w.puter?.ai?.chat) {
       try {
         localStorage.setItem(LS_PUTER_APP_ID, appId);
         localStorage.setItem(LS_PUTER_TOKEN, authToken);
+        // Remove old keys if they exist
+        localStorage.removeItem("shafaf_puter_app_id");
+        localStorage.removeItem("shafaf_puter_auth_token");
       } catch (_) {}
       resolve(true);
       return;
@@ -98,6 +101,9 @@ export function loadPuter(appId: string, authToken: string): Promise<boolean> {
         try {
           localStorage.setItem(LS_PUTER_APP_ID, appId);
           localStorage.setItem(LS_PUTER_TOKEN, authToken);
+          // Remove old keys if they exist
+          localStorage.removeItem("shafaf_puter_app_id");
+          localStorage.removeItem("shafaf_puter_auth_token");
         } catch (_) {}
       }
       resolve(ok);

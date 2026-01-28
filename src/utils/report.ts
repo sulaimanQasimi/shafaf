@@ -1,0 +1,777 @@
+import { queryDatabase, resultToObjects } from "./db";
+import { georgianToPersian } from "./date";
+import { formatPersianNumber } from "./dashboard";
+
+export interface ReportData {
+  title: string;
+  type: string;
+  dateRange: { from: string; to: string };
+  summary: {
+    totalAmount?: number;
+    totalCount?: number;
+    paidAmount?: number;
+    remainingAmount?: number;
+    [key: string]: any;
+  };
+  sections: ReportSection[];
+}
+
+export interface ReportSection {
+  title: string;
+  type: "table" | "summary";
+  data: any[];
+  columns?: { key: string; label: string }[];
+}
+
+/**
+ * Generate Sales Report filtered by date range
+ */
+export async function generateSalesReport(
+  fromDate: string,
+  toDate: string
+): Promise<ReportData> {
+  // Convert dates to Georgian format if needed (assuming they're already in YYYY-MM-DD)
+  const from = fromDate;
+  const to = toDate;
+
+  // Query sales with customer and currency info
+  const salesQuery = `
+    SELECT 
+      s.id,
+      s.date,
+      c.full_name as customer_name,
+      s.total_amount,
+      s.base_amount,
+      s.paid_amount,
+      (s.base_amount - s.paid_amount) as remaining_amount,
+      s.notes,
+      curr.name as currency_name,
+      s.exchange_rate
+    FROM sales s
+    LEFT JOIN customers c ON s.customer_id = c.id
+    LEFT JOIN currencies curr ON s.currency_id = curr.id
+    WHERE s.date >= ? AND s.date <= ?
+    ORDER BY s.date DESC, s.id DESC
+  `;
+
+  const salesResult = await queryDatabase(salesQuery, [from, to]);
+  const sales = resultToObjects(salesResult);
+
+  // Get sale items for each sale
+  const saleIds = sales.map((s: any) => s.id);
+  let saleItems: any[] = [];
+  if (saleIds.length > 0) {
+    const placeholders = saleIds.map(() => "?").join(",");
+    const itemsQuery = `
+      SELECT 
+        si.sale_id,
+        si.product_id,
+        p.name as product_name,
+        si.per_price,
+        si.amount,
+        si.total,
+        u.name as unit_name
+      FROM sale_items si
+      LEFT JOIN products p ON si.product_id = p.id
+      LEFT JOIN units u ON si.unit_id = u.id
+      WHERE si.sale_id IN (${placeholders})
+      ORDER BY si.sale_id, si.id
+    `;
+    const itemsResult = await queryDatabase(itemsQuery, saleIds);
+    saleItems = resultToObjects(itemsResult);
+  }
+
+  // Get sale payments
+  let salePayments: any[] = [];
+  if (saleIds.length > 0) {
+    const placeholders = saleIds.map(() => "?").join(",");
+    const paymentsQuery = `
+      SELECT 
+        sp.sale_id,
+        sp.amount,
+        sp.base_amount,
+        sp.date as payment_date,
+        a.name as account_name,
+        curr.name as currency_name
+      FROM sale_payments sp
+      LEFT JOIN accounts a ON sp.account_id = a.id
+      LEFT JOIN currencies curr ON sp.currency_id = curr.id
+      WHERE sp.sale_id IN (${placeholders})
+      ORDER BY sp.sale_id, sp.date
+    `;
+    const paymentsResult = await queryDatabase(paymentsQuery, saleIds);
+    salePayments = resultToObjects(paymentsResult);
+  }
+
+  // Calculate summary
+  const totalAmount = sales.reduce((sum: number, s: any) => sum + (s.base_amount || 0), 0);
+  const paidAmount = sales.reduce((sum: number, s: any) => sum + (s.paid_amount || 0), 0);
+  const remainingAmount = totalAmount - paidAmount;
+
+  // Format sales data for display
+  const formattedSales = sales.map((sale: any) => ({
+    ...sale,
+    date_persian: georgianToPersian(sale.date),
+    total_amount_formatted: formatPersianNumber(sale.total_amount || 0),
+    base_amount_formatted: formatPersianNumber(sale.base_amount || 0),
+    paid_amount_formatted: formatPersianNumber(sale.paid_amount || 0),
+    remaining_amount_formatted: formatPersianNumber(sale.remaining_amount || 0),
+  }));
+
+  return {
+    title: "گزارش فروشات",
+    type: "sales",
+    dateRange: { from, to },
+    summary: {
+      totalCount: sales.length,
+      totalAmount,
+      paidAmount,
+      remainingAmount,
+    },
+    sections: [
+      {
+        title: "خلاصه گزارش",
+        type: "summary",
+        data: [
+          { label: "تعداد کل فروشات", value: formatPersianNumber(sales.length) },
+          { label: "مجموع مبلغ", value: formatPersianNumber(totalAmount) },
+          { label: "مبلغ پرداخت شده", value: formatPersianNumber(paidAmount) },
+          { label: "مبلغ باقیمانده", value: formatPersianNumber(remainingAmount) },
+        ],
+      },
+      {
+        title: "لیست فروشات",
+        type: "table",
+        columns: [
+          { key: "id", label: "شماره" },
+          { key: "date_persian", label: "تاریخ" },
+          { key: "customer_name", label: "مشتری" },
+          { key: "base_amount_formatted", label: "مبلغ کل" },
+          { key: "paid_amount_formatted", label: "پرداخت شده" },
+          { key: "remaining_amount_formatted", label: "باقیمانده" },
+          { key: "currency_name", label: "ارز" },
+        ],
+        data: formattedSales,
+      },
+      {
+        title: "اقلام فروش",
+        type: "table",
+        columns: [
+          { key: "sale_id", label: "شماره فروش" },
+          { key: "product_name", label: "محصول" },
+          { key: "amount", label: "تعداد" },
+          { key: "unit_name", label: "واحد" },
+          { key: "per_price", label: "قیمت واحد" },
+          { key: "total", label: "جمع" },
+        ],
+        data: saleItems.map((item: any) => ({
+          ...item,
+          per_price: formatPersianNumber(item.per_price || 0),
+          amount: formatPersianNumber(item.amount || 0),
+          total: formatPersianNumber(item.total || 0),
+        })),
+      },
+      {
+        title: "پرداخت‌های فروش",
+        type: "table",
+        columns: [
+          { key: "sale_id", label: "شماره فروش" },
+          { key: "payment_date", label: "تاریخ پرداخت" },
+          { key: "amount", label: "مبلغ" },
+          { key: "base_amount", label: "مبلغ پایه" },
+          { key: "account_name", label: "حساب" },
+          { key: "currency_name", label: "ارز" },
+        ],
+        data: salePayments.map((payment: any) => ({
+          ...payment,
+          payment_date: georgianToPersian(payment.payment_date),
+          amount: formatPersianNumber(payment.amount || 0),
+          base_amount: formatPersianNumber(payment.base_amount || 0),
+        })),
+      },
+    ],
+  };
+}
+
+/**
+ * Generate Purchase Report filtered by date range
+ */
+export async function generatePurchaseReport(
+  fromDate: string,
+  toDate: string
+): Promise<ReportData> {
+  const from = fromDate;
+  const to = toDate;
+
+  const purchasesQuery = `
+    SELECT 
+      p.id,
+      p.date,
+      s.full_name as supplier_name,
+      p.total_amount,
+      p.notes,
+      curr.name as currency_name
+    FROM purchases p
+    LEFT JOIN suppliers s ON p.supplier_id = s.id
+    LEFT JOIN currencies curr ON p.currency_id = curr.id
+    WHERE p.date >= ? AND p.date <= ?
+    ORDER BY p.date DESC, p.id DESC
+  `;
+
+  const purchasesResult = await queryDatabase(purchasesQuery, [from, to]);
+  const purchases = resultToObjects(purchasesResult);
+
+  const purchaseIds = purchases.map((p: any) => p.id);
+  let purchaseItems: any[] = [];
+  if (purchaseIds.length > 0) {
+    const placeholders = purchaseIds.map(() => "?").join(",");
+    const itemsQuery = `
+      SELECT 
+        pi.purchase_id,
+        pi.product_id,
+        pr.name as product_name,
+        pi.per_price,
+        pi.amount,
+        pi.total,
+        u.name as unit_name
+      FROM purchase_items pi
+      LEFT JOIN products pr ON pi.product_id = pr.id
+      LEFT JOIN units u ON pi.unit_id = u.id
+      WHERE pi.purchase_id IN (${placeholders})
+      ORDER BY pi.purchase_id, pi.id
+    `;
+    const itemsResult = await queryDatabase(itemsQuery, purchaseIds);
+    purchaseItems = resultToObjects(itemsResult);
+  }
+
+  let purchasePayments: any[] = [];
+  if (purchaseIds.length > 0) {
+    const placeholders = purchaseIds.map(() => "?").join(",");
+    const paymentsQuery = `
+      SELECT 
+        pp.purchase_id,
+        pp.amount,
+        pp.total,
+        pp.date as payment_date,
+        a.name as account_name,
+        pp.currency
+      FROM purchase_payments pp
+      LEFT JOIN accounts a ON pp.account_id = a.id
+      WHERE pp.purchase_id IN (${placeholders})
+      ORDER BY pp.purchase_id, pp.date
+    `;
+    const paymentsResult = await queryDatabase(paymentsQuery, purchaseIds);
+    purchasePayments = resultToObjects(paymentsResult);
+  }
+
+  const totalAmount = purchases.reduce((sum: number, p: any) => sum + (p.total_amount || 0), 0);
+
+  const formattedPurchases = purchases.map((purchase: any) => ({
+    ...purchase,
+    date_persian: georgianToPersian(purchase.date),
+    total_amount_formatted: formatPersianNumber(purchase.total_amount || 0),
+  }));
+
+  return {
+    title: "گزارش خریداری‌ها",
+    type: "purchases",
+    dateRange: { from, to },
+    summary: {
+      totalCount: purchases.length,
+      totalAmount,
+    },
+    sections: [
+      {
+        title: "خلاصه گزارش",
+        type: "summary",
+        data: [
+          { label: "تعداد کل خریداری‌ها", value: formatPersianNumber(purchases.length) },
+          { label: "مجموع مبلغ", value: formatPersianNumber(totalAmount) },
+        ],
+      },
+      {
+        title: "لیست خریداری‌ها",
+        type: "table",
+        columns: [
+          { key: "id", label: "شماره" },
+          { key: "date_persian", label: "تاریخ" },
+          { key: "supplier_name", label: "تمویل‌کننده" },
+          { key: "total_amount_formatted", label: "مبلغ کل" },
+          { key: "currency_name", label: "ارز" },
+        ],
+        data: formattedPurchases,
+      },
+      {
+        title: "اقلام خریداری",
+        type: "table",
+        columns: [
+          { key: "purchase_id", label: "شماره خریداری" },
+          { key: "product_name", label: "محصول" },
+          { key: "amount", label: "تعداد" },
+          { key: "unit_name", label: "واحد" },
+          { key: "per_price", label: "قیمت واحد" },
+          { key: "total", label: "جمع" },
+        ],
+        data: purchaseItems.map((item: any) => ({
+          ...item,
+          per_price: formatPersianNumber(item.per_price || 0),
+          amount: formatPersianNumber(item.amount || 0),
+          total: formatPersianNumber(item.total || 0),
+        })),
+      },
+      {
+        title: "پرداخت‌های خریداری",
+        type: "table",
+        columns: [
+          { key: "purchase_id", label: "شماره خریداری" },
+          { key: "payment_date", label: "تاریخ پرداخت" },
+          { key: "amount", label: "مبلغ" },
+          { key: "total", label: "جمع" },
+          { key: "account_name", label: "حساب" },
+          { key: "currency", label: "ارز" },
+        ],
+        data: purchasePayments.map((payment: any) => ({
+          ...payment,
+          payment_date: georgianToPersian(payment.payment_date),
+          amount: formatPersianNumber(payment.amount || 0),
+          total: formatPersianNumber(payment.total || 0),
+        })),
+      },
+    ],
+  };
+}
+
+/**
+ * Generate Expense Report filtered by date range
+ */
+export async function generateExpenseReport(
+  fromDate: string,
+  toDate: string
+): Promise<ReportData> {
+  const from = fromDate;
+  const to = toDate;
+
+  const expensesQuery = `
+    SELECT 
+      e.id,
+      e.date,
+      et.name as expense_type_name,
+      e.amount,
+      e.currency,
+      e.rate,
+      e.total,
+      e.bill_no,
+      e.description
+    FROM expenses e
+    LEFT JOIN expense_types et ON e.expense_type_id = et.id
+    WHERE e.date >= ? AND e.date <= ?
+    ORDER BY e.date DESC, e.id DESC
+  `;
+
+  const expensesResult = await queryDatabase(expensesQuery, [from, to]);
+  const expenses = resultToObjects(expensesResult);
+
+  // Group by expense type
+  const groupedByType: Record<string, any[]> = {};
+  expenses.forEach((expense: any) => {
+    const typeName = expense.expense_type_name || "بدون دسته‌بندی";
+    if (!groupedByType[typeName]) {
+      groupedByType[typeName] = [];
+    }
+    groupedByType[typeName].push(expense);
+  });
+
+  const totalAmount = expenses.reduce((sum: number, e: any) => sum + (e.total || 0), 0);
+
+  const formattedExpenses = expenses.map((expense: any) => ({
+    ...expense,
+    date_persian: georgianToPersian(expense.date),
+    amount_formatted: formatPersianNumber(expense.amount || 0),
+    total_formatted: formatPersianNumber(expense.total || 0),
+  }));
+
+  // Create summary by type
+  const typeSummary = Object.entries(groupedByType).map(([typeName, typeExpenses]) => {
+    const typeTotal = typeExpenses.reduce((sum: number, e: any) => sum + (e.total || 0), 0);
+    return {
+      expense_type: typeName,
+      count: typeExpenses.length,
+      total: formatPersianNumber(typeTotal),
+    };
+  });
+
+  return {
+    title: "گزارش مصارف",
+    type: "expenses",
+    dateRange: { from, to },
+    summary: {
+      totalCount: expenses.length,
+      totalAmount,
+    },
+    sections: [
+      {
+        title: "خلاصه گزارش",
+        type: "summary",
+        data: [
+          { label: "تعداد کل مصارف", value: formatPersianNumber(expenses.length) },
+          { label: "مجموع مبلغ", value: formatPersianNumber(totalAmount) },
+        ],
+      },
+      {
+        title: "خلاصه بر اساس نوع",
+        type: "table",
+        columns: [
+          { key: "expense_type", label: "نوع مصارف" },
+          { key: "count", label: "تعداد" },
+          { key: "total", label: "مجموع" },
+        ],
+        data: typeSummary,
+      },
+      {
+        title: "لیست مصارف",
+        type: "table",
+        columns: [
+          { key: "id", label: "شماره" },
+          { key: "date_persian", label: "تاریخ" },
+          { key: "expense_type_name", label: "نوع" },
+          { key: "amount_formatted", label: "مبلغ" },
+          { key: "currency", label: "ارز" },
+          { key: "total_formatted", label: "جمع" },
+          { key: "bill_no", label: "شماره بیل" },
+          { key: "description", label: "توضیحات" },
+        ],
+        data: formattedExpenses,
+      },
+    ],
+  };
+}
+
+/**
+ * Generate Account Report filtered by date range
+ */
+export async function generateAccountReport(
+  fromDate: string,
+  toDate: string
+): Promise<ReportData> {
+  const from = fromDate;
+  const to = toDate;
+
+  const transactionsQuery = `
+    SELECT 
+      at.id,
+      at.transaction_date,
+      a.name as account_name,
+      at.transaction_type,
+      at.amount,
+      at.currency,
+      at.rate,
+      at.total,
+      at.notes
+    FROM account_transactions at
+    LEFT JOIN accounts a ON at.account_id = a.id
+    WHERE at.transaction_date >= ? AND at.transaction_date <= ?
+    ORDER BY at.transaction_date DESC, at.id DESC
+  `;
+
+  const transactionsResult = await queryDatabase(transactionsQuery, [from, to]);
+  const transactions = resultToObjects(transactionsResult);
+
+  const deposits = transactions.filter((t: any) => t.transaction_type === "deposit");
+  const withdrawals = transactions.filter((t: any) => t.transaction_type === "withdraw");
+
+  const totalDeposits = deposits.reduce((sum: number, t: any) => sum + (t.total || 0), 0);
+  const totalWithdrawals = withdrawals.reduce((sum: number, t: any) => sum + (t.total || 0), 0);
+
+  const formattedTransactions = transactions.map((transaction: any) => ({
+    ...transaction,
+    transaction_date_persian: georgianToPersian(transaction.transaction_date),
+    amount_formatted: formatPersianNumber(transaction.amount || 0),
+    total_formatted: formatPersianNumber(transaction.total || 0),
+    transaction_type_label: transaction.transaction_type === "deposit" ? "واریز" : "برداشت",
+  }));
+
+  return {
+    title: "گزارش حساب‌ها",
+    type: "accounts",
+    dateRange: { from, to },
+    summary: {
+      totalCount: transactions.length,
+      totalDeposits,
+      totalWithdrawals,
+    },
+    sections: [
+      {
+        title: "خلاصه گزارش",
+        type: "summary",
+        data: [
+          { label: "تعداد کل تراکنش‌ها", value: formatPersianNumber(transactions.length) },
+          { label: "مجموع واریزها", value: formatPersianNumber(totalDeposits) },
+          { label: "مجموع برداشت‌ها", value: formatPersianNumber(totalWithdrawals) },
+        ],
+      },
+      {
+        title: "لیست تراکنش‌ها",
+        type: "table",
+        columns: [
+          { key: "id", label: "شماره" },
+          { key: "transaction_date_persian", label: "تاریخ" },
+          { key: "account_name", label: "حساب" },
+          { key: "transaction_type_label", label: "نوع" },
+          { key: "amount_formatted", label: "مبلغ" },
+          { key: "currency", label: "ارز" },
+          { key: "total_formatted", label: "جمع" },
+          { key: "notes", label: "توضیحات" },
+        ],
+        data: formattedTransactions,
+      },
+    ],
+  };
+}
+
+/**
+ * Generate Product Report filtered by date range
+ */
+export async function generateProductReport(
+  fromDate: string,
+  toDate: string
+): Promise<ReportData> {
+  const from = fromDate;
+  const to = toDate;
+
+  // Get product sales summary
+  const salesQuery = `
+    SELECT 
+      p.id as product_id,
+      p.name as product_name,
+      SUM(si.amount) as total_sold,
+      SUM(si.total) as total_sales_amount,
+      COUNT(DISTINCT si.sale_id) as sale_count
+    FROM sale_items si
+    JOIN sales s ON si.sale_id = s.id
+    JOIN products p ON si.product_id = p.id
+    WHERE s.date >= ? AND s.date <= ?
+    GROUP BY p.id, p.name
+    ORDER BY total_sales_amount DESC
+  `;
+
+  const salesResult = await queryDatabase(salesQuery, [from, to]);
+  const productSales = resultToObjects(salesResult);
+
+  // Get product purchases summary
+  const purchasesQuery = `
+    SELECT 
+      p.id as product_id,
+      p.name as product_name,
+      SUM(pi.amount) as total_purchased,
+      SUM(pi.total) as total_purchase_amount,
+      COUNT(DISTINCT pi.purchase_id) as purchase_count
+    FROM purchase_items pi
+    JOIN purchases pur ON pi.purchase_id = pur.id
+    JOIN products p ON pi.product_id = p.id
+    WHERE pur.date >= ? AND pur.date <= ?
+    GROUP BY p.id, p.name
+    ORDER BY total_purchase_amount DESC
+  `;
+
+  const purchasesResult = await queryDatabase(purchasesQuery, [from, to]);
+  const productPurchases = resultToObjects(purchasesResult);
+
+  const totalSalesAmount = productSales.reduce((sum: number, ps: any) => sum + (ps.total_sales_amount || 0), 0);
+  const totalPurchaseAmount = productPurchases.reduce((sum: number, pp: any) => sum + (pp.total_purchase_amount || 0), 0);
+
+  const formattedSales = productSales.map((ps: any) => ({
+    ...ps,
+    total_sold_formatted: formatPersianNumber(ps.total_sold || 0),
+    total_sales_amount_formatted: formatPersianNumber(ps.total_sales_amount || 0),
+  }));
+
+  const formattedPurchases = productPurchases.map((pp: any) => ({
+    ...pp,
+    total_purchased_formatted: formatPersianNumber(pp.total_purchased || 0),
+    total_purchase_amount_formatted: formatPersianNumber(pp.total_purchase_amount || 0),
+  }));
+
+  return {
+    title: "گزارش محصولات",
+    type: "products",
+    dateRange: { from, to },
+    summary: {
+      totalSalesAmount,
+      totalPurchaseAmount,
+    },
+    sections: [
+      {
+        title: "خلاصه گزارش",
+        type: "summary",
+        data: [
+          { label: "مجموع فروش محصولات", value: formatPersianNumber(totalSalesAmount) },
+          { label: "مجموع خرید محصولات", value: formatPersianNumber(totalPurchaseAmount) },
+        ],
+      },
+      {
+        title: "فروش محصولات",
+        type: "table",
+        columns: [
+          { key: "product_name", label: "محصول" },
+          { key: "total_sold_formatted", label: "تعداد فروخته شده" },
+          { key: "total_sales_amount_formatted", label: "مبلغ فروش" },
+          { key: "sale_count", label: "تعداد فروشات" },
+        ],
+        data: formattedSales,
+      },
+      {
+        title: "خرید محصولات",
+        type: "table",
+        columns: [
+          { key: "product_name", label: "محصول" },
+          { key: "total_purchased_formatted", label: "تعداد خریداری شده" },
+          { key: "total_purchase_amount_formatted", label: "مبلغ خرید" },
+          { key: "purchase_count", label: "تعداد خریداری‌ها" },
+        ],
+        data: formattedPurchases,
+      },
+    ],
+  };
+}
+
+/**
+ * Generate Customer Report filtered by date range
+ */
+export async function generateCustomerReport(
+  fromDate: string,
+  toDate: string
+): Promise<ReportData> {
+  const from = fromDate;
+  const to = toDate;
+
+  const customersQuery = `
+    SELECT 
+      c.id,
+      c.full_name,
+      COUNT(DISTINCT s.id) as sale_count,
+      SUM(s.base_amount) as total_sales,
+      SUM(s.paid_amount) as total_paid,
+      SUM(s.base_amount - s.paid_amount) as total_remaining
+    FROM customers c
+    LEFT JOIN sales s ON c.id = s.customer_id AND s.date >= ? AND s.date <= ?
+    GROUP BY c.id, c.full_name
+    HAVING sale_count > 0
+    ORDER BY total_sales DESC
+  `;
+
+  const customersResult = await queryDatabase(customersQuery, [from, to]);
+  const customers = resultToObjects(customersResult);
+
+  const totalSales = customers.reduce((sum: number, c: any) => sum + (c.total_sales || 0), 0);
+  const totalPaid = customers.reduce((sum: number, c: any) => sum + (c.total_paid || 0), 0);
+  const totalRemaining = customers.reduce((sum: number, c: any) => sum + (c.total_remaining || 0), 0);
+
+  const formattedCustomers = customers.map((customer: any) => ({
+    ...customer,
+    sale_count_formatted: formatPersianNumber(customer.sale_count || 0),
+    total_sales_formatted: formatPersianNumber(customer.total_sales || 0),
+    total_paid_formatted: formatPersianNumber(customer.total_paid || 0),
+    total_remaining_formatted: formatPersianNumber(customer.total_remaining || 0),
+  }));
+
+  return {
+    title: "گزارش مشتریان",
+    type: "customers",
+    dateRange: { from, to },
+    summary: {
+      totalCount: customers.length,
+      totalSales,
+      totalPaid,
+      totalRemaining,
+    },
+    sections: [
+      {
+        title: "خلاصه گزارش",
+        type: "summary",
+        data: [
+          { label: "تعداد مشتریان", value: formatPersianNumber(customers.length) },
+          { label: "مجموع فروشات", value: formatPersianNumber(totalSales) },
+          { label: "مجموع پرداخت شده", value: formatPersianNumber(totalPaid) },
+          { label: "مجموع باقیمانده", value: formatPersianNumber(totalRemaining) },
+        ],
+      },
+      {
+        title: "لیست مشتریان",
+        type: "table",
+        columns: [
+          { key: "full_name", label: "نام مشتری" },
+          { key: "sale_count_formatted", label: "تعداد فروشات" },
+          { key: "total_sales_formatted", label: "مجموع فروشات" },
+          { key: "total_paid_formatted", label: "پرداخت شده" },
+          { key: "total_remaining_formatted", label: "باقیمانده" },
+        ],
+        data: formattedCustomers,
+      },
+    ],
+  };
+}
+
+/**
+ * Generate Supplier Report filtered by date range
+ */
+export async function generateSupplierReport(
+  fromDate: string,
+  toDate: string
+): Promise<ReportData> {
+  const from = fromDate;
+  const to = toDate;
+
+  const suppliersQuery = `
+    SELECT 
+      s.id,
+      s.full_name,
+      COUNT(DISTINCT p.id) as purchase_count,
+      SUM(p.total_amount) as total_purchases
+    FROM suppliers s
+    LEFT JOIN purchases p ON s.id = p.supplier_id AND p.date >= ? AND p.date <= ?
+    GROUP BY s.id, s.full_name
+    HAVING purchase_count > 0
+    ORDER BY total_purchases DESC
+  `;
+
+  const suppliersResult = await queryDatabase(suppliersQuery, [from, to]);
+  const suppliers = resultToObjects(suppliersResult);
+
+  const totalPurchases = suppliers.reduce((sum: number, s: any) => sum + (s.total_purchases || 0), 0);
+
+  const formattedSuppliers = suppliers.map((supplier: any) => ({
+    ...supplier,
+    purchase_count_formatted: formatPersianNumber(supplier.purchase_count || 0),
+    total_purchases_formatted: formatPersianNumber(supplier.total_purchases || 0),
+  }));
+
+  return {
+    title: "گزارش تمویل‌کنندگان",
+    type: "suppliers",
+    dateRange: { from, to },
+    summary: {
+      totalCount: suppliers.length,
+      totalPurchases,
+    },
+    sections: [
+      {
+        title: "خلاصه گزارش",
+        type: "summary",
+        data: [
+          { label: "تعداد تمویل‌کنندگان", value: formatPersianNumber(suppliers.length) },
+          { label: "مجموع خریداری‌ها", value: formatPersianNumber(totalPurchases) },
+        ],
+      },
+      {
+        title: "لیست تمویل‌کنندگان",
+        type: "table",
+        columns: [
+          { key: "full_name", label: "نام تمویل‌کننده" },
+          { key: "purchase_count_formatted", label: "تعداد خریداری‌ها" },
+          { key: "total_purchases_formatted", label: "مجموع خریداری‌ها" },
+        ],
+        data: formattedSuppliers,
+      },
+    ],
+  };
+}

@@ -1,0 +1,147 @@
+name: Shafaf Development Assistant
+description: AI assistant for developing the Shafaf financial and inventory management system
+author: sulaimanQasimi
+version: 1.0.0
+
+# Context about the project
+context: |
+  Shafaf is a comprehensive financial and inventory management system built with:
+  - Frontend: React + TypeScript + Vite + Tailwind CSS
+  - Backend: Tauri (Rust) with SQLite database
+  - Features: Sales, Purchases, Expenses, Accounts, Products, Customers, Suppliers, Employees, Salaries, Reports
+  - Language: Persian/Dari (RTL support)
+  - Date System: Persian (Jalali) calendar with moment-jalaali
+
+# Common tasks and patterns
+tasks:
+  - name: Add new feature
+    prompt: |
+      When adding a new feature to Shafaf:
+      1. Create TypeScript interfaces/types in src/utils/[feature].ts
+      2. Create React component in src/components/[Feature].tsx
+      3. Add database schema in src-tauri/src/lib.rs
+      4. Add navigation card in src/App.tsx
+      5. Follow RTL layout patterns and Persian date formatting
+      6. Use formatPersianNumber for number display
+      7. Support dark mode with dark: classes
+      8. Use framer-motion for animations
+
+  - name: Database query
+    prompt: |
+      When writing database queries:
+      - Use queryDatabase() for SELECT queries
+      - Use executeQuery() for INSERT/UPDATE/DELETE
+      - Dates are stored as TEXT in YYYY-MM-DD format (Georgian)
+      - Convert to Persian for display using georgianToPersian()
+      - Always use parameterized queries to prevent SQL injection
+      - Join related tables for comprehensive data
+
+  - name: Report generation
+    prompt: |
+      When creating reports:
+      - Use generate[Type]Report() functions in src/utils/report.ts
+      - Filter by date range (fromDate, toDate in YYYY-MM-DD)
+      - Return ReportData structure with sections
+      - Support PDF export via exportReportToPDF()
+      - Support Excel export via exportReportToExcel()
+      - Format numbers with formatPersianNumber()
+      - Display dates in Persian format
+
+  - name: Component styling
+    prompt: |
+      When styling components:
+      - Use Tailwind CSS utility classes
+      - Support dark mode: dark:bg-gray-800 dark:text-white
+      - RTL layout: dir="rtl" and text-right
+      - Use gradient backgrounds: bg-gradient-to-r from-purple-600 to-blue-600
+      - Add hover effects: hover:bg-purple-700
+      - Use framer-motion for animations: motion.div with initial/animate props
+      - Responsive: grid-cols-1 md:grid-cols-2 lg:grid-cols-3
+
+  - name: Date handling
+    prompt: |
+      When working with dates:
+      - Database stores dates as YYYY-MM-DD (Georgian)
+      - Use PersianDatePicker component for user input
+      - Convert Persian to Georgian: persianToGeorgian()
+      - Convert Georgian to Persian: georgianToPersian()
+      - Use moment-jalaali for date calculations
+      - Display dates in Persian format: YYYY/MM/DD
+
+# Code patterns
+patterns:
+  - name: Paginated list component
+    code: |
+      const [page, setPage] = useState(1);
+      const [data, setData] = useState<PaginatedResponse<Type>>({...});
+      
+      useEffect(() => {
+        loadData();
+      }, [page]);
+      
+      const loadData = async () => {
+        const result = await getItems(page, 10);
+        setData(result);
+      };
+
+  - name: Form with validation
+    code: |
+      const [formData, setFormData] = useState({...});
+      const [errors, setErrors] = useState({...});
+      
+      const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (validate()) {
+          await saveData(formData);
+        }
+      };
+
+  - name: Export functionality
+    code: |
+      const handleExport = async () => {
+        try {
+          await exportToPDF(data, elementRef.current);
+          toast.success("PDF با موفقیت دانلود شد");
+        } catch (error) {
+          toast.error("خطا در تولید PDF");
+        }
+      };
+
+# Best practices
+best_practices:
+  - Always use TypeScript types/interfaces
+  - Handle errors with try-catch and toast notifications
+  - Use async/await for database operations
+  - Format Persian numbers for display
+  - Support both light and dark themes
+  - Ensure RTL layout works correctly
+  - Use parameterized SQL queries
+  - Add loading states for async operations
+  - Validate user input before submission
+  - Use consistent naming: camelCase for variables, PascalCase for components
+
+# Common issues and solutions
+troubleshooting:
+  - issue: "Date conversion not working"
+    solution: "Ensure dates are in YYYY-MM-DD format before conversion. Use persianToGeorgian() for input, georgianToPersian() for display"
+  
+  - issue: "RTL layout broken"
+    solution: "Add dir='rtl' to root div, use text-right for text alignment, check flex/grid direction"
+  
+  - issue: "Dark mode not applying"
+    solution: "Ensure dark: classes are used, check if dark class is on html element, verify Tailwind config"
+  
+  - issue: "Database query fails"
+    solution: "Check SQL syntax, ensure table names are correct, verify parameters match placeholders, check database is open"
+
+# Project structure
+structure: |
+  src/
+    components/     # React components
+    utils/          # Utility functions and API calls
+    App.tsx         # Main app component with routing
+  src-tauri/
+    src/            # Rust backend code
+    tauri.conf.json # Tauri configuration
+  .github/
+    workflows/      # CI/CD workflows

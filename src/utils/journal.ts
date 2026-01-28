@@ -118,6 +118,32 @@ export async function getJournalEntry(id: number): Promise<[JournalEntry, Journa
 }
 
 /**
+ * Update a journal entry - add new lines or modify existing lines
+ * @param entry_id Journal entry ID
+ * @param lines Array of journal entry lines (all lines, including existing and new)
+ * @returns Promise with JournalEntry
+ */
+export async function updateJournalEntry(
+    entry_id: number,
+    lines: JournalEntryLineInput[]
+): Promise<JournalEntry> {
+    // Convert lines to tuple format expected by Rust
+    const linesTuple: [number, number, number, number, number, string | null][] = lines.map(line => [
+        line.account_id,
+        line.currency_id,
+        line.debit_amount,
+        line.credit_amount,
+        line.exchange_rate,
+        line.description || null,
+    ]);
+
+    return await invoke<JournalEntry>("update_journal_entry", {
+        entryId: entry_id,
+        newLines: linesTuple,
+    });
+}
+
+/**
  * Validate that a journal entry is balanced (debits = credits)
  * @param lines Journal entry lines
  * @returns true if balanced, false otherwise

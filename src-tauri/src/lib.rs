@@ -6961,13 +6961,7 @@ fn create_journal_entry_internal(
     reference_id: Option<i64>,
     lines: Vec<(i64, i64, f64, f64, f64, Option<String>)>, // (account_id, currency_id, debit_amount, credit_amount, exchange_rate, description)
 ) -> Result<i64, String> {
-    // Validate that debits equal credits
-    let total_debits: f64 = lines.iter().map(|(_, _, debit, _, _, _)| debit).sum();
-    let total_credits: f64 = lines.iter().map(|(_, _, _, credit, _, _)| credit).sum();
-
-    if (total_debits - total_credits).abs() > 0.01 {
-        return Err(format!("Journal entry is not balanced. Debits: {}, Credits: {}", total_debits, total_credits));
-    }
+    // Balance validation removed - entries can be saved unbalanced and balanced later with updates
 
     // Generate entry number
     let entry_number_sql = "SELECT COALESCE(MAX(CAST(SUBSTR(entry_number, 2) AS INTEGER)), 0) + 1 FROM journal_entries WHERE entry_number LIKE 'J%'";
@@ -7049,13 +7043,7 @@ fn create_journal_entry(
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    // Validate that debits equal credits
-    let total_debits: f64 = lines.iter().map(|(_, _, debit, _, _, _)| debit).sum();
-    let total_credits: f64 = lines.iter().map(|(_, _, _, credit, _, _)| credit).sum();
-
-    if (total_debits - total_credits).abs() > 0.01 {
-        return Err(format!("Journal entry is not balanced. Debits: {}, Credits: {}", total_debits, total_credits));
-    }
+    // Balance validation removed - entries can be saved unbalanced and balanced later with updates
 
     // Generate entry number
     let entry_number_sql = "SELECT COALESCE(MAX(CAST(SUBSTR(entry_number, 2) AS INTEGER)), 0) + 1 FROM journal_entries WHERE entry_number LIKE 'J%'";
@@ -7259,6 +7247,144 @@ fn get_journal_entry(
         .map_err(|e| format!("Failed to fetch journal entry lines: {}", e))?;
 
     Ok((entry.clone(), lines))
+}
+
+/// Update a journal entry - add new lines to balance or modify existing lines
+#[tauri::command]
+fn update_journal_entry(
+    db_state: State<'_, Mutex<Option<Database>>>,
+    entry_id: i64,
+    new_lines: Vec<(i64, i64, f64, f64, f64, Option<String>)>, // (account_id, currency_id, debit_amount, credit_amount, exchange_rate, description)
+) -> Result<JournalEntry, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Get existing lines to reverse their account balance changes
+    let existing_lines_sql = "SELECT account_id, currency_id, debit_amount, credit_amount FROM journal_entry_lines WHERE journal_entry_id = ?";
+    let existing_lines = db
+        .query(existing_lines_sql, &[&entry_id as &dyn rusqlite::ToSql], |row| {
+            Ok((
+                row.get::<_, i64>(0)?, // account_id
+                row.get::<_, i64>(1)?, // currency_id
+                row.get::<_, f64>(2)?, // debit_amount
+                row.get::<_, f64>(3)?, // credit_amount
+            ))
+        })
+        .map_err(|e| format!("Failed to fetch existing lines: {}", e))?;
+
+    // Reverse account balance changes from existing lines
+    for (account_id, currency_id, old_debit, old_credit) in existing_lines.iter() {
+        let current_balance = get_account_balance_by_currency_internal(db, *account_id, *currency_id)?;
+        // Reverse: if it was a debit, subtract it; if it was a credit, add it back
+        let reversed_balance = if *old_debit > 0.0 {
+            current_balance - old_debit
+        } else {
+            current_balance + old_credit
+        };
+        update_account_currency_balance_internal(db, *account_id, *currency_id, reversed_balance)?;
+    }
+
+    // Delete existing lines
+    let delete_lines_sql = "DELETE FROM journal_entry_lines WHERE journal_entry_id = ?";
+    db.execute(delete_lines_sql, &[&entry_id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to delete existing lines: {}", e))?;
+
+    // Insert new lines and update account balances
+    for (account_id, currency_id, debit_amount, credit_amount, exchange_rate, line_desc) in new_lines.iter() {
+        let base_amount = if *debit_amount > 0.0 {
+            debit_amount * exchange_rate
+        } else {
+            credit_amount * exchange_rate
+        };
+        let line_desc_str: Option<&str> = line_desc.as_ref().map(|s| s.as_str());
+
+        // Insert new line
+        let insert_line_sql = "INSERT INTO journal_entry_lines (journal_entry_id, account_id, currency_id, debit_amount, credit_amount, exchange_rate, base_amount, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        db.execute(insert_line_sql, &[
+            &entry_id as &dyn rusqlite::ToSql,
+            account_id as &dyn rusqlite::ToSql,
+            currency_id as &dyn rusqlite::ToSql,
+            debit_amount as &dyn rusqlite::ToSql,
+            credit_amount as &dyn rusqlite::ToSql,
+            exchange_rate as &dyn rusqlite::ToSql,
+            &base_amount as &dyn rusqlite::ToSql,
+            &line_desc_str as &dyn rusqlite::ToSql,
+        ])
+            .map_err(|e| format!("Failed to insert journal entry line: {}", e))?;
+
+        // Update account currency balance
+        let current_balance = get_account_balance_by_currency_internal(db, *account_id, *currency_id)?;
+        let new_balance = if *debit_amount > 0.0 {
+            current_balance + debit_amount
+        } else {
+            current_balance - credit_amount
+        };
+        update_account_currency_balance_internal(db, *account_id, *currency_id, new_balance)?;
+
+        // Create account transaction for new/modified lines
+        let entry_sql = "SELECT entry_date FROM journal_entries WHERE id = ?";
+        let entry_dates = db
+            .query(entry_sql, &[&entry_id as &dyn rusqlite::ToSql], |row| {
+                Ok(row.get::<_, String>(0)?)
+            })
+            .map_err(|e| format!("Failed to fetch entry date: {}", e))?;
+        
+        if let Some(entry_date) = entry_dates.first() {
+            let transaction_type = if *debit_amount > 0.0 { "deposit" } else { "withdraw" };
+            let amount = if *debit_amount > 0.0 { *debit_amount } else { *credit_amount };
+            let currency_name_sql = "SELECT name FROM currencies WHERE id = ?";
+            let currency_names = db
+                .query(currency_name_sql, &[currency_id as &dyn rusqlite::ToSql], |row| {
+                    Ok(row.get::<_, String>(0)?)
+                })
+                .ok()
+                .and_then(|v| v.first().cloned());
+            
+            if let Some(currency_name) = currency_names {
+                let total = base_amount;
+                let insert_transaction_sql = "INSERT INTO account_transactions (account_id, transaction_type, amount, currency, rate, total, transaction_date, is_full, notes) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)";
+                let notes_str: Option<&str> = line_desc.as_ref().map(|s| s.as_str());
+                let _ = db.execute(insert_transaction_sql, &[
+                    account_id as &dyn rusqlite::ToSql,
+                    &transaction_type as &dyn rusqlite::ToSql,
+                    &amount as &dyn rusqlite::ToSql,
+                    &currency_name as &dyn rusqlite::ToSql,
+                    exchange_rate as &dyn rusqlite::ToSql,
+                    &total as &dyn rusqlite::ToSql,
+                    entry_date as &dyn rusqlite::ToSql,
+                    &notes_str as &dyn rusqlite::ToSql,
+                ]);
+            }
+        }
+    }
+
+    // Update entry timestamp
+    let update_entry_sql = "UPDATE journal_entries SET updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+    db.execute(update_entry_sql, &[&entry_id as &dyn rusqlite::ToSql])
+        .map_err(|e| format!("Failed to update journal entry: {}", e))?;
+
+    // Get the updated entry
+    let entry_sql = "SELECT id, entry_number, entry_date, description, reference_type, reference_id, created_at, updated_at FROM journal_entries WHERE id = ?";
+    let entries = db
+        .query(entry_sql, &[&entry_id as &dyn rusqlite::ToSql], |row| {
+            Ok(JournalEntry {
+                id: row.get(0)?,
+                entry_number: row.get(1)?,
+                entry_date: row.get(2)?,
+                description: row.get(3)?,
+                reference_type: row.get(4)?,
+                reference_id: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch updated journal entry: {}", e))?;
+
+    if let Some(entry) = entries.first() {
+        Ok(entry.clone())
+    } else {
+        Err("Failed to retrieve updated journal entry".to_string())
+    }
 }
 
 /// Create exchange rate
@@ -7615,6 +7741,7 @@ pub fn run() {
             create_journal_entry,
             get_journal_entries,
             get_journal_entry,
+            update_journal_entry,
             init_currency_exchange_rates_table,
             create_exchange_rate,
             get_exchange_rate,

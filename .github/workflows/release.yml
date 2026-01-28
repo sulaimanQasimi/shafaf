@@ -73,7 +73,15 @@ jobs:
           }
           
           try {
+            # Wait a bit for assets to be fully uploaded
+            Start-Sleep -Seconds 5
+            
             $response = Invoke-RestMethod -Uri $releaseUrl -Headers $headers -Method Get
+            
+            # Debug: List all assets
+            Write-Host "Available assets:"
+            $response.assets | ForEach-Object { Write-Host "  - $($_.name)" }
+            
             $latestJson = $response.assets | Where-Object { $_.name -eq "latest.json" }
             
             if ($latestJson) {
@@ -81,41 +89,72 @@ jobs:
             } else {
               Write-Host "latest.json not found. Generating and uploading..."
               
-              # Find the installer file
-              $installer = $response.assets | Where-Object { $_.name -like "*.exe" -or $_.name -like "*setup*.exe" } | Select-Object -First 1
+              # Find the installer file (try multiple patterns)
+              $installer = $response.assets | Where-Object { 
+                $_.name -like "*.exe" -and $_.name -notlike "*.sig" 
+              } | Select-Object -First 1
+              
               if (-not $installer) {
+                Write-Host "Available files:"
+                $response.assets | ForEach-Object { Write-Host "  - $($_.name)" }
                 Write-Host "::error::Could not find installer file in release assets"
                 exit 1
               }
               
-              # Find the signature file
-              $signature = $response.assets | Where-Object { $_.name -like "*.sig" } | Select-Object -First 1
+              Write-Host "Found installer: $($installer.name)"
+              
+              # Find the signature file (try multiple patterns)
+              $signature = $response.assets | Where-Object { 
+                $_.name -like "*.sig" -or 
+                $_.name -like "*$($installer.name).sig" -or
+                ($_.name -eq "$($installer.name).sig")
+              } | Select-Object -First 1
+              
               if (-not $signature) {
-                Write-Host "::error::Could not find signature file in release assets"
-                exit 1
-              }
-              
-              # Get signature content (trim whitespace)
-              $sigContent = ((Invoke-WebRequest -Uri $signature.browser_download_url -Headers $headers).Content).Trim()
-              
-              # Extract version from tag (remove 'v' prefix if present)
-              $version = "${{ github.ref_name }}" -replace '^v', ''
-              
-              # Get current date in ISO format
-              $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-              
-              # Create latest.json content
-              $latestJsonContent = @{
-                version = "${{ github.ref_name }}"
-                notes = "See the assets to download this version and install."
-                pub_date = $pubDate
-                platforms = @{
-                  "windows-x86_64" = @{
-                    signature = $sigContent
-                    url = $installer.browser_download_url
+                Write-Host "Warning: Could not find signature file in release assets"
+                Write-Host "Available files:"
+                $response.assets | ForEach-Object { Write-Host "  - $($_.name)" }
+                Write-Host "Attempting to create latest.json without signature (updater may not work)..."
+                
+                # Create latest.json without signature
+                $version = "${{ github.ref_name }}" -replace '^v', ''
+                $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                
+                $latestJsonContent = @{
+                  version = "${{ github.ref_name }}"
+                  notes = "See the assets to download this version and install."
+                  pub_date = $pubDate
+                  platforms = @{
+                    "windows-x86_64" = @{
+                      url = $installer.browser_download_url
+                    }
                   }
-                }
-              } | ConvertTo-Json -Depth 10
+                } | ConvertTo-Json -Depth 10
+              } else {
+                Write-Host "Found signature file: $($signature.name)"
+                
+                # Get signature content (trim whitespace)
+                $sigContent = ((Invoke-WebRequest -Uri $signature.browser_download_url -Headers $headers).Content).Trim()
+                
+                # Extract version from tag (remove 'v' prefix if present)
+                $version = "${{ github.ref_name }}" -replace '^v', ''
+                
+                # Get current date in ISO format
+                $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                
+                # Create latest.json content
+                $latestJsonContent = @{
+                  version = "${{ github.ref_name }}"
+                  notes = "See the assets to download this version and install."
+                  pub_date = $pubDate
+                  platforms = @{
+                    "windows-x86_64" = @{
+                      signature = $sigContent
+                      url = $installer.browser_download_url
+                    }
+                  }
+                } | ConvertTo-Json -Depth 10
+              }
               
               # Save to file
               $latestJsonContent | Out-File -FilePath "latest.json" -Encoding utf8
@@ -124,6 +163,8 @@ jobs:
             }
           } catch {
             Write-Host "::error::Could not process release: $_"
+            Write-Host $_.Exception.Message
+            Write-Host $_.ScriptStackTrace
             exit 1
           }
 
@@ -164,11 +205,6 @@ jobs:
             }
           } else {
             Write-Host "latest.json not generated, skipping upload"
-          }
-            }
-          } catch {
-            Write-Host "::error::Could not process release: $_"
-            exit 1
           }
 
       - name: Release link

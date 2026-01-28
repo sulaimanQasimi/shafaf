@@ -1,10 +1,20 @@
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 
 interface FooterProps {
   className?: string;
 }
 
 export default function Footer({ className = "" }: FooterProps) {
+  const [appVersion, setAppVersion] = useState<string>("");
+
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => setAppVersion(""));
+  }, []);
+
   return (
     <motion.footer
       initial={{ opacity: 0 }}
@@ -13,6 +23,12 @@ export default function Footer({ className = "" }: FooterProps) {
       className={`mt-auto pt-8 pb-4 border-t border-gray-200 dark:border-gray-700 text-center ${className}`}
     >
       <p className="text-sm text-gray-500 dark:text-gray-400">
+        {appVersion && (
+          <>
+            <span className="font-semibold">شفاف</span> نسخه {appVersion}
+            {" - "}
+          </>
+        )}
         Developed by{" "}
         <a
           href="https://www.galaxytechology.com"

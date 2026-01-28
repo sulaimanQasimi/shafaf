@@ -128,9 +128,9 @@ jobs:
               
               # Use version from filename if available, otherwise use tag version
               $version = if ($versionFromFilename) { $versionFromFilename } else { $tagVersion }
-              $versionWithV = if ($versionFromFilename) { "v$versionFromFilename" } else { "${{ github.ref_name }}" }
               
-              Write-Host "Using version: $versionWithV (tag: ${{ github.ref_name }})"
+              Write-Host "Using version: $version (tag: ${{ github.ref_name }})"
+              Write-Host "Note: Tauri expects version without 'v' prefix for comparison"
               
               # Find the signature file (try multiple patterns)
               $signature = $response.assets | Where-Object { 
@@ -149,8 +149,9 @@ jobs:
                 $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
                 
                 # Create latest.json without signature
+                # Note: Tauri requires version WITHOUT 'v' prefix for proper comparison
                 $latestJsonContent = @{
-                  version = $versionWithV
+                  version = $version
                   notes = "See the assets to download this version and install."
                   pub_date = $pubDate
                   platforms = @{
@@ -169,8 +170,9 @@ jobs:
                 $pubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
                 
                 # Create latest.json content
+                # Note: Tauri requires version WITHOUT 'v' prefix for proper comparison
                 $latestJsonContent = @{
-                  version = $versionWithV
+                  version = $version
                   notes = "See the assets to download this version and install."
                   pub_date = $pubDate
                   platforms = @{

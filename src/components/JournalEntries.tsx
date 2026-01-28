@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
-import { Search, Eye, Copy, Grid, List, Calendar, Filter, X, Printer, CheckCircle2, XCircle, TrendingUp, TrendingDown, FileText, Edit } from "lucide-react";
+import { Search, Eye, Copy, Grid, List, Filter, X, Printer, CheckCircle2, XCircle, TrendingUp, TrendingDown, FileText, Edit } from "lucide-react";
 import {
     initJournalEntriesTable,
     initJournalEntryLinesTable,
@@ -97,7 +97,7 @@ const getDefaultDate = () => {
 };
 
 export default function JournalEntries({ onBack }: JournalEntriesProps) {
-    const [entries, setEntries] = useState<JournalEntry[]>([]);
+    const [, setEntries] = useState<JournalEntry[]>([]);
     const [allEntries, setAllEntries] = useState<JournalEntry[]>([]); // For client-side filtering
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -990,8 +990,8 @@ export default function JournalEntries({ onBack }: JournalEntriesProps) {
 // Entry Card Component
 function EntryCard({
     entry,
-    accounts,
-    currencies,
+    accounts: _accounts,
+    currencies: _currencies,
     onView,
     onEdit,
     onCopy,
@@ -1127,7 +1127,7 @@ function CreateEntryModal({
     setFormData,
     inputValues,
     setInputValues,
-    accounts,
+    accounts: _accounts,
     currencies,
     accountSearchQueries,
     setAccountSearchQueries,
@@ -1595,8 +1595,8 @@ function CreateEntryModal({
 function ViewEntryModal({
     entry,
     lines,
-    accounts,
-    currencies,
+    accounts: _accounts,
+    currencies: _currencies,
     getAccountName,
     getCurrencyName,
     formatPersianDate,

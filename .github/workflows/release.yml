@@ -63,16 +63,25 @@ jobs:
           args: '--bundles nsis'
 
       - name: Verify latest.json was uploaded
+        shell: pwsh
         run: |
-          echo "Checking if latest.json exists in release assets..."
-          RELEASE_URL="https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}"
-          ASSETS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$RELEASE_URL" | grep -o '"browser_download_url": "[^"]*latest.json[^"]*"' || echo "")
-          if [ -z "$ASSETS" ]; then
-            echo "::warning::latest.json not found in release assets. Auto-updater may not work."
-          else
-            echo "✅ latest.json found in release assets"
-            echo "$ASSETS"
-          fi
+          Write-Host "Checking if latest.json exists in release assets..."
+          $releaseUrl = "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}"
+          $headers = @{
+            "Authorization" = "token ${{ secrets.GITHUB_TOKEN }}"
+            "Accept" = "application/vnd.github.v3+json"
+          }
+          try {
+            $response = Invoke-RestMethod -Uri $releaseUrl -Headers $headers -Method Get
+            $latestJson = $response.assets | Where-Object { $_.name -like "*latest.json*" }
+            if ($latestJson) {
+              Write-Host "✅ latest.json found in release assets: $($latestJson.browser_download_url)"
+            } else {
+              Write-Host "::warning::latest.json not found in release assets. Auto-updater may not work."
+            }
+          } catch {
+            Write-Host "::warning::Could not verify latest.json: $_"
+          }
 
       - name: Release link
         run: echo "::notice title=Release::https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"

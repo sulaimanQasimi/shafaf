@@ -3119,7 +3119,25 @@ pub struct SaleItem {
     pub per_price: f64,
     pub amount: f64,
     pub total: f64,
+    pub purchase_item_id: Option<i64>,
+    pub sale_type: Option<String>,
     pub created_at: String,
+}
+
+// ProductBatch Model (for batch information)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductBatch {
+    pub purchase_item_id: i64,
+    pub purchase_id: i64,
+    pub batch_number: Option<String>,
+    pub purchase_date: String,
+    pub expiry_date: Option<String>,
+    pub per_price: f64,
+    pub per_unit: Option<f64>,
+    pub wholesale_price: Option<f64>,
+    pub retail_price: Option<f64>,
+    pub amount: f64,
+    pub remaining_quantity: f64,
 }
 
 // SalePayment Model
@@ -3195,15 +3213,28 @@ fn init_sales_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<Stri
             per_price REAL NOT NULL,
             amount REAL NOT NULL,
             total REAL NOT NULL,
+            purchase_item_id INTEGER,
+            sale_type TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
             FOREIGN KEY (product_id) REFERENCES products(id),
-            FOREIGN KEY (unit_id) REFERENCES units(id)
+            FOREIGN KEY (unit_id) REFERENCES units(id),
+            FOREIGN KEY (purchase_item_id) REFERENCES purchase_items(id)
         )
     ";
 
     db.execute(create_items_table_sql, &[])
         .map_err(|e| format!("Failed to create sale_items table: {}", e))?;
+
+    // Add new columns if they don't exist (for existing databases)
+    let alter_sale_items_queries = vec![
+        "ALTER TABLE sale_items ADD COLUMN purchase_item_id INTEGER",
+        "ALTER TABLE sale_items ADD COLUMN sale_type TEXT",
+    ];
+
+    for alter_sql in alter_sale_items_queries {
+        let _ = db.execute(alter_sql, &[]);
+    }
 
     let create_payments_table_sql = "
         CREATE TABLE IF NOT EXISTS sale_payments (
@@ -3265,13 +3296,13 @@ fn create_sale(
     exchange_rate: f64,
     paid_amount: f64,
     additional_costs: Vec<(String, f64)>, // (name, amount)
-    items: Vec<(i64, i64, f64, f64)>, // (product_id, unit_id, per_price, amount)
+    items: Vec<(i64, i64, f64, f64, Option<i64>, Option<String>)>, // (product_id, unit_id, per_price, amount, purchase_item_id, sale_type)
 ) -> Result<Sale, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Calculate total amount from items + additional costs
-    let items_total: f64 = items.iter().map(|(_, _, per_price, amount)| per_price * amount).sum();
+    let items_total: f64 = items.iter().map(|(_, _, per_price, amount, _, _)| per_price * amount).sum();
     let additional_costs_total: f64 = additional_costs.iter().map(|(_, amount)| amount).sum();
     let total_amount = items_total + additional_costs_total;
     let base_amount = total_amount * exchange_rate;
@@ -3353,9 +3384,9 @@ fn create_sale(
     }
 
     // Insert sale items
-    for (product_id, unit_id, per_price, amount) in items {
+    for (product_id, unit_id, per_price, amount, purchase_item_id, sale_type) in items {
         let total = per_price * amount;
-        let insert_item_sql = "INSERT INTO sale_items (sale_id, product_id, unit_id, per_price, amount, total) VALUES (?, ?, ?, ?, ?, ?)";
+        let insert_item_sql = "INSERT INTO sale_items (sale_id, product_id, unit_id, per_price, amount, total, purchase_item_id, sale_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         db.execute(insert_item_sql, &[
             sale_id as &dyn rusqlite::ToSql,
             &product_id as &dyn rusqlite::ToSql,
@@ -3363,6 +3394,8 @@ fn create_sale(
             &per_price as &dyn rusqlite::ToSql,
             &amount as &dyn rusqlite::ToSql,
             &total as &dyn rusqlite::ToSql,
+            &purchase_item_id as &dyn rusqlite::ToSql,
+            &sale_type as &dyn rusqlite::ToSql,
         ])
             .map_err(|e| format!("Failed to insert sale item: {}", e))?;
     }
@@ -3544,7 +3577,7 @@ fn get_sale(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<(Sa
     let sale = sales.first().ok_or("Sale not found")?;
 
     // Get sale items
-    let items_sql = "SELECT id, sale_id, product_id, unit_id, per_price, amount, total, created_at FROM sale_items WHERE sale_id = ?";
+    let items_sql = "SELECT id, sale_id, product_id, unit_id, per_price, amount, total, purchase_item_id, sale_type, created_at FROM sale_items WHERE sale_id = ?";
     let items = db
         .query(items_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(SaleItem {
@@ -3555,7 +3588,9 @@ fn get_sale(db_state: State<'_, Mutex<Option<Database>>>, id: i64) -> Result<(Sa
                 per_price: row.get(4)?,
                 amount: row.get(5)?,
                 total: row.get(6)?,
-                created_at: row.get(7)?,
+                purchase_item_id: row.get(7)?,
+                sale_type: row.get(8)?,
+                created_at: row.get(9)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale items: {}", e))?;
@@ -3597,13 +3632,13 @@ fn update_sale(
     exchange_rate: f64,
     _paid_amount: f64, // Ignored, handled by payments table
     additional_costs: Vec<(String, f64)>, // (name, amount)
-    items: Vec<(i64, i64, f64, f64)>, // (product_id, unit_id, per_price, amount)
+    items: Vec<(i64, i64, f64, f64, Option<i64>, Option<String>)>, // (product_id, unit_id, per_price, amount, purchase_item_id, sale_type)
 ) -> Result<Sale, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     // Calculate total amount from items + additional costs
-    let items_total: f64 = items.iter().map(|(_, _, per_price, amount)| per_price * amount).sum();
+    let items_total: f64 = items.iter().map(|(_, _, per_price, amount, _, _)| per_price * amount).sum();
     let additional_costs_total: f64 = additional_costs.iter().map(|(_, amount)| amount).sum();
     let total_amount = items_total + additional_costs_total;
     let base_amount = total_amount * exchange_rate;
@@ -3630,9 +3665,9 @@ fn update_sale(
         .map_err(|e| format!("Failed to delete sale items: {}", e))?;
 
     // Insert new items
-    for (product_id, unit_id, per_price, amount) in items {
+    for (product_id, unit_id, per_price, amount, purchase_item_id, sale_type) in items {
         let total = per_price * amount;
-        let insert_item_sql = "INSERT INTO sale_items (sale_id, product_id, unit_id, per_price, amount, total) VALUES (?, ?, ?, ?, ?, ?)";
+        let insert_item_sql = "INSERT INTO sale_items (sale_id, product_id, unit_id, per_price, amount, total, purchase_item_id, sale_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         db.execute(insert_item_sql, &[
             &id as &dyn rusqlite::ToSql,
             &product_id as &dyn rusqlite::ToSql,
@@ -3640,6 +3675,8 @@ fn update_sale(
             &per_price as &dyn rusqlite::ToSql,
             &amount as &dyn rusqlite::ToSql,
             &total as &dyn rusqlite::ToSql,
+            &purchase_item_id as &dyn rusqlite::ToSql,
+            &sale_type as &dyn rusqlite::ToSql,
         ])
             .map_err(|e| format!("Failed to insert sale item: {}", e))?;
     }
@@ -3713,13 +3750,15 @@ fn create_sale_item(
     unit_id: i64,
     per_price: f64,
     amount: f64,
+    purchase_item_id: Option<i64>,
+    sale_type: Option<String>,
 ) -> Result<SaleItem, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     let total = per_price * amount;
 
-    let insert_sql = "INSERT INTO sale_items (sale_id, product_id, unit_id, per_price, amount, total) VALUES (?, ?, ?, ?, ?, ?)";
+    let insert_sql = "INSERT INTO sale_items (sale_id, product_id, unit_id, per_price, amount, total, purchase_item_id, sale_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
     db.execute(insert_sql, &[
         &sale_id as &dyn rusqlite::ToSql,
         &product_id as &dyn rusqlite::ToSql,
@@ -3727,6 +3766,8 @@ fn create_sale_item(
         &per_price as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
         &total as &dyn rusqlite::ToSql,
+        &purchase_item_id as &dyn rusqlite::ToSql,
+        &sale_type as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to insert sale item: {}", e))?;
 
@@ -3736,7 +3777,7 @@ fn create_sale_item(
         .map_err(|e| format!("Failed to update sale total: {}", e))?;
 
     // Get the created item
-    let item_sql = "SELECT id, sale_id, product_id, unit_id, per_price, amount, total, created_at FROM sale_items WHERE sale_id = ? AND product_id = ? ORDER BY id DESC LIMIT 1";
+    let item_sql = "SELECT id, sale_id, product_id, unit_id, per_price, amount, total, purchase_item_id, sale_type, created_at FROM sale_items WHERE sale_id = ? AND product_id = ? ORDER BY id DESC LIMIT 1";
     let items = db
         .query(item_sql, &[&sale_id as &dyn rusqlite::ToSql, &product_id as &dyn rusqlite::ToSql], |row| {
             Ok(SaleItem {
@@ -3747,7 +3788,9 @@ fn create_sale_item(
                 per_price: row.get(4)?,
                 amount: row.get(5)?,
                 total: row.get(6)?,
-                created_at: row.get(7)?,
+                purchase_item_id: row.get(7)?,
+                sale_type: row.get(8)?,
+                created_at: row.get(9)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale item: {}", e))?;
@@ -3765,7 +3808,7 @@ fn get_sale_items(db_state: State<'_, Mutex<Option<Database>>>, sale_id: i64) ->
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
-    let sql = "SELECT id, sale_id, product_id, unit_id, per_price, amount, total, created_at FROM sale_items WHERE sale_id = ? ORDER BY id";
+    let sql = "SELECT id, sale_id, product_id, unit_id, per_price, amount, total, purchase_item_id, sale_type, created_at FROM sale_items WHERE sale_id = ? ORDER BY id";
     let items = db
         .query(sql, &[&sale_id as &dyn rusqlite::ToSql], |row| {
             Ok(SaleItem {
@@ -3776,12 +3819,64 @@ fn get_sale_items(db_state: State<'_, Mutex<Option<Database>>>, sale_id: i64) ->
                 per_price: row.get(4)?,
                 amount: row.get(5)?,
                 total: row.get(6)?,
-                created_at: row.get(7)?,
+                purchase_item_id: row.get(7)?,
+                sale_type: row.get(8)?,
+                created_at: row.get(9)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale items: {}", e))?;
 
     Ok(items)
+}
+
+/// Get all batches for a product (from purchase_items)
+#[tauri::command]
+fn get_product_batches(db_state: State<'_, Mutex<Option<Database>>>, product_id: i64) -> Result<Vec<ProductBatch>, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+
+    // Query purchase_items with purchase info and calculate remaining quantity
+    let sql = "
+        SELECT 
+            pi.id as purchase_item_id,
+            pi.purchase_id,
+            p.batch_number,
+            p.date as purchase_date,
+            pi.expiry_date,
+            pi.per_price,
+            pi.per_unit,
+            pi.wholesale_price,
+            pi.retail_price,
+            pi.amount,
+            (pi.amount - COALESCE(SUM(si.amount), 0)) as remaining_quantity
+        FROM purchase_items pi
+        INNER JOIN purchases p ON pi.purchase_id = p.id
+        LEFT JOIN sale_items si ON si.purchase_item_id = pi.id
+        WHERE pi.product_id = ?
+        GROUP BY pi.id, pi.purchase_id, p.batch_number, p.date, pi.expiry_date, pi.per_price, pi.per_unit, pi.wholesale_price, pi.retail_price, pi.amount
+        HAVING remaining_quantity > 0
+        ORDER BY p.date ASC, pi.id ASC
+    ";
+
+    let batches = db
+        .query(sql, &[&product_id as &dyn rusqlite::ToSql], |row| {
+            Ok(ProductBatch {
+                purchase_item_id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                batch_number: row.get(2)?,
+                purchase_date: row.get(3)?,
+                expiry_date: row.get(4)?,
+                per_price: row.get(5)?,
+                per_unit: row.get(6)?,
+                wholesale_price: row.get(7)?,
+                retail_price: row.get(8)?,
+                amount: row.get(9)?,
+                remaining_quantity: row.get(10)?,
+            })
+        })
+        .map_err(|e| format!("Failed to fetch product batches: {}", e))?;
+
+    Ok(batches)
 }
 
 /// Update a sale item
@@ -3793,19 +3888,23 @@ fn update_sale_item(
     unit_id: i64,
     per_price: f64,
     amount: f64,
+    purchase_item_id: Option<i64>,
+    sale_type: Option<String>,
 ) -> Result<SaleItem, String> {
     let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let db = db_guard.as_ref().ok_or("No database is currently open")?;
 
     let total = per_price * amount;
 
-    let update_sql = "UPDATE sale_items SET product_id = ?, unit_id = ?, per_price = ?, amount = ?, total = ? WHERE id = ?";
+    let update_sql = "UPDATE sale_items SET product_id = ?, unit_id = ?, per_price = ?, amount = ?, total = ?, purchase_item_id = ?, sale_type = ? WHERE id = ?";
     db.execute(update_sql, &[
         &product_id as &dyn rusqlite::ToSql,
         &unit_id as &dyn rusqlite::ToSql,
         &per_price as &dyn rusqlite::ToSql,
         &amount as &dyn rusqlite::ToSql,
         &total as &dyn rusqlite::ToSql,
+        &purchase_item_id as &dyn rusqlite::ToSql,
+        &sale_type as &dyn rusqlite::ToSql,
         &id as &dyn rusqlite::ToSql,
     ])
         .map_err(|e| format!("Failed to update sale item: {}", e))?;
@@ -3826,7 +3925,7 @@ fn update_sale_item(
     }
 
     // Get the updated item
-    let item_sql = "SELECT id, sale_id, product_id, unit_id, per_price, amount, total, created_at FROM sale_items WHERE id = ?";
+    let item_sql = "SELECT id, sale_id, product_id, unit_id, per_price, amount, total, purchase_item_id, sale_type, created_at FROM sale_items WHERE id = ?";
     let items = db
         .query(item_sql, &[&id as &dyn rusqlite::ToSql], |row| {
             Ok(SaleItem {
@@ -3837,7 +3936,9 @@ fn update_sale_item(
                 per_price: row.get(4)?,
                 amount: row.get(5)?,
                 total: row.get(6)?,
-                created_at: row.get(7)?,
+                purchase_item_id: row.get(7)?,
+                sale_type: row.get(8)?,
+                created_at: row.get(9)?,
             })
         })
         .map_err(|e| format!("Failed to fetch sale item: {}", e))?;
@@ -7762,6 +7863,7 @@ pub fn run() {
             delete_sale,
             create_sale_item,
             get_sale_items,
+            get_product_batches,
             update_sale_item,
             delete_sale_item,
             create_sale_payment,

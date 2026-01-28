@@ -12,11 +12,13 @@ import {
     getSalePayments,
     deleteSalePayment,
     getSaleAdditionalCosts,
+    getProductBatches,
     type Sale,
     type SaleItemInput,
     type SaleWithItems,
     type SalePayment,
     type SaleAdditionalCost,
+    type ProductBatch,
 } from "../utils/sales";
 import { getCustomers, type Customer } from "../utils/customer";
 import { getProducts, type Product } from "../utils/product";
@@ -132,6 +134,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
         date: persianToGeorgian(getCurrentPersianDate()) || new Date().toISOString().split('T')[0],
     });
     const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+    const [productBatches, setProductBatches] = useState<Record<number, ProductBatch[]>>({});
 
     // Pagination & Search
     const [page, setPage] = useState(1);
@@ -231,6 +234,21 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             const saleData = await getSale(id);
             const additionalCosts: SaleAdditionalCost[] = await getSaleAdditionalCosts(id);
             setEditingSale(saleData.sale);
+            
+            // Fetch batches for all products in sale items
+            const batchesMap: Record<number, ProductBatch[]> = {};
+            for (const item of saleData.items) {
+                if (item.product_id && !batchesMap[item.product_id]) {
+                    try {
+                        const batches = await getProductBatches(item.product_id);
+                        batchesMap[item.product_id] = batches;
+                    } catch (error) {
+                        console.error(`Error fetching batches for product ${item.product_id}:`, error);
+                    }
+                }
+            }
+            setProductBatches(prev => ({ ...prev, ...batchesMap }));
+            
             setFormData({
                 customer_id: saleData.sale.customer_id,
                 date: saleData.sale.date,
@@ -244,6 +262,8 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                     unit_id: item.unit_id,
                     per_price: item.per_price,
                     amount: item.amount,
+                    purchase_item_id: item.purchase_item_id ?? null,
+                    sale_type: (item.sale_type as 'retail' | 'wholesale') || 'retail',
                 })),
             });
         } catch (error: any) {
@@ -355,6 +375,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                 additional_costs: [],
                 items: [],
             });
+            setProductBatches({});
         }
         setIsModalOpen(true);
     };
@@ -372,6 +393,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             additional_costs: [],
             items: [],
         });
+        setProductBatches({});
     };
 
     const addItem = () => {
@@ -379,7 +401,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
             ...formData,
             items: [
                 ...formData.items,
-                { product_id: 0, unit_id: 0, per_price: 0, amount: 0 },
+                { product_id: 0, unit_id: 0, per_price: 0, amount: 0, purchase_item_id: null, sale_type: 'retail' },
             ],
         });
     };
@@ -409,21 +431,69 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
         });
     };
 
-    const updateItem = (index: number, field: keyof SaleItemInput, value: any) => {
+    const updateItem = async (index: number, field: keyof SaleItemInput, value: any) => {
         const newItems = [...formData.items];
         newItems[index] = { ...newItems[index], [field]: value };
 
-        // Auto fill price if product is selected (optional feature)
-        if (field === 'product_id') {
-            const product = products.find(p => p.id === value);
-            if (product && product.price) {
-                newItems[index].per_price = product.price;
+        // When product is selected, fetch batches and auto-select oldest batch
+        if (field === 'product_id' && value) {
+            try {
+                const batches = await getProductBatches(value);
+                setProductBatches(prev => ({ ...prev, [value]: batches }));
+                
+                // Auto-select oldest batch (first in array)
+                if (batches.length > 0) {
+                    const oldestBatch = batches[0];
+                    newItems[index].purchase_item_id = oldestBatch.purchase_item_id;
+                    
+                    // Set default sale_type to retail if not set
+                    if (!newItems[index].sale_type) {
+                        newItems[index].sale_type = 'retail';
+                    }
+                    
+                    // Auto-fill price based on sale_type
+                    if (newItems[index].sale_type === 'retail') {
+                        newItems[index].per_price = oldestBatch.retail_price || oldestBatch.per_price;
+                    } else {
+                        newItems[index].per_price = oldestBatch.wholesale_price || oldestBatch.per_price;
+                    }
+                }
+                
+                const product = products.find(p => p.id === value);
+                if (product && product.unit) {
+                    const unit = units.find(u => u.name === product.unit);
+                    if (unit) {
+                        newItems[index].unit_id = unit.id;
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching batches:", error);
+                toast.error("خطا در دریافت اطلاعات دسته‌ها");
             }
-            if (product && product.unit) {
-                // Try to find unit by name, or leave as is
-                const unit = units.find(u => u.name === product.unit);
-                if (unit) {
-                    newItems[index].unit_id = unit.id;
+        }
+
+        // When sale_type changes, update price based on selected batch
+        if (field === 'sale_type' && newItems[index].product_id && newItems[index].purchase_item_id) {
+            const batches = productBatches[newItems[index].product_id] || [];
+            const selectedBatch = batches.find(b => b.purchase_item_id === newItems[index].purchase_item_id);
+            if (selectedBatch) {
+                if (value === 'retail') {
+                    newItems[index].per_price = selectedBatch.retail_price || selectedBatch.per_price;
+                } else {
+                    newItems[index].per_price = selectedBatch.wholesale_price || selectedBatch.per_price;
+                }
+            }
+        }
+
+        // When purchase_item_id (batch) changes, update price based on sale_type
+        if (field === 'purchase_item_id' && newItems[index].product_id && newItems[index].sale_type) {
+            const batches = productBatches[newItems[index].product_id] || [];
+            const selectedBatch = batches.find(b => b.purchase_item_id === value);
+            if (selectedBatch) {
+                if (newItems[index].sale_type === 'retail') {
+                    newItems[index].per_price = selectedBatch.retail_price || selectedBatch.per_price;
+                } else {
+                    newItems[index].per_price = selectedBatch.wholesale_price || selectedBatch.per_price;
                 }
             }
         }
@@ -954,7 +1024,7 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                                     className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border-2 border-gray-200 dark:border-gray-600"
                                                 >
                                                     <div className="grid grid-cols-12 gap-3 items-end">
-                                                        <div className="col-span-4">
+                                                        <div className={item.product_id && productBatches[item.product_id] && productBatches[item.product_id].length > 0 ? "col-span-2" : "col-span-4"}>
                                                             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                                                                 {translations.product}
                                                             </label>
@@ -972,7 +1042,43 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                                                 ))}
                                                             </select>
                                                         </div>
-                                                        <div className="col-span-2">
+                                                        {item.product_id && productBatches[item.product_id] && productBatches[item.product_id].length > 0 && (
+                                                            <div className="col-span-2">
+                                                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                                                    دسته (Batch)
+                                                                </label>
+                                                                <select
+                                                                    value={item.purchase_item_id || ''}
+                                                                    onChange={(e) => updateItem(index, 'purchase_item_id', parseInt(e.target.value) || null)}
+                                                                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                                                    dir="rtl"
+                                                                >
+                                                                    {productBatches[item.product_id].map((batch) => (
+                                                                        <option key={batch.purchase_item_id} value={batch.purchase_item_id}>
+                                                                            {batch.batch_number || `دسته ${batch.purchase_item_id}`} - 
+                                                                            تاریخ: {formatPersianDate(batch.purchase_date)} - 
+                                                                            موجودی: {batch.remaining_quantity.toLocaleString()}
+                                                                            {batch.expiry_date && ` - انقضا: ${formatPersianDate(batch.expiry_date)}`}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                        )}
+                                                        <div className="col-span-1">
+                                                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                                                نوع فروش
+                                                            </label>
+                                                            <select
+                                                                value={item.sale_type || 'retail'}
+                                                                onChange={(e) => updateItem(index, 'sale_type', e.target.value as 'retail' | 'wholesale')}
+                                                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                                                dir="rtl"
+                                                            >
+                                                                <option value="retail">خرده فروشی</option>
+                                                                <option value="wholesale">عمده فروشی</option>
+                                                            </select>
+                                                        </div>
+                                                        <div className="col-span-1">
                                                             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                                                                 {translations.unit}
                                                             </label>
@@ -1036,6 +1142,24 @@ export default function SalesManagement({ onBack, onOpenInvoice }: SalesManageme
                                                             </motion.button>
                                                         </div>
                                                     </div>
+                                                    {item.product_id && item.purchase_item_id && productBatches[item.product_id] && (
+                                                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-xs">
+                                                            {(() => {
+                                                                const batch = productBatches[item.product_id].find(b => b.purchase_item_id === item.purchase_item_id);
+                                                                if (batch) {
+                                                                    return (
+                                                                        <div className="grid grid-cols-4 gap-2 text-gray-700 dark:text-gray-300">
+                                                                            <div><span className="font-semibold">تاریخ خرید:</span> {formatPersianDate(batch.purchase_date)}</div>
+                                                                            {batch.expiry_date && <div><span className="font-semibold">تاریخ انقضا:</span> {formatPersianDate(batch.expiry_date)}</div>}
+                                                                            <div><span className="font-semibold">موجودی:</span> {batch.remaining_quantity.toLocaleString()}</div>
+                                                                            <div><span className="font-semibold">قیمت خرید:</span> {batch.per_price.toLocaleString()}</div>
+                                                                        </div>
+                                                                    );
+                                                                }
+                                                                return null;
+                                                            })()}
+                                                        </div>
+                                                    )}
                                                 </motion.div>
                                             ))}
                                         </div>

@@ -23,6 +23,8 @@ export interface SaleItem {
     per_price: number;
     amount: number;
     total: number;
+    purchase_item_id?: number | null;
+    sale_type?: string | null;
     created_at: string;
 }
 
@@ -57,6 +59,22 @@ export interface SaleItemInput {
     unit_id: number;
     per_price: number;
     amount: number;
+    purchase_item_id?: number | null;
+    sale_type?: 'retail' | 'wholesale' | null;
+}
+
+export interface ProductBatch {
+    purchase_item_id: number;
+    purchase_id: number;
+    batch_number?: string | null;
+    purchase_date: string;
+    expiry_date?: string | null;
+    per_price: number;
+    per_unit?: number | null;
+    wholesale_price?: number | null;
+    retail_price?: number | null;
+    amount: number;
+    remaining_quantity: number;
 }
 
 export interface SaleAdditionalCostInput {
@@ -94,12 +112,14 @@ export async function createSale(
     additional_costs: SaleAdditionalCostInput[],
     items: SaleItemInput[]
 ): Promise<Sale> {
-    // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
-    const itemsTuple: [number, number, number, number][] = items.map(item => [
+    // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount, purchase_item_id, sale_type)
+    const itemsTuple: [number, number, number, number, number | null, string | null][] = items.map(item => [
         item.product_id,
         item.unit_id,
         item.per_price,
         item.amount,
+        item.purchase_item_id ?? null,
+        item.sale_type ?? null,
     ]);
 
     // Convert additional_costs to tuple format expected by Rust: (name, amount)
@@ -190,12 +210,14 @@ export async function updateSale(
     additional_costs: SaleAdditionalCostInput[],
     items: SaleItemInput[]
 ): Promise<Sale> {
-    // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
-    const itemsTuple: [number, number, number, number][] = items.map(item => [
+    // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount, purchase_item_id, sale_type)
+    const itemsTuple: [number, number, number, number, number | null, string | null][] = items.map(item => [
         item.product_id,
         item.unit_id,
         item.per_price,
         item.amount,
+        item.purchase_item_id ?? null,
+        item.sale_type ?? null,
     ]);
 
     // Convert additional_costs to tuple format expected by Rust: (name, amount)
@@ -240,7 +262,9 @@ export async function createSaleItem(
     product_id: number,
     unit_id: number,
     per_price: number,
-    amount: number
+    amount: number,
+    purchase_item_id?: number | null,
+    sale_type?: 'retail' | 'wholesale' | null
 ): Promise<SaleItem> {
     return await invoke<SaleItem>("create_sale_item", {
         saleId: sale_id,
@@ -248,6 +272,8 @@ export async function createSaleItem(
         unitId: unit_id,
         perPrice: per_price,
         amount,
+        purchaseItemId: purchase_item_id ?? null,
+        saleType: sale_type ?? null,
     });
 }
 
@@ -274,7 +300,9 @@ export async function updateSaleItem(
     product_id: number,
     unit_id: number,
     per_price: number,
-    amount: number
+    amount: number,
+    purchase_item_id?: number | null,
+    sale_type?: 'retail' | 'wholesale' | null
 ): Promise<SaleItem> {
     return await invoke<SaleItem>("update_sale_item", {
         id,
@@ -282,6 +310,8 @@ export async function updateSaleItem(
         unitId: unit_id,
         perPrice: per_price,
         amount,
+        purchaseItemId: purchase_item_id ?? null,
+        saleType: sale_type ?? null,
     });
 }
 
@@ -394,4 +424,13 @@ export async function updateSaleAdditionalCost(
  */
 export async function deleteSaleAdditionalCost(id: number): Promise<string> {
     return await invoke<string>("delete_sale_additional_cost", { id });
+}
+
+/**
+ * Get all batches for a product
+ * @param productId Product ID
+ * @returns Promise with array of ProductBatch
+ */
+export async function getProductBatches(productId: number): Promise<ProductBatch[]> {
+    return await invoke<ProductBatch[]>("get_product_batches", { productId });
 }

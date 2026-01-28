@@ -53,6 +53,12 @@ const translations = {
   product: "محصول",
   unit: "واحد",
   perPrice: "قیمت واحد",
+  perUnit: "تعداد واحد",
+  costPrice: "قیمت تمام شد",
+  wholesalePrice: "قیمت عمده",
+  retailPrice: "قیمت خرده",
+  expiryDate: "تاریخ انقضا",
+  batchNumber: "شماره بچ",
   amount: "مقدار",
   total: "جمع کل",
   totalAmount: "مبلغ کل",
@@ -234,6 +240,11 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
           unit_id: item.unit_id,
           per_price: item.per_price,
           amount: item.amount,
+          per_unit: item.per_unit ?? 0,
+          cost_price: item.cost_price ?? 0,
+          wholesale_price: item.wholesale_price ?? 0,
+          retail_price: item.retail_price ?? 0,
+          expiry_date: item.expiry_date ?? "",
         })),
       });
     } catch (error: any) {
@@ -253,7 +264,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
         notes: "",
         currency_id: currencies.length > 0 ? currencies[0].id : 0,
         additional_costs: [],
-        items: [],
+        items: [] as PurchaseItemInput[],
       });
     }
     setIsModalOpen(true);
@@ -277,7 +288,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
       ...formData,
       items: [
         ...formData.items,
-        { product_id: 0, unit_id: 0, per_price: 0, amount: 0 },
+        { product_id: 0, unit_id: 0, per_price: 0, amount: 0, per_unit: 0, cost_price: 0, wholesale_price: 0, retail_price: 0, expiry_date: "" },
       ],
     });
   };
@@ -608,6 +619,14 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
               )
             },
             {
+              key: "batch_number", label: translations.batchNumber, sortable: false,
+              render: (p: Purchase) => (
+                <span className="text-gray-700 dark:text-gray-300 font-medium font-mono">
+                  {p.batch_number || "-"}
+                </span>
+              )
+            },
+            {
               key: "date", label: translations.date, sortable: true,
               render: (p: Purchase) => (
                 <span className="text-gray-700 dark:text-gray-300 font-medium">
@@ -930,87 +949,155 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                           animate={{ opacity: 1, y: 0 }}
                           className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border-2 border-gray-200 dark:border-gray-600"
                         >
-                          <div className="grid grid-cols-12 gap-3 items-end">
-                            <div className="col-span-4">
-                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                {translations.product}
-                              </label>
-                              <select
-                                value={item.product_id}
-                                onChange={(e) => updateItem(index, 'product_id', parseInt(e.target.value))}
-                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
-                                dir="rtl"
-                              >
-                                <option value={0}>انتخاب محصول</option>
-                                {products.map((product) => (
-                                  <option key={product.id} value={product.id}>
-                                    {product.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="col-span-2">
-                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                {translations.unit}
-                              </label>
-                              <select
-                                value={item.unit_id}
-                                onChange={(e) => updateItem(index, 'unit_id', parseInt(e.target.value))}
-                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
-                                dir="rtl"
-                              >
-                                <option value={0}>انتخاب واحد</option>
-                                {units.map((unit) => (
-                                  <option key={unit.id} value={unit.id}>
-                                    {unit.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="col-span-2">
-                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                {translations.perPrice}
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={item.per_price || ''}
-                                onChange={(e) => updateItem(index, 'per_price', parseFloat(e.target.value) || 0)}
-                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
-                                dir="ltr"
-                              />
-                            </div>
-                            <div className="col-span-2">
-                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                {translations.amount}
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={item.amount || ''}
-                                onChange={(e) => updateItem(index, 'amount', parseFloat(e.target.value) || 0)}
-                                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
-                                dir="ltr"
-                              />
-                            </div>
-                            <div className="col-span-1">
-                              <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                {translations.total}
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-12 gap-3 items-end">
+                              <div className="col-span-3">
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  {translations.product}
+                                </label>
+                                <select
+                                  value={item.product_id}
+                                  onChange={(e) => updateItem(index, 'product_id', parseInt(e.target.value))}
+                                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                  dir="rtl"
+                                >
+                                  <option value={0}>انتخاب محصول</option>
+                                  {products.map((product) => (
+                                    <option key={product.id} value={product.id}>
+                                      {product.name}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
-                              <div className="px-3 py-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-sm font-bold text-purple-700 dark:text-purple-300">
-                                {calculateItemTotal(item).toLocaleString('en-US')}
+                              <div className="col-span-2">
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  {translations.unit}
+                                </label>
+                                <select
+                                  value={item.unit_id}
+                                  onChange={(e) => updateItem(index, 'unit_id', parseInt(e.target.value))}
+                                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                  dir="rtl"
+                                >
+                                  <option value={0}>انتخاب واحد</option>
+                                  {units.map((unit) => (
+                                    <option key={unit.id} value={unit.id}>
+                                      {unit.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="col-span-2">
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  {translations.perPrice}
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={item.per_price || ''}
+                                  onChange={(e) => updateItem(index, 'per_price', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                  dir="ltr"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  {translations.amount}
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={item.amount || ''}
+                                  onChange={(e) => updateItem(index, 'amount', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                  dir="ltr"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  {translations.total}
+                                </div>
+                                <div className="px-3 py-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-sm font-bold text-purple-700 dark:text-purple-300">
+                                  {calculateItemTotal(item).toLocaleString('en-US')}
+                                </div>
+                              </div>
+                              <div className="col-span-1">
+                                <motion.button
+                                  type="button"
+                                  whileHover={{ scale: 1.1 }}
+                                  whileTap={{ scale: 0.9 }}
+                                  onClick={() => removeItem(index)}
+                                  className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm"
+                                >
+                                  {translations.removeItem}
+                                </motion.button>
                               </div>
                             </div>
-                            <div className="col-span-1">
-                              <motion.button
-                                type="button"
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                                onClick={() => removeItem(index)}
-                                className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm"
-                              >
-                                {translations.removeItem}
-                              </motion.button>
+                            <div className="grid grid-cols-12 gap-3 items-end">
+                              <div className="col-span-3">
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  {translations.perUnit}
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={item.per_unit || ''}
+                                  onChange={(e) => updateItem(index, 'per_unit', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                  dir="ltr"
+                                />
+                              </div>
+                              <div className="col-span-3">
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  {translations.costPrice}
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={item.cost_price || ''}
+                                  onChange={(e) => updateItem(index, 'cost_price', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                  dir="ltr"
+                                />
+                              </div>
+                              {(item.per_unit ?? 0) > 1 && (
+                                <div className="col-span-3">
+                                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                    {translations.wholesalePrice}
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={item.wholesale_price || ''}
+                                    onChange={(e) => updateItem(index, 'wholesale_price', parseFloat(e.target.value) || 0)}
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                    dir="ltr"
+                                  />
+                                </div>
+                              )}
+                              <div className={`col-span-3 ${(item.per_unit ?? 0) > 1 ? '' : 'col-span-6'}`}>
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  {translations.retailPrice}
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={item.retail_price || ''}
+                                  onChange={(e) => updateItem(index, 'retail_price', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:border-purple-500"
+                                  dir="ltr"
+                                />
+                              </div>
+                              <div className="col-span-3">
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  {translations.expiryDate}
+                                </label>
+                                <PersianDatePicker
+                                  value={item.expiry_date || ""}
+                                  onChange={(date) => updateItem(index, 'expiry_date', date)}
+                                  placeholder="تاریخ انقضا"
+                                />
+                              </div>
                             </div>
                           </div>
                         </motion.div>
@@ -1160,6 +1247,23 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                       {formatPersianDate(viewingPurchase.purchase.date)}
                     </p>
                   </motion.div>
+                  {viewingPurchase.purchase.batch_number && (
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      className="p-5 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-2xl border border-indigo-200/50 dark:border-indigo-700/30">
+                      <div className="flex items-center gap-3 mb-2">
+                        <svg className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                        </svg>
+                        <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                          {translations.batchNumber}
+                        </label>
+                      </div>
+                      <p className="text-lg font-semibold text-gray-900 dark:text-white mr-8 font-mono">
+                        {viewingPurchase.purchase.batch_number}
+                      </p>
+                    </motion.div>
+                  )}
                   {viewingPurchase.additional_costs && viewingPurchase.additional_costs.length > 0 && (
                     <motion.div
                       whileHover={{ scale: 1.02 }}
@@ -1224,19 +1328,34 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                     <table className="w-full">
                       <thead>
                         <tr className="bg-gradient-to-r from-purple-600 to-blue-600">
-                          <th className="px-6 py-4 text-right text-sm font-bold text-white">
+                          <th className="px-4 py-3 text-right text-xs font-bold text-white">
                             {translations.product}
                           </th>
-                          <th className="px-6 py-4 text-right text-sm font-bold text-white">
+                          <th className="px-4 py-3 text-right text-xs font-bold text-white">
                             {translations.unit}
                           </th>
-                          <th className="px-6 py-4 text-left text-sm font-bold text-white">
+                          <th className="px-4 py-3 text-left text-xs font-bold text-white">
                             {translations.perPrice}
                           </th>
-                          <th className="px-6 py-4 text-left text-sm font-bold text-white">
+                          <th className="px-4 py-3 text-left text-xs font-bold text-white">
                             {translations.amount}
                           </th>
-                          <th className="px-6 py-4 text-left text-sm font-bold text-white">
+                          <th className="px-4 py-3 text-left text-xs font-bold text-white">
+                            {translations.perUnit}
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-white">
+                            {translations.costPrice}
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-white">
+                            {translations.wholesalePrice}
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-white">
+                            {translations.retailPrice}
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-bold text-white">
+                            {translations.expiryDate}
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-white">
                             {translations.total}
                           </th>
                         </tr>
@@ -1253,20 +1372,35 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                               transition={{ delay: index * 0.05 }}
                               className="border-b border-gray-200 dark:border-gray-700 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors"
                             >
-                              <td className="px-6 py-4 text-gray-900 dark:text-white font-medium">
+                              <td className="px-4 py-3 text-gray-900 dark:text-white font-medium text-sm">
                                 {product?.name || `ID: ${item.product_id}`}
                               </td>
-                              <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-sm">
                                 {unit ? unit.name : `ID: ${item.unit_id}`}
                               </td>
-                              <td className="px-6 py-4 text-gray-900 dark:text-white text-left font-semibold">
+                              <td className="px-4 py-3 text-gray-900 dark:text-white text-left font-semibold text-sm">
                                 {item.per_price.toLocaleString('en-US')}
                               </td>
-                              <td className="px-6 py-4 text-gray-900 dark:text-white text-left font-semibold">
+                              <td className="px-4 py-3 text-gray-900 dark:text-white text-left font-semibold text-sm">
                                 {item.amount.toLocaleString('en-US')}
                               </td>
-                              <td className="px-6 py-4 text-left">
-                                <span className="inline-block px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-bold rounded-lg">
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-left text-sm">
+                                {item.per_unit ? item.per_unit.toLocaleString('en-US') : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-left text-sm">
+                                {item.cost_price ? item.cost_price.toLocaleString('en-US') : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-left text-sm">
+                                {item.wholesale_price ? item.wholesale_price.toLocaleString('en-US') : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-left text-sm">
+                                {item.retail_price ? item.retail_price.toLocaleString('en-US') : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-right text-sm">
+                                {item.expiry_date ? formatPersianDate(item.expiry_date) : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-left">
+                                <span className="inline-block px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-bold rounded-lg text-sm">
                                   {item.total.toLocaleString('en-US')}
                                 </span>
                               </td>
@@ -1282,7 +1416,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                             <>
                               {additionalCostsTotal > 0 && (
                                 <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-                                  <td colSpan={4} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
+                                  <td colSpan={9} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
                                     <div className="flex items-center justify-end gap-2">
                                       <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1299,7 +1433,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                               )}
                               {viewingPurchase.additional_costs && viewingPurchase.additional_costs.length > 0 && viewingPurchase.additional_costs.map((cost, idx) => (
                                 <tr key={cost.id || idx} className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20">
-                                  <td colSpan={4} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
+                                  <td colSpan={9} className="px-6 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">
                                     <div className="flex items-center justify-end gap-2">
                                       <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1318,7 +1452,7 @@ export default function PurchaseManagement({ onBack }: PurchaseManagementProps) 
                           );
                         })()}
                         <tr className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/40 dark:to-blue-900/40">
-                          <td colSpan={4} className="px-6 py-5 text-right font-bold text-gray-900 dark:text-white text-lg">
+                          <td colSpan={9} className="px-6 py-5 text-right font-bold text-gray-900 dark:text-white text-lg">
                             <div className="flex items-center justify-end gap-2">
                               <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

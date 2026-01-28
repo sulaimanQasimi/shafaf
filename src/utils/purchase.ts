@@ -7,6 +7,7 @@ export interface Purchase {
   notes?: string | null;
   currency_id?: number | null;
   total_amount: number;
+  batch_number?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -19,6 +20,11 @@ export interface PurchaseItem {
   per_price: number;
   amount: number;
   total: number;
+  per_unit?: number | null;
+  cost_price?: number | null;
+  wholesale_price?: number | null;
+  retail_price?: number | null;
+  expiry_date?: string | null;
   created_at: string;
 }
 
@@ -41,6 +47,11 @@ export interface PurchaseItemInput {
   unit_id: number;
   per_price: number;
   amount: number;
+  per_unit?: number;
+  cost_price?: number;
+  wholesale_price?: number;
+  retail_price?: number;
+  expiry_date?: string;
 }
 
 export interface PurchaseAdditionalCostInput {
@@ -82,13 +93,20 @@ export async function createPurchase(
   additional_costs: PurchaseAdditionalCostInput[],
   items: PurchaseItemInput[]
 ): Promise<Purchase> {
-  // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
-  const itemsTuple: [number, number, number, number][] = items.map(item => [
-    item.product_id,
-    item.unit_id,
-    item.per_price,
-    item.amount,
-  ]);
+  // Convert items to tuple format expected by Rust:
+  // (product_id, unit_id, per_price, amount, per_unit, cost_price, wholesale_price, retail_price, expiry_date)
+  const itemsTuple: [number, number, number, number, number | null, number | null, number | null, number | null, string | null][] =
+    items.map(item => [
+      item.product_id,
+      item.unit_id,
+      item.per_price,
+      item.amount,
+      item.per_unit ?? null,
+      item.cost_price ?? null,
+      item.wholesale_price ?? null,
+      item.retail_price ?? null,
+      item.expiry_date ?? null,
+    ]);
 
   // Convert additional_costs to tuple format expected by Rust: (name, amount)
   const additionalCostsTuple: [string, number][] = additional_costs.map(cost => [
@@ -163,12 +181,17 @@ export async function updatePurchase(
   additional_costs: PurchaseAdditionalCostInput[],
   items: PurchaseItemInput[]
 ): Promise<Purchase> {
-  // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount)
-  const itemsTuple: [number, number, number, number][] = items.map(item => [
+  // Convert items to tuple format expected by Rust: (product_id, unit_id, per_price, amount, per_unit, cost_price, wholesale_price, retail_price, expiry_date)
+  const itemsTuple: [number, number, number, number, number | null, number | null, number | null, number | null, string | null][] = items.map(item => [
     item.product_id,
     item.unit_id,
     item.per_price,
     item.amount,
+    item.per_unit ?? null,
+    item.cost_price ?? null,
+    item.wholesale_price ?? null,
+    item.retail_price ?? null,
+    item.expiry_date ?? null,
   ]);
 
   // Convert additional_costs to tuple format expected by Rust: (name, amount)

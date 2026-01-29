@@ -84,9 +84,9 @@ export default function DatabaseConfig({ onConfigComplete }: DatabaseConfigProps
     setLoading(true);
 
     try {
-      const config = {
+      const config: any = {
         mode,
-        offline_path: mode === "offline" || mode === "both" ? null : undefined,
+        offline_path: mode === "offline" || mode === "both" ? null : null,
         online_url: mode === "online" || mode === "both" ? serverUrl.trim() : null,
         namespace: mode === "online" || mode === "both" ? namespace.trim() : null,
         database: mode === "online" || mode === "both" ? database.trim() : null,

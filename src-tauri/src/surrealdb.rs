@@ -8,10 +8,12 @@ use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum ConnectionMode {
+    #[serde(rename = "offline")]
     Offline,
+    #[serde(rename = "online")]
     Online,
+    #[serde(rename = "both")]
     Both,
 }
 

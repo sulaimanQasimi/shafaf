@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import { loginUser, registerUser, initUsersTable, type LoginResult } from "../utils/auth";
-import { openDatabase, isDatabaseOpen } from "../utils/db";
+import { isDatabaseOpenSurreal, getDatabaseConfig, openDatabaseSurreal } from "../utils/db";
 import Footer from "./Footer";
 
 interface LoginProps {
@@ -64,14 +64,22 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     setLoading(true);
 
     try {
-      // Ensure database is open (path from .env file or default)
-      const dbOpen = await isDatabaseOpen();
+      // Ensure SurrealDB is open
+      let dbOpen = await isDatabaseOpenSurreal();
       if (!dbOpen) {
-        // Open database using path from .env file (DATABASE_PATH)
-        await openDatabase("db");
+        // Try to load database configuration and open SurrealDB
+        const config = await getDatabaseConfig();
+        if (config) {
+          await openDatabaseSurreal(config);
+          dbOpen = true;
+        } else {
+          toast.error("لطفاً ابتدا پایگاه داده را پیکربندی کنید");
+          setLoading(false);
+          return;
+        }
       }
 
-      // Initialize users table if needed
+      // Initialize users table schema (already done in init_schema, but kept for compatibility)
       try {
         await initUsersTable();
       } catch (err) {

@@ -32,6 +32,7 @@ pub struct DatabaseConfig {
 pub struct SurrealDatabase {
     pub offline: Option<Arc<Surreal<Db>>>,
     pub online: Option<Arc<Surreal<Client>>>,
+    #[allow(dead_code)]
     pub config: DatabaseConfig,
 }
 
@@ -174,6 +175,7 @@ impl SurrealDatabase {
     }
 
     /// Sync data from online to offline
+    #[allow(dead_code)]
     pub async fn sync_online_to_offline(&self) -> Result<()> {
         let offline = self.offline.as_ref()
             .ok_or_else(|| anyhow::anyhow!("Offline database not connected"))?;
@@ -236,6 +238,7 @@ impl SurrealDatabase {
     }
 
     /// Execute a query that returns a single result
+    #[allow(dead_code)]
     pub async fn query_one<T>(&self, query: &str) -> Result<Option<T>>
     where
         T: serde::de::DeserializeOwned,

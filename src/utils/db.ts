@@ -55,22 +55,24 @@ export async function createDatabase(dbName: string): Promise<string> {
 }
 
 /**
- * Open database (legacy SQLite - kept for backward compatibility)
- * @param dbName Name of the database (without .db extension) - currently not used
- * @returns Promise with the database path
+ * Open database (SurrealDB only - SQLite removed)
+ * @param dbName Name of the database (not used for SurrealDB)
+ * @returns Promise with success message
  */
 export async function openDatabase(dbName: string): Promise<string> {
-  // Try SurrealDB first, fallback to SQLite
-  try {
-    const isOpen = await isDatabaseOpenSurreal();
-    if (isOpen) {
-      return "SurrealDB already open";
-    }
-  } catch {
-    // SurrealDB not configured, use SQLite
-    return await invoke<string>("db_open", { dbName });
+  // Check if SurrealDB is already open
+  const isOpen = await isDatabaseOpenSurreal();
+  if (isOpen) {
+    return "SurrealDB already open";
   }
-  return await invoke<string>("db_open", { dbName });
+  
+  // Try to load configuration and open SurrealDB
+  const config = await getDatabaseConfig();
+  if (config) {
+    return await openDatabaseSurreal(config);
+  }
+  
+  throw new Error("No SurrealDB configuration found. Please configure database first.");
 }
 
 /**
@@ -107,20 +109,11 @@ export async function closeDatabaseSurreal(): Promise<string> {
 }
 
 /**
- * Close the current database connection (legacy SQLite)
+ * Close the current database connection (SurrealDB only)
  * @returns Promise with success message
  */
 export async function closeDatabase(): Promise<string> {
-  // Try SurrealDB first
-  try {
-    const isOpen = await isDatabaseOpenSurreal();
-    if (isOpen) {
-      return await closeDatabaseSurreal();
-    }
-  } catch {
-    // Fallback to SQLite
-  }
-  return await invoke<string>("db_close");
+  return await closeDatabaseSurreal();
 }
 
 /**
@@ -132,20 +125,11 @@ export async function isDatabaseOpenSurreal(): Promise<boolean> {
 }
 
 /**
- * Check if a database is currently open (checks SurrealDB first, then SQLite)
+ * Check if a database is currently open (SurrealDB only)
  * @returns Promise with boolean indicating if database is open
  */
 export async function isDatabaseOpen(): Promise<boolean> {
-  // Try SurrealDB first
-  try {
-    const isOpen = await isDatabaseOpenSurreal();
-    if (isOpen) {
-      return true;
-    }
-  } catch {
-    // SurrealDB not configured, check SQLite
-  }
-  return await invoke<boolean>("db_is_open");
+  return await isDatabaseOpenSurreal();
 }
 
 /**
@@ -183,17 +167,7 @@ export async function queryDatabase(
   query: string,
   params: any[] = []
 ): Promise<QueryResult> {
-  // Try SurrealDB first
-  try {
-    const isOpen = await isDatabaseOpenSurreal();
-    if (isOpen) {
-      return await invoke<QueryResult>("db_query_surreal", { query });
-    }
-  } catch {
-    // Fallback to SQLite
-  }
-  // Fallback to SQLite (convert params if needed)
-  return await invoke<QueryResult>("db_query", { sql: query, params });
+  return await invoke<QueryResult>("db_query_surreal", { query });
 }
 
 /**

@@ -17,6 +17,7 @@ impl Database {
     }
 
     /// Create a new database file (does not open it)
+    #[allow(dead_code)]
     pub fn create_database(&self) -> Result<()> {
         if self.db_path.exists() {
             return Err(anyhow::anyhow!("Database already exists at {:?}", self.db_path));
@@ -85,6 +86,7 @@ impl Database {
     }
 
     /// Get column names from a prepared statement
+    #[allow(dead_code)]
     pub fn get_columns(&self, sql: &str) -> Result<Vec<String>> {
         let mut conn_guard = self.conn.lock().unwrap();
         let conn = conn_guard.as_mut().ok_or_else(|| anyhow::anyhow!("Database is not open. Please open it first."))?;
@@ -107,11 +109,13 @@ impl Database {
     }
 
     /// Get the database path
+    #[allow(dead_code)]
     pub fn get_path(&self) -> &PathBuf {
         &self.db_path
     }
 
     /// Check if database file exists
+    #[allow(dead_code)]
     pub fn exists(&self) -> bool {
         self.db_path.exists()
     }

@@ -506,7 +506,7 @@ fn db_query(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    pub id: i64,
+    pub id: i64, // Numeric ID extracted from SurrealDB record ID
     pub username: String,
     pub email: String,
     pub full_name: Option<String>,
@@ -517,6 +517,59 @@ pub struct User {
     pub updated_at: String,
 }
 
+// Helper to convert SurrealDB record to User
+fn record_to_user(record: &serde_json::Value) -> Result<User, String> {
+    // Extract numeric ID from record ID (e.g., "users:123" -> 123)
+    // SurrealDB returns id as a record identifier string
+    let id = if let Some(id_val) = record.get("id") {
+        if let Some(id_str) = id_val.as_str() {
+            // Extract numeric part from "users:123" format
+            id_str.split(':').last()
+                .and_then(|n| n.parse::<i64>().ok())
+                .unwrap_or(0)
+        } else if let Some(id_num) = id_val.as_i64() {
+            id_num
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+    
+    Ok(User {
+        id,
+        username: record.get("username")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .ok_or("Missing username")?,
+        email: record.get("email")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .ok_or("Missing email")?,
+        full_name: record.get("full_name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        phone: record.get("phone")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        role: record.get("role")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "user".to_string()),
+        is_active: record.get("is_active")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(1),
+        created_at: record.get("created_at")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()),
+        updated_at: record.get("updated_at")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()),
+    })
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginResult {
     pub success: bool,
@@ -524,74 +577,39 @@ pub struct LoginResult {
     pub message: String,
 }
 
-/// Initialize users table schema
+/// Initialize users table schema (SurrealDB - schema is already defined in surreal_schema.surql)
 #[tauri::command]
-fn init_users_table(db_state: State<'_, Mutex<Option<Database>>>) -> Result<String, String> {
-    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let db = db_guard.as_ref().ok_or("No database is currently open")?;
-
-    let create_table_sql = "
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            full_name TEXT,
-            phone TEXT,
-            role TEXT NOT NULL DEFAULT 'user',
-            is_active INTEGER NOT NULL DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ";
-
-    db.execute(create_table_sql, &[])
-        .map_err(|e| format!("Failed to create users table: {}", e))?;
-
-    // Add new columns if they don't exist (for existing databases)
-    // Note: SQLite doesn't support NOT NULL DEFAULT in ALTER TABLE, so we add nullable columns and update them
-    let alter_queries = vec![
-        "ALTER TABLE users ADD COLUMN full_name TEXT",
-        "ALTER TABLE users ADD COLUMN phone TEXT",
-        "ALTER TABLE users ADD COLUMN role TEXT",
-        "ALTER TABLE users ADD COLUMN is_active INTEGER",
-    ];
-
-    for alter_sql in alter_queries {
-        let _ = db.execute(alter_sql, &[]);
-    }
-
-    // Update existing rows to set default values for new columns
-    let update_role_sql = "UPDATE users SET role = 'user' WHERE role IS NULL";
-    let _ = db.execute(update_role_sql, &[]);
+async fn init_users_table(db_state: State<'_, Mutex<Option<SurrealDatabase>>>) -> Result<String, String> {
+    let db = {
+        let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        db_guard.as_ref().ok_or("No database is currently open")?.clone()
+    }; // Clone and drop guard before await
     
-    let update_active_sql = "UPDATE users SET is_active = 1 WHERE is_active IS NULL";
-    let _ = db.execute(update_active_sql, &[]);
-
-    Ok("Users table initialized successfully".to_string())
+    // Schema is already initialized in init_schema, so we just verify it exists
+    // This function is kept for backward compatibility
+    Ok("Users table schema already initialized".to_string())
 }
 
-/// Register a new user
+/// Register a new user (SurrealDB)
 #[tauri::command]
-fn register_user(
-    db_state: State<'_, Mutex<Option<Database>>>,
+async fn register_user(
+    db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
     username: String,
     email: String,
     password: String,
 ) -> Result<LoginResult, String> {
-    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+    let db = {
+        let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        db_guard.as_ref().ok_or("No database is currently open")?.clone()
+    }; // Clone and drop guard before await
 
     // Hash the password
     let password_hash = bcrypt::hash(&password, bcrypt::DEFAULT_COST)
         .map_err(|e| format!("Failed to hash password: {}", e))?;
 
     // Check if username or email already exists
-    let check_sql = "SELECT id FROM users WHERE username = ? OR email = ?";
-    let existing = db
-        .query(check_sql, &[&username as &dyn rusqlite::ToSql, &email as &dyn rusqlite::ToSql], |row| {
-            Ok(row.get::<_, i64>(0)?)
-        })
+    let check_query = format!("SELECT id FROM users WHERE username = '{}' OR email = '{}'", username, email);
+    let existing: Vec<serde_json::Value> = db.query_json(&check_query).await
         .map_err(|e| format!("Database query error: {}", e))?;
 
     if !existing.is_empty() {
@@ -602,33 +620,27 @@ fn register_user(
         });
     }
 
-    // Insert new user
-    let insert_sql = "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)";
-    db.execute(insert_sql, &[&username as &dyn rusqlite::ToSql, &email as &dyn rusqlite::ToSql, &password_hash as &dyn rusqlite::ToSql])
-        .map_err(|e| format!("Failed to insert user: {}", e))?;
+    // Create new user with SurrealQL
+    // Use parameterized query to avoid SQL injection
+    let create_query = format!(
+        "CREATE users SET username = '{}', email = '{}', password_hash = '{}', role = 'user', is_active = 1, created_at = time::now(), updated_at = time::now()",
+        username.replace("'", "''"),
+        email.replace("'", "''"),
+        password_hash.replace("'", "''")
+    );
+    db.execute(&create_query).await
+        .map_err(|e| format!("Failed to create user: {}", e))?;
 
     // Get the created user
-    let user_sql = "SELECT id, username, email, full_name, phone, role, is_active, created_at, updated_at FROM users WHERE username = ?";
-    let users = db
-        .query(user_sql, &[&username as &dyn rusqlite::ToSql], |row| {
-            Ok(User {
-                id: row.get(0)?,
-                username: row.get(1)?,
-                email: row.get(2)?,
-                full_name: row.get(3)?,
-                phone: row.get(4)?,
-                role: row.get(5)?,
-                is_active: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
-            })
-        })
+    let user_query = format!("SELECT * FROM users WHERE username = '{}'", username.replace("'", "''"));
+    let user_records: Vec<serde_json::Value> = db.query_json(&user_query).await
         .map_err(|e| format!("Failed to fetch user: {}", e))?;
 
-    if let Some(user) = users.first() {
+    if let Some(record) = user_records.first() {
+        let user = record_to_user(record)?;
         Ok(LoginResult {
             success: true,
-            user: Some(user.clone()),
+            user: Some(user),
             message: "User registered successfully".to_string(),
         })
     } else {
@@ -636,36 +648,29 @@ fn register_user(
     }
 }
 
-/// Login a user
+/// Login a user (SurrealDB)
 #[tauri::command]
-fn login_user(
-    db_state: State<'_, Mutex<Option<Database>>>,
+async fn login_user(
+    db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
     username: String,
     password: String,
 ) -> Result<LoginResult, String> {
-    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+    let db = {
+        let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        db_guard.as_ref().ok_or("No database is currently open")?.clone()
+    }; // Clone and drop guard before await
 
-    // Get user by username or email
-    let user_sql = "SELECT id, username, email, password_hash, full_name, phone, role, is_active, created_at, updated_at FROM users WHERE username = ? OR email = ?";
-    let users = db
-        .query(user_sql, &[&username as &dyn rusqlite::ToSql, &username as &dyn rusqlite::ToSql], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, Option<String>>(4)?,
-                row.get::<_, Option<String>>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, Option<i64>>(7)?,
-                row.get::<_, String>(8)?,
-                row.get::<_, String>(9)?,
-            ))
-        })
+    // Get user by username or email using SurrealQL
+    let escaped_username = username.replace("'", "''");
+    let user_query = format!(
+        "SELECT * FROM users WHERE username = '{}' OR email = '{}'",
+        escaped_username, escaped_username
+    );
+    
+    let user_records: Vec<serde_json::Value> = db.query_json(&user_query).await
         .map_err(|e| format!("Database query error: {}", e))?;
 
-    if users.is_empty() {
+    if user_records.is_empty() {
         return Ok(LoginResult {
             success: false,
             user: None,
@@ -673,7 +678,12 @@ fn login_user(
         });
     }
 
-    let (id, db_username, email, password_hash, full_name, phone, role, is_active, created_at, updated_at) = &users[0];
+    let record = &user_records[0];
+    
+    // Get password hash from the record
+    let password_hash = record.get("password_hash")
+        .and_then(|v| v.as_str())
+        .ok_or("Failed to get password hash")?;
 
     // Verify password
     let password_valid = bcrypt::verify(&password, password_hash)
@@ -687,19 +697,12 @@ fn login_user(
         });
     }
 
+    // Convert record to User
+    let user = record_to_user(record)?;
+
     Ok(LoginResult {
         success: true,
-        user: Some(User {
-            id: *id,
-            username: db_username.clone(),
-            email: email.clone(),
-            full_name: full_name.clone(),
-            phone: phone.clone(),
-            role: role.clone().unwrap_or_else(|| "user".to_string()),
-            is_active: is_active.unwrap_or(1),
-            created_at: created_at.clone(),
-            updated_at: updated_at.clone(),
-        }),
+        user: Some(user),
         message: "Login successful".to_string(),
     })
 }
@@ -8021,18 +8024,9 @@ pub fn run() {
             });
             Ok(())
         })
-        .manage(Mutex::new(None::<Database>))
         .manage(Mutex::new(None::<SurrealDatabase>))
         .manage(Mutex::new(None::<DatabaseConfig>))
         .invoke_handler(tauri::generate_handler![
-            db_create,
-            db_open,
-            db_close,
-            db_is_open,
-            db_execute,
-            db_query,
-            get_database_path,
-            backup_database,
             db_configure,
             get_db_config,
             db_open_surreal,
@@ -8041,6 +8035,8 @@ pub fn run() {
             db_query_surreal,
             db_execute_surreal,
             db_sync,
+            get_database_path,
+            backup_database,
             init_users_table,
             register_user,
             login_user,

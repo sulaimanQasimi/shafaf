@@ -179,21 +179,12 @@ function App() {
             await openDatabaseSurreal(config);
             console.log("SurrealDB initialized with stored configuration");
             return;
+          } else {
+            console.warn("No SurrealDB configuration found. Please configure database in License screen.");
           }
         } catch (err: any) {
-          // No configuration found or error loading - this is okay, will use SQLite fallback
-          console.log("No SurrealDB configuration found, using SQLite fallback:", err);
-        }
-
-        // Fallback to SQLite if no SurrealDB configuration
-        const dbOpen = await isDatabaseOpen();
-        if (!dbOpen) {
-          // Open existing database (path from .env file or default)
-          try {
-            await openDatabase("db");
-          } catch (err: any) {
-            console.error("Database init error:", err);
-          }
+          // No configuration found - user needs to configure database
+          console.log("No SurrealDB configuration found:", err);
         }
       } catch (err: any) {
         console.log("Database init:", err);

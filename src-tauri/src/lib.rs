@@ -1,8 +1,10 @@
 mod db;
+mod surrealdb;
 mod license;
 mod server;
 
 use db::Database;
+use surrealdb::{SurrealDatabase, DatabaseConfig, ConnectionMode, init_schema};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -95,6 +97,189 @@ fn backup_database(app: AppHandle) -> Result<String, String> {
     
     // Return the database path - frontend will use dialog plugin to save
     Ok(db_path.to_string_lossy().to_string())
+}
+
+/// Configure SurrealDB database
+#[tauri::command]
+async fn db_configure(
+    app: AppHandle,
+    config: DatabaseConfig,
+    config_state: State<'_, Mutex<Option<DatabaseConfig>>>,
+) -> Result<String, String> {
+    let mut config_guard = config_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    *config_guard = Some(config.clone());
+    
+    // Also store in keychain for persistence
+    let keychain = tauri_plugin_keychain::Keychain::new(&app);
+    let config_json = serde_json::to_string(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    keychain.set("db_config", &config_json)
+        .map_err(|e| format!("Failed to store config: {}", e))?;
+    
+    Ok("Database configuration saved".to_string())
+}
+
+/// Open SurrealDB database based on configuration
+#[tauri::command]
+async fn db_open_surreal(
+    app: AppHandle,
+    config: DatabaseConfig,
+    db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
+    config_state: State<'_, Mutex<Option<DatabaseConfig>>>,
+) -> Result<String, String> {
+    let mut config_guard = config_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    *config_guard = Some(config.clone());
+    
+    let mut db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    
+    let mut db = SurrealDatabase::new(config.clone());
+    let db_path = get_db_path(&app, "")?;
+    let db_path_str = db_path.to_string_lossy().to_string();
+    
+    match config.mode {
+        ConnectionMode::Offline => {
+            db.connect_offline(db_path).await
+                .map_err(|e| format!("Failed to connect offline: {}", e))?;
+        }
+        ConnectionMode::Online => {
+            let url = config.online_url.as_ref()
+                .ok_or("Online URL not configured")?;
+            let namespace = config.namespace.as_ref()
+                .ok_or("Namespace not configured")?;
+            let database = config.database.as_ref()
+                .ok_or("Database not configured")?;
+            let username = config.username.as_ref()
+                .ok_or("Username not configured")?;
+            let password = config.password.as_ref()
+                .ok_or("Password not configured")?;
+            
+            db.connect_online(url, namespace, database, username, password).await
+                .map_err(|e| format!("Failed to connect online: {}", e))?;
+        }
+        ConnectionMode::Both => {
+            let url = config.online_url.as_ref()
+                .ok_or("Online URL not configured")?;
+            let namespace = config.namespace.as_ref()
+                .ok_or("Namespace not configured")?;
+            let database = config.database.as_ref()
+                .ok_or("Database not configured")?;
+            let username = config.username.as_ref()
+                .ok_or("Username not configured")?;
+            let password = config.password.as_ref()
+                .ok_or("Password not configured")?;
+            
+            db.connect_both(db_path, url, namespace, database, username, password).await
+                .map_err(|e| format!("Failed to connect both: {}", e))?;
+        }
+    }
+    
+    // Initialize schema
+    init_schema(&db).await
+        .map_err(|e| format!("Failed to initialize schema: {}", e))?;
+    
+    *db_guard = Some(db);
+    
+    Ok(format!("SurrealDB opened successfully: {}", db_path_str))
+}
+
+/// Close SurrealDB database
+#[tauri::command]
+async fn db_close_surreal(
+    db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
+) -> Result<String, String> {
+    let mut db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    
+    if let Some(mut db) = db_guard.take() {
+        db.close().await
+            .map_err(|e| format!("Failed to close database: {}", e))?;
+        Ok("SurrealDB closed successfully".to_string())
+    } else {
+        Err("No SurrealDB connection is currently open".to_string())
+    }
+}
+
+/// Check if SurrealDB is open
+#[tauri::command]
+fn db_is_open_surreal(
+    db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
+) -> Result<bool, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    Ok(db_guard.as_ref().map(|db| db.is_offline_connected() || db.is_online_connected()).unwrap_or(false))
+}
+
+/// Execute a SurrealQL query
+#[tauri::command]
+async fn db_query_surreal(
+    db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
+    query: String,
+) -> Result<QueryResult, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+    
+    // Execute query and get results as JSON values
+    let results: Vec<serde_json::Value> = db.query_json(&query).await
+        .map_err(|e| format!("Query error: {}", e))?;
+    
+    if results.is_empty() {
+        return Ok(QueryResult {
+            columns: vec![],
+            rows: vec![],
+        });
+    }
+    
+    // Extract columns from first result
+    let first = &results[0];
+    let columns: Vec<String> = if let serde_json::Value::Object(obj) = first {
+        obj.keys().cloned().collect()
+    } else {
+        vec!["value".to_string()]
+    };
+    
+    // Convert results to rows
+    let rows: Vec<Vec<serde_json::Value>> = results.into_iter().map(|val| {
+        if let serde_json::Value::Object(obj) = val {
+            columns.iter().map(|col| obj.get(col).cloned().unwrap_or(serde_json::Value::Null)).collect()
+        } else {
+            vec![val]
+        }
+    }).collect();
+    
+    Ok(QueryResult { columns, rows })
+}
+
+/// Execute a SurrealQL command (CREATE, UPDATE, DELETE)
+#[tauri::command]
+async fn db_execute_surreal(
+    db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
+    query: String,
+) -> Result<ExecuteResult, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+    
+    db.execute(&query).await
+        .map_err(|e| format!("Execute error: {}", e))?;
+    
+    // SurrealDB doesn't return rows_affected directly, so we return 1 as a placeholder
+    // In a real implementation, you might want to parse the response
+    Ok(ExecuteResult { rows_affected: 1 })
+}
+
+/// Sync data between offline and online
+#[tauri::command]
+async fn db_sync(
+    db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
+) -> Result<String, String> {
+    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+    
+    if db.is_offline_connected() && db.is_online_connected() {
+        // Sync offline to online
+        db.sync_offline_to_online().await
+            .map_err(|e| format!("Sync error: {}", e))?;
+        Ok("Sync completed successfully".to_string())
+    } else {
+        Err("Both offline and online connections are required for sync".to_string())
+    }
 }
 
 /// Create a new SQLite database file (creates database automatically on open)
@@ -7803,6 +7988,8 @@ pub fn run() {
             Ok(())
         })
         .manage(Mutex::new(None::<Database>))
+        .manage(Mutex::new(None::<SurrealDatabase>))
+        .manage(Mutex::new(None::<DatabaseConfig>))
         .invoke_handler(tauri::generate_handler![
             db_create,
             db_open,
@@ -7812,6 +7999,13 @@ pub fn run() {
             db_query,
             get_database_path,
             backup_database,
+            db_configure,
+            db_open_surreal,
+            db_close_surreal,
+            db_is_open_surreal,
+            db_query_surreal,
+            db_execute_surreal,
+            db_sync,
             init_users_table,
             register_user,
             login_user,

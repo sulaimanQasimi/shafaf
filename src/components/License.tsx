@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { getMachineId, validateLicenseKey, storeLicenseKey } from "../utils/license";
 import Footer from "./Footer";
+import DatabaseConfig from "./DatabaseConfig";
 
 interface LicenseProps {
   onLicenseValid: () => void;
@@ -43,6 +44,7 @@ export default function License({ onLicenseValid }: LicenseProps) {
   const [loading, setLoading] = useState(false);
   const [loadingMachineId, setLoadingMachineId] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [showDatabaseConfig, setShowDatabaseConfig] = useState(false);
 
   // Load machine ID on mount
   useEffect(() => {
@@ -90,8 +92,9 @@ export default function License({ onLicenseValid }: LicenseProps) {
         // Store the license key
         await storeLicenseKey(licenseKey.trim());
         toast.success(translations.success.activated);
+        // Show database configuration step
         setTimeout(() => {
-          onLicenseValid();
+          setShowDatabaseConfig(true);
         }, 500);
       } else {
         toast.error(translations.errors.invalidKey);
@@ -103,6 +106,11 @@ export default function License({ onLicenseValid }: LicenseProps) {
       setLoading(false);
     }
   };
+
+  // Show database configuration if license is valid
+  if (showDatabaseConfig) {
+    return <DatabaseConfig onConfigComplete={onLicenseValid} />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4 relative overflow-hidden">

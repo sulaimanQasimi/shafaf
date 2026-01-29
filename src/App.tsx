@@ -3,6 +3,10 @@ import { motion } from "framer-motion";
 import {
   openDatabase,
   isDatabaseOpen,
+  openDatabaseSurreal,
+  isDatabaseOpenSurreal,
+  configureDatabase,
+  type DatabaseConfig,
   backupDatabase,
   restoreDatabase,
 } from "./utils/db";
@@ -158,6 +162,31 @@ function App() {
   useEffect(() => {
     const initDb = async () => {
       try {
+        // Check if SurrealDB is already open
+        const surrealOpen = await isDatabaseOpenSurreal();
+        if (surrealOpen) {
+          console.log("SurrealDB already initialized");
+          return;
+        }
+
+        // Try to load database configuration from keychain
+        try {
+          const { get } = await import("@tauri-apps/plugin-keychain");
+          const configJson = await get("db_config");
+          
+          if (configJson) {
+            const config: DatabaseConfig = JSON.parse(configJson);
+            // Open SurrealDB with stored configuration
+            await openDatabaseSurreal(config);
+            console.log("SurrealDB initialized with stored configuration");
+            return;
+          }
+        } catch (err: any) {
+          // No configuration found or error loading - this is okay, will use SQLite fallback
+          console.log("No SurrealDB configuration found, using SQLite fallback");
+        }
+
+        // Fallback to SQLite if no SurrealDB configuration
         const dbOpen = await isDatabaseOpen();
         if (!dbOpen) {
           // Open existing database (path from .env file or default)

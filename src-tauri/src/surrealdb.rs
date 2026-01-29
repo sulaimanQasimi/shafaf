@@ -2,12 +2,13 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use surrealdb::engine::local::Db;
+use surrealdb::engine::local::{Db, SurrealKv};
 use surrealdb::engine::remote::ws::{Client, Ws};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ConnectionMode {
     Offline,
     Online,
@@ -48,7 +49,10 @@ impl SurrealDatabase {
             std::fs::create_dir_all(parent)?;
         }
 
-        let db = Surreal::new::<Db>(db_path).await?;
+        // Convert PathBuf to string for SurrealKv connection
+        // Surreal::new::<SurrealKv> returns Surreal<Db>
+        let db_path_str = db_path.to_string_lossy().to_string();
+        let db: Surreal<Db> = Surreal::new::<SurrealKv>(db_path_str).await?;
         self.offline = Some(Arc::new(db));
         Ok(())
     }
@@ -72,15 +76,21 @@ impl SurrealDatabase {
     /// Connect in both modes (offline + online)
     pub async fn connect_both(
         &mut self,
-        _db_path: PathBuf,
+        db_path: PathBuf,
         url: &str,
         namespace: &str,
         database: &str,
         username: &str,
         password: &str,
     ) -> Result<()> {
-        // Connect offline (in-memory)
-        let offline_db = Surreal::new::<Mem>(()).await?;
+        // Connect offline
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        // Convert PathBuf to string for SurrealKv connection
+        // Surreal::new::<SurrealKv> returns Surreal<Db>
+        let db_path_str = db_path.to_string_lossy().to_string();
+        let offline_db: Surreal<Db> = Surreal::new::<SurrealKv>(db_path_str).await?;
         self.offline = Some(Arc::new(offline_db));
 
         // Connect online
@@ -145,7 +155,7 @@ impl SurrealDatabase {
             let mut response = offline.query(&query).await?;
             
             // Try to get results
-            if let Ok(mut records) = response.take::<Vec<serde_json::Value>>(0) {
+            if let Ok(records) = response.take::<Vec<serde_json::Value>>(0) {
                 for record in records {
                     if let Some(id) = record.get("id") {
                         // Create or update record in online
@@ -185,7 +195,7 @@ impl SurrealDatabase {
             let mut response = online.query(&query).await?;
             
             // Try to get results
-            if let Ok(mut records) = response.take::<Vec<serde_json::Value>>(0) {
+            if let Ok(records) = response.take::<Vec<serde_json::Value>>(0) {
                 for record in records {
                     if let Some(id) = record.get("id") {
                         // Create or update record in offline

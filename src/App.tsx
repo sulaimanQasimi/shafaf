@@ -6,6 +6,7 @@ import {
   openDatabaseSurreal,
   isDatabaseOpenSurreal,
   configureDatabase,
+  getDatabaseConfig,
   type DatabaseConfig,
   backupDatabase,
   restoreDatabase,
@@ -169,13 +170,11 @@ function App() {
           return;
         }
 
-        // Try to load database configuration from keychain
+        // Try to load database configuration from Rust backend
         try {
-          const { get } = await import("@tauri-apps/plugin-keychain");
-          const configJson = await get("db_config");
+          const config = await getDatabaseConfig();
           
-          if (configJson) {
-            const config: DatabaseConfig = JSON.parse(configJson);
+          if (config) {
             // Open SurrealDB with stored configuration
             await openDatabaseSurreal(config);
             console.log("SurrealDB initialized with stored configuration");
@@ -183,7 +182,7 @@ function App() {
           }
         } catch (err: any) {
           // No configuration found or error loading - this is okay, will use SQLite fallback
-          console.log("No SurrealDB configuration found, using SQLite fallback");
+          console.log("No SurrealDB configuration found, using SQLite fallback:", err);
         }
 
         // Fallback to SQLite if no SurrealDB configuration

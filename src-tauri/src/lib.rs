@@ -121,6 +121,25 @@ fn db_configure(
     Ok("Database configuration saved".to_string())
 }
 
+/// Get SurrealDB database configuration from keyring
+#[tauri::command]
+fn get_db_config() -> Result<Option<DatabaseConfig>, String> {
+    use keyring::Entry;
+    
+    let entry = Entry::new("finance_app", "db_config")
+        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+    
+    match entry.get_password() {
+        Ok(config_json) => {
+            let config: DatabaseConfig = serde_json::from_str(&config_json)
+                .map_err(|e| format!("Failed to deserialize config: {}", e))?;
+            Ok(Some(config))
+        }
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("Failed to get database config: {}", e)),
+    }
+}
+
 /// Open SurrealDB database based on configuration
 #[tauri::command]
 async fn db_open_surreal(
@@ -193,7 +212,7 @@ async fn db_open_surreal(
 async fn db_close_surreal(
     db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
 ) -> Result<String, String> {
-    let mut db = {
+    let db = {
         let mut db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
         db_guard.take()
     }; // Drop guard before await
@@ -8015,6 +8034,7 @@ pub fn run() {
             get_database_path,
             backup_database,
             db_configure,
+            get_db_config,
             db_open_surreal,
             db_close_surreal,
             db_is_open_surreal,

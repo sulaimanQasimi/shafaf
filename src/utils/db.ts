@@ -29,6 +29,14 @@ export async function configureDatabase(config: DatabaseConfig): Promise<string>
 }
 
 /**
+ * Get SurrealDB database configuration from storage
+ * @returns Promise with database configuration or null if not configured
+ */
+export async function getDatabaseConfig(): Promise<DatabaseConfig | null> {
+  return await invoke<DatabaseConfig | null>("get_db_config");
+}
+
+/**
  * Open SurrealDB database (creates it automatically if it doesn't exist)
  * @param config Database configuration
  * @returns Promise with success message

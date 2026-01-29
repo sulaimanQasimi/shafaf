@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use surrealdb::engine::local::Mem;
+use surrealdb::engine::local::Db;
 use surrealdb::engine::remote::ws::{Client, Ws};
 use surrealdb::opt::auth::Root;
 use surrealdb::Surreal;
@@ -25,8 +25,9 @@ pub struct DatabaseConfig {
     pub password: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct SurrealDatabase {
-    pub offline: Option<Arc<Surreal<Mem>>>,
+    pub offline: Option<Arc<Surreal<Db>>>,
     pub online: Option<Arc<Surreal<Client>>>,
     pub config: DatabaseConfig,
 }
@@ -40,13 +41,14 @@ impl SurrealDatabase {
         }
     }
 
-    /// Connect in offline mode (in-memory)
-    /// Note: Using Mem engine - data is not persisted. For persistent storage on Windows,
-    /// users need to install LLVM/Clang for RocksDB support, or use HTTP client with local SurrealDB server
-    pub async fn connect_offline(&mut self, _db_path: PathBuf) -> Result<()> {
-        // Use in-memory storage (Mem engine doesn't require native compilation)
-        // For production, consider using HTTP client with local SurrealDB server
-        let db = Surreal::new::<Mem>(()).await?;
+    /// Connect in offline mode (local file-based)
+    pub async fn connect_offline(&mut self, db_path: PathBuf) -> Result<()> {
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let db = Surreal::new::<Db>(db_path).await?;
         self.offline = Some(Arc::new(db));
         Ok(())
     }
@@ -100,7 +102,7 @@ impl SurrealDatabase {
     }
 
     /// Get offline connection
-    pub fn get_offline(&self) -> Option<Arc<Surreal<Mem>>> {
+    pub fn get_offline(&self) -> Option<Arc<Surreal<Db>>> {
         self.offline.clone()
     }
 
@@ -261,7 +263,7 @@ impl SurrealDatabase {
 
 #[derive(Clone)]
 pub enum DatabaseConnection {
-    Offline(Arc<Surreal<Mem>>),
+    Offline(Arc<Surreal<Db>>),
     Online(Arc<Surreal<Client>>),
 }
 

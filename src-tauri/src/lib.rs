@@ -101,19 +101,21 @@ fn backup_database(app: AppHandle) -> Result<String, String> {
 
 /// Configure SurrealDB database
 #[tauri::command]
-async fn db_configure(
-    app: AppHandle,
+fn db_configure(
     config: DatabaseConfig,
     config_state: State<'_, Mutex<Option<DatabaseConfig>>>,
 ) -> Result<String, String> {
     let mut config_guard = config_state.lock().map_err(|e| format!("Lock error: {}", e))?;
     *config_guard = Some(config.clone());
+    drop(config_guard);
     
-    // Also store in keychain for persistence
-    let keychain = tauri_plugin_keychain::Keychain::new(&app);
+    // Also store in keyring for persistence
+    use keyring::Entry;
+    let entry = Entry::new("finance_app", "db_config")
+        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
     let config_json = serde_json::to_string(&config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
-    keychain.set("db_config", &config_json)
+    entry.set_password(&config_json)
         .map_err(|e| format!("Failed to store config: {}", e))?;
     
     Ok("Database configuration saved".to_string())
@@ -127,14 +129,15 @@ async fn db_open_surreal(
     db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
     config_state: State<'_, Mutex<Option<DatabaseConfig>>>,
 ) -> Result<String, String> {
-    let mut config_guard = config_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    *config_guard = Some(config.clone());
+    {
+        let mut config_guard = config_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        *config_guard = Some(config.clone());
+    } // Drop guard before await
     
-    let mut db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    
-    let mut db = SurrealDatabase::new(config.clone());
     let db_path = get_db_path(&app, "")?;
     let db_path_str = db_path.to_string_lossy().to_string();
+    
+    let mut db = SurrealDatabase::new(config.clone());
     
     match config.mode {
         ConnectionMode::Offline => {
@@ -177,7 +180,10 @@ async fn db_open_surreal(
     init_schema(&db).await
         .map_err(|e| format!("Failed to initialize schema: {}", e))?;
     
-    *db_guard = Some(db);
+    {
+        let mut db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        *db_guard = Some(db);
+    } // Drop guard
     
     Ok(format!("SurrealDB opened successfully: {}", db_path_str))
 }
@@ -187,9 +193,12 @@ async fn db_open_surreal(
 async fn db_close_surreal(
     db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
 ) -> Result<String, String> {
-    let mut db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut db = {
+        let mut db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        db_guard.take()
+    }; // Drop guard before await
     
-    if let Some(mut db) = db_guard.take() {
+    if let Some(mut db) = db {
         db.close().await
             .map_err(|e| format!("Failed to close database: {}", e))?;
         Ok("SurrealDB closed successfully".to_string())
@@ -213,8 +222,10 @@ async fn db_query_surreal(
     db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
     query: String,
 ) -> Result<QueryResult, String> {
-    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+    let db = {
+        let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        db_guard.as_ref().ok_or("No database is currently open")?.clone()
+    }; // Clone and drop guard before await
     
     // Execute query and get results as JSON values
     let results: Vec<serde_json::Value> = db.query_json(&query).await
@@ -253,8 +264,10 @@ async fn db_execute_surreal(
     db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
     query: String,
 ) -> Result<ExecuteResult, String> {
-    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+    let db = {
+        let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        db_guard.as_ref().ok_or("No database is currently open")?.clone()
+    }; // Clone and drop guard before await
     
     db.execute(&query).await
         .map_err(|e| format!("Execute error: {}", e))?;
@@ -269,8 +282,10 @@ async fn db_execute_surreal(
 async fn db_sync(
     db_state: State<'_, Mutex<Option<SurrealDatabase>>>,
 ) -> Result<String, String> {
-    let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let db = db_guard.as_ref().ok_or("No database is currently open")?;
+    let db = {
+        let db_guard = db_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+        db_guard.as_ref().ok_or("No database is currently open")?.clone()
+    }; // Clone and drop guard before await
     
     if db.is_offline_connected() && db.is_online_connected() {
         // Sync offline to online
